@@ -105,7 +105,7 @@ export default function AppLayout({
       localStorage.removeItem("aicte_token");
       navigate({ to: "/login" });
     } else if (action === "focus-chat") {
-      navigate({ to: "/ai-activity" });
+      navigate({ to: "/comms" });
     } else if (action === "new-leave") {
       navigate({ to: "/requests/new" });
     } else if (action === "new-lab") {

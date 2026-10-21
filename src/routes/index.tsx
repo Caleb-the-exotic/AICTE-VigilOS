@@ -97,16 +97,14 @@ function Dashboard() {
               <p className="text-sm text-muted-foreground mt-1.5 max-w-xl">VigilOS handles institutional complaint cases, cross-bureau overlap detection, approvals, and AI intelligence — all in one place.</p>
               <div className="flex gap-2.5 mt-5 flex-wrap">
                 <Button variant="neon" size="sm" onClick={() => nav({ to: "/cases" })} className="btn-glow magnet"><Gavel className="w-3.5 h-3.5" /> AICTE Complaints & Overlaps</Button>
-                <Button variant="outline" size="sm" onClick={() => nav({ to: "/ai-activity" })} className="magnet"><Bot className="w-3.5 h-3.5" /> AI Overlap Activity</Button>
                 <Button variant="outline" size="sm" onClick={() => nav({ to: "/comms", search: { tab: "chat" } })} className="magnet"><Activity className="w-3.5 h-3.5" /> Bureau Copilot</Button>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {[
               { label: "AICTE Oversight", desc: "Cross-bureau complaint & overlap monitoring", icon: Gavel, to: "/cases" },
-              { label: "AI Intelligence Logs", desc: "Real-time duplicate & overlap agent decisions", icon: Bot, to: "/ai-activity" },
               { label: "Bureau Notices", desc: "Inter-bureau orders, email alerts & hearing updates", icon: Activity, to: "/comms" },
               { label: "AICTE Helpdesk & ROs", desc: "Headquarters & 8 Regional Offices assistance", icon: Users, to: "/help" },
             ].map((a, i) => (

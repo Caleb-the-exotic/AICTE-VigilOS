@@ -14,7 +14,6 @@ import { mailStore } from "@/lib/mail-store";
 const coreNavItems: { title: string; url: string; icon: any; badge?: () => number }[] = [
   { title: "Dashboard",      url: "/",            icon: LayoutDashboard },
   { title: "Cases",          url: "/cases",       icon: Gavel },
-  { title: "AI Activity",    url: "/ai-activity",  icon: Brain },
   { title: "Messages",       url: "/comms",        icon: MessageSquare, badge: () => mailStore.unread() },
   { title: "Help & Support", url: "/help",         icon: HelpCircle },
 ];

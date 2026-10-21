@@ -17,7 +17,6 @@ import { Route as HelpRouteImport } from './routes/help'
 import { Route as CommsRouteImport } from './routes/comms'
 import { Route as ChatRouteImport } from './routes/chat'
 import { Route as CasesRouteImport } from './routes/cases'
-import { Route as AiActivityRouteImport } from './routes/ai-activity'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RequestsIdRouteImport } from './routes/requests.$id'
@@ -62,11 +61,6 @@ const CasesRoute = CasesRouteImport.update({
   path: '/cases',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AiActivityRoute = AiActivityRouteImport.update({
-  id: '/ai-activity',
-  path: '/ai-activity',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -86,7 +80,6 @@ const RequestsIdRoute = RequestsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/ai-activity': typeof AiActivityRoute
   '/cases': typeof CasesRoute
   '/chat': typeof ChatRoute
   '/comms': typeof CommsRoute
@@ -100,7 +93,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/ai-activity': typeof AiActivityRoute
   '/cases': typeof CasesRoute
   '/chat': typeof ChatRoute
   '/comms': typeof CommsRoute
@@ -115,7 +107,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
-  '/ai-activity': typeof AiActivityRoute
   '/cases': typeof CasesRoute
   '/chat': typeof ChatRoute
   '/comms': typeof CommsRoute
@@ -131,7 +122,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
-    | '/ai-activity'
     | '/cases'
     | '/chat'
     | '/comms'
@@ -145,7 +135,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
-    | '/ai-activity'
     | '/cases'
     | '/chat'
     | '/comms'
@@ -159,7 +148,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
-    | '/ai-activity'
     | '/cases'
     | '/chat'
     | '/comms'
@@ -174,7 +162,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
-  AiActivityRoute: typeof AiActivityRoute
   CasesRoute: typeof CasesRoute
   ChatRoute: typeof ChatRoute
   CommsRoute: typeof CommsRoute
@@ -244,13 +231,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CasesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/ai-activity': {
-      id: '/ai-activity'
-      path: '/ai-activity'
-      fullPath: '/ai-activity'
-      preLoaderRoute: typeof AiActivityRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/admin': {
       id: '/admin'
       path: '/admin'
@@ -278,7 +258,6 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
-  AiActivityRoute: AiActivityRoute,
   CasesRoute: CasesRoute,
   ChatRoute: ChatRoute,
   CommsRoute: CommsRoute,

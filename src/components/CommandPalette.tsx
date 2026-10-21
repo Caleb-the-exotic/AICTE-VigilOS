@@ -40,7 +40,6 @@ const COMMANDS = [
     items: [
       { id: "nav-home",         label: "Go to Dashboard",       icon: BarChart3,    to: "/",               shortcut: "G H" },
       { id: "nav-cases-quick",  label: "Complaint Cases & Overlap", icon: Gavel,    to: "/cases",          shortcut: "G K" },
-      { id: "nav-chat",         label: "AI Intelligence Activity", icon: Brain,     to: "/ai-activity",    shortcut: "G A" },
       { id: "nav-comms",        label: "Bureau Communications", icon: MessageSquare,to: "/comms",          shortcut: "G M" },
       { id: "nav-help",         label: "AICTE Support & Directory", icon: Building2, to: "/help",          shortcut: "G S" },
       { id: "nav-notifications",label: "Notifications",         icon: Bell,         to: "/notifications",  shortcut: "" },
