@@ -83,10 +83,10 @@ function Dashboard() {
                   const el = document.getElementById("features-section");
                   if (el) el.scrollIntoView({ behavior: "smooth" });
                 }}
-                className="mt-12 md:mt-16 px-6 py-2.5 rounded-2xl text-sm font-semibold tracking-wide text-white bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:via-rose-500 hover:to-red-500 border border-red-500/40 shadow-[0_0_25px_rgba(220,38,38,0.45)] hover:shadow-[0_0_35px_rgba(220,38,38,0.7)] transition-all duration-300 hover:scale-[1.03] active:scale-[0.98] cursor-pointer flex items-center gap-2 group"
+                className="mt-12 md:mt-16 px-8 py-3.5 rounded-2xl text-base font-semibold tracking-wide text-white bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:via-rose-500 hover:to-red-500 border border-red-500/40 shadow-[0_0_25px_rgba(220,38,38,0.45)] hover:shadow-[0_0_35px_rgba(220,38,38,0.7)] transition-all duration-300 hover:scale-[1.03] active:scale-[0.98] cursor-pointer flex items-center gap-2.5 group"
               >
                 <span>View features</span>
-                <ChevronDown className="w-4 h-4 text-white/80 group-hover:translate-y-0.5 transition-transform" />
+                <ChevronDown className="w-5 h-5 text-white/80 group-hover:translate-y-0.5 transition-transform" />
               </button>
             </div>
           </div>

@@ -55,11 +55,11 @@ export default function AppSidebar({ collapsed, onToggle }: Props) {
             const badge = item.badge?.() || 0;
             return (
               <li key={item.title + item.url}>
-                <Link to={item.url} className={cn("w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium relative",
+                <Link to={item.url} className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium relative",
                   isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
                   collapsed && "justify-center px-0")} title={collapsed ? item.title : undefined}>
                   {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-full bg-primary" />}
-                  <item.icon className={cn("w-[18px] h-[18px] shrink-0", isActive && "text-primary")} />
+                  <item.icon className={cn("w-5 h-5 shrink-0", isActive && "text-primary")} />
                   {!collapsed && <span className="flex-1">{item.title}</span>}
                   {!collapsed && badge > 0 && <span className="text-[9px] bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 min-w-[18px] text-center">{badge}</span>}
                 </Link>
@@ -71,20 +71,20 @@ export default function AppSidebar({ collapsed, onToggle }: Props) {
 
       <div className="p-2 border-t border-border/30 space-y-1">
         {/* Theme Toggle */}
-        <button onClick={toggleTheme} className={cn("w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground", collapsed && "justify-center px-0")} aria-label="Toggle theme">
-          {theme === "dark" ? <Sun className="w-[18px] h-[18px] shrink-0" /> : <Moon className="w-[18px] h-[18px] shrink-0" />}
+        <button onClick={toggleTheme} className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground", collapsed && "justify-center px-0")} aria-label="Toggle theme">
+          {theme === "dark" ? <Sun className="w-5 h-5 shrink-0" /> : <Moon className="w-5 h-5 shrink-0" />}
           {!collapsed && <span className="flex-1 text-left">Theme</span>}
         </button>
 
         {/* Notifications */}
-        <Link to="/notifications" className={cn("w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground", collapsed && "justify-center px-0")} title={collapsed ? "Notifications" : undefined}>
-          <Bell className="w-[18px] h-[18px] shrink-0" />
+        <Link to="/notifications" className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground", collapsed && "justify-center px-0")} title={collapsed ? "Notifications" : undefined}>
+          <Bell className="w-5 h-5 shrink-0" />
           {!collapsed && <span className="flex-1 text-left">Notifications</span>}
         </Link>
 
         {/* Profile Link */}
-        <Link to="/profile" className={cn("w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground", collapsed && "justify-center px-0")} title={collapsed ? user?.name : undefined}>
-          <div className="w-[18px] h-[18px] rounded-full bg-gradient-to-br from-primary to-primary/50 grid place-items-center text-[9px] font-bold text-primary-foreground shrink-0">
+        <Link to="/profile" className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground", collapsed && "justify-center px-0")} title={collapsed ? user?.name : undefined}>
+          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-primary to-primary/50 grid place-items-center text-[9px] font-bold text-primary-foreground shrink-0">
             {(user?.name || "U").slice(0, 1).toUpperCase()}
           </div>
           {!collapsed && (
@@ -96,8 +96,8 @@ export default function AppSidebar({ collapsed, onToggle }: Props) {
         </Link>
 
         {/* Logout */}
-        <button onClick={() => { logout(); navigate({ to: "/login" }); }} className={cn("w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:bg-secondary/60 hover:text-primary", collapsed && "justify-center px-0")} aria-label="Logout">
-          <LogOut className="w-[18px] h-[18px] shrink-0" />
+        <button onClick={() => { logout(); navigate({ to: "/login" }); }} className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-primary", collapsed && "justify-center px-0")} aria-label="Logout">
+          <LogOut className="w-5 h-5 shrink-0" />
           {!collapsed && <span className="flex-1 text-left">Logout</span>}
         </button>
 
