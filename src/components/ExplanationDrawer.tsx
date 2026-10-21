@@ -86,12 +86,6 @@ function StepCard({ step, index }: { step: AgentStep; index: number }) {
               )}
             </div>
             <div className="flex items-center gap-2">
-              {step.score !== null && step.score !== undefined && (
-                <div className="flex items-center gap-1">
-                  <Star className="w-2.5 h-2.5 text-amber-400" />
-                  <span className="text-[10px] text-amber-400 font-mono">{step.score}/10</span>
-                </div>
-              )}
               <StatusIcon
                 className={`w-3.5 h-3.5 ${
                   step.status === "done" ? "text-emerald-400" :

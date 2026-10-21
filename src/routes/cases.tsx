@@ -185,14 +185,6 @@ function OverlapAlertCard({
         </div>
       </div>
 
-      {/* Root cause */}
-      {analysis?.shared_root_cause && (
-        <div className="text-[11px] text-red-200/80 bg-red-950/30 border border-primary/20 rounded-lg px-3 py-2">
-          <span className="font-semibold text-primary">Root Cause: </span>
-          {analysis.shared_root_cause}
-        </div>
-      )}
-
       {/* Case pills */}
       <div className="flex flex-wrap gap-2">
         {rbCases.map(c => (
@@ -211,26 +203,15 @@ function OverlapAlertCard({
         ))}
       </div>
 
-      {/* Recommended action */}
-      {analysis?.recommended_action && (
-        <div className="flex items-center gap-2 text-[11px] text-red-300">
-          <Zap className="w-3 h-3 shrink-0 text-primary" />
-          <span><span className="font-semibold">Action: </span>{analysis.recommended_action}</span>
-        </div>
-      )}
-
       <div className="flex gap-2 pt-1 flex-wrap">
         <button
           onClick={() => onViewProfile(aictePid)}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/50 border border-border/40 text-xs text-white/80 hover:bg-secondary hover:text-white transition-all"
         >
-          <Eye className="w-3.5 h-3.5" /> View 360° Profile
+          <Eye className="w-3.5 h-3.5" /> View Institutional Profile
         </button>
         <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/30 text-xs text-primary hover:bg-primary/25 transition-all">
           <Link2 className="w-3.5 h-3.5" /> Link Cases
-        </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-primary-foreground font-semibold text-xs px-3 py-1.5 rounded-lg transition-all shadow-md shadow-primary/20">
-          <GitMerge className="w-3.5 h-3.5" /> Initiate Joint Hearing
         </button>
       </div>
     </div>
@@ -392,9 +373,6 @@ function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void 
             <div className="flex flex-wrap gap-2">
               <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/30 text-xs text-primary hover:bg-primary/25 transition-all">
                 <Link2 className="w-3.5 h-3.5" /> Link Cases
-              </button>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/95 text-primary-foreground font-semibold text-xs transition-all shadow-md shadow-primary/20">
-                <GitMerge className="w-3.5 h-3.5" /> Initiate Joint Hearing
               </button>
               <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/60 border border-border/40 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
                 <Shield className="w-3.5 h-3.5" /> Consolidate under RB
