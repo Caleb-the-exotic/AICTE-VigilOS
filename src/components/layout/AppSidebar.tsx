@@ -11,14 +11,21 @@ import { useAuth } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { mailStore } from "@/lib/mail-store";
 
-const coreNavItems: { title: string; url: string; icon: any; badge?: () => number }[] = [
+interface NavItem {
+  title: string;
+  url: string;
+  icon: any;
+  badge?: () => number;
+}
+
+const coreNavItems: NavItem[] = [
   { title: "Dashboard",      url: "/",            icon: LayoutDashboard },
   { title: "Cases",          url: "/cases",       icon: Gavel },
   { title: "Messages",       url: "/comms",        icon: MessageSquare, badge: () => mailStore.unread() },
   { title: "Help & Support", url: "/help",         icon: HelpCircle },
 ];
 
-const adminNavItem = { title: "Admin", url: "/admin", icon: Shield };
+const adminNavItem: NavItem = { title: "Admin", url: "/admin", icon: Shield };
 
 interface Props { collapsed: boolean; onToggle: () => void }
 

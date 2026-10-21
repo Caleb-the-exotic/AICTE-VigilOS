@@ -41,8 +41,8 @@ export default function AppLayout({
       if (e.key.toLowerCase() === "g") { gPress = true; if (gT) clearTimeout(gT); gT = setTimeout(() => { gPress = false; }, 800); return; }
       if (gPress) {
         if (e.key.toLowerCase() === "d") navigate({ to: "/" });
-        if (e.key.toLowerCase() === "r") navigate({ to: "/requests" });
-        if (e.key.toLowerCase() === "n") navigate({ to: "/requests/new" });
+        if (e.key.toLowerCase() === "r") navigate({ to: "/cases" });
+        if (e.key.toLowerCase() === "n") navigate({ to: "/cases" });
         if (e.key.toLowerCase() === "c") navigate({ to: "/chat" });
         if (e.key.toLowerCase() === "h") navigate({ to: "/help" });
         gPress = false;
@@ -61,11 +61,11 @@ export default function AppLayout({
     } else if (action === "focus-chat") {
       navigate({ to: "/comms" });
     } else if (action === "new-leave") {
-      navigate({ to: "/requests/new" });
+      navigate({ to: "/cases" });
     } else if (action === "new-lab") {
-      navigate({ to: "/requests/new" });
+      navigate({ to: "/cases" });
     } else if (action === "new-complaint") {
-      navigate({ to: "/requests/new" });
+      navigate({ to: "/cases" });
     }
   };
 

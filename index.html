@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VigilOS - AICTE Complaint & Cross-Bureau Intelligence Platform</title>
+    <meta name="description" content="Centralized AICTE complaint tracking and cross-bureau intelligence system." />
+    <meta name="author" content="VigilOS" />
+    <link rel="icon" type="image/png" href="/aicte-logo.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      try {
+        var t = localStorage.getItem('aicte_theme') || 'dark';
+        document.documentElement.classList.add(t);
+      } catch (e) {
+        document.documentElement.classList.add('dark');
+      }
+    </script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

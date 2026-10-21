@@ -17,7 +17,8 @@ import { VoiceInputButton, ReadAloudButton } from "@/components/VoiceControls";
 export const Route = createFileRoute("/comms")({
   validateSearch: (search: Record<string, unknown>) => ({
     q: typeof search.q === "string" ? search.q : undefined,
-  }) as { q?: string },
+    tab: typeof search.tab === "string" ? search.tab : undefined,
+  }) as { q?: string; tab?: string },
   component: CommsHubPage,
 });
 
