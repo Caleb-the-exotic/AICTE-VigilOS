@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import AppSidebar from "./AppSidebar";
 import AnimatedBackground from "../AnimatedBackground";
@@ -6,10 +6,9 @@ import ShortcutsModal from "../ShortcutsModal";
 import OnboardingTour from "../OnboardingTour";
 import BottomTabs from "../BottomTabs";
 import { CommandPalette, useCommandPalette } from "../CommandPalette";
-import { FloatingActionButton } from "../FloatingActionButton";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { Menu, Search, X } from "lucide-react";
+import { Menu } from "lucide-react";
 
 export default function AppLayout({
   children,
@@ -24,12 +23,6 @@ export default function AppLayout({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
-  // FAB-driven slide-in search bar state
-  const [fabSearchOpen, setFabSearchOpen] = useState(false);
-  const [fabSearchQuery, setFabSearchQuery] = useState("");
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const searchDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -38,44 +31,6 @@ export default function AppLayout({
   useEffect(() => { if (!loading && requireAuth && !user) navigate({ to: "/login" }); }, [loading, user, requireAuth, navigate]);
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
-  // ── FAB Search auto-dismiss logic ────────────────────────────────
-  const resetSearchTimer = useCallback(() => {
-    if (searchDismissTimer.current) clearTimeout(searchDismissTimer.current);
-    searchDismissTimer.current = setTimeout(() => {
-      setFabSearchOpen(false);
-      setFabSearchQuery("");
-    }, 6000);
-  }, []);
-
-  const handleFabSearchOpen = useCallback(() => {
-    setFabSearchOpen(true);
-    resetSearchTimer();
-    setTimeout(() => searchInputRef.current?.focus(), 80);
-  }, [resetSearchTimer]);
-
-  const handleFabSearchClose = useCallback(() => {
-    setFabSearchOpen(false);
-    setFabSearchQuery("");
-    if (searchDismissTimer.current) clearTimeout(searchDismissTimer.current);
-  }, []);
-
-  // Reset timer on any typing activity while search is open
-  useEffect(() => {
-    if (!fabSearchOpen) return;
-    const handler = () => resetSearchTimer();
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [fabSearchOpen, resetSearchTimer]);
-
-  useEffect(() => () => { if (searchDismissTimer.current) clearTimeout(searchDismissTimer.current); }, []);
-
-  // ── Submit FAB search → open command palette ──────────────────────
-  const handleFabSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    handleFabSearchClose();
-    setCmdOpen(true);
-  };
-
   // ── Keyboard shortcuts ───────────────────────────────────────────
   useEffect(() => {
     let gPress = false; let gT: ReturnType<typeof setTimeout> | null = null;
@@ -83,7 +38,6 @@ export default function AppLayout({
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === "?") { e.preventDefault(); setShowShortcuts(true); return; }
       if ((e.ctrlKey || e.metaKey) && e.key === "k") { e.preventDefault(); setCmdOpen(true); return; }
-      if (e.key === "Escape" && fabSearchOpen) { handleFabSearchClose(); return; }
       if (e.key.toLowerCase() === "g") { gPress = true; if (gT) clearTimeout(gT); gT = setTimeout(() => { gPress = false; }, 800); return; }
       if (gPress) {
         if (e.key.toLowerCase() === "d") navigate({ to: "/" });
@@ -96,7 +50,7 @@ export default function AppLayout({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate, fabSearchOpen, handleFabSearchClose, setCmdOpen]);
+  }, [navigate, setCmdOpen]);
 
   if (loading) return <div className="min-h-screen grid place-items-center bg-background text-muted-foreground">Loading…</div>;
 
@@ -134,46 +88,6 @@ export default function AppLayout({
         <Menu className="w-4 h-4" />
       </button>
 
-      {/* FAB-triggered slide-in search bar — appears at top-right when Search radial button clicked */}
-      <div
-        className={cn(
-          "fixed top-3 right-4 z-30 transition-all duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)]",
-          fabSearchOpen
-            ? "opacity-100 translate-y-0 pointer-events-auto"
-            : "opacity-0 -translate-y-3 pointer-events-none"
-        )}
-      >
-        <form onSubmit={handleFabSearchSubmit} className="relative flex items-center">
-          <Search className="absolute left-3.5 w-4 h-4 text-primary pointer-events-none" />
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={fabSearchQuery}
-            onChange={(e) => { setFabSearchQuery(e.target.value); resetSearchTimer(); }}
-            placeholder="Search cases, institutions, bureaus…"
-            className={cn(
-              "pl-10 pr-10 py-2 rounded-xl text-sm w-72 md:w-96 h-10",
-              "bg-background/95 border border-primary/40 text-white",
-              "placeholder:text-white/40 backdrop-blur-md shadow-lg",
-              "focus:outline-none focus:border-primary focus:shadow-[0_0_20px_rgba(220,38,38,0.35)]",
-              "transition-all duration-200"
-            )}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") { handleFabSearchClose(); }
-              else if (e.key === "Enter") { handleFabSearchSubmit(e as any); }
-            }}
-          />
-          <button
-            type="button"
-            onClick={handleFabSearchClose}
-            className="absolute right-3 p-1 rounded text-white/40 hover:text-white/80 transition-colors"
-            aria-label="Close search"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </form>
-      </div>
-
       <main className={cn(noPadding ? "pt-0" : "pt-4", "pb-16 md:pb-6 min-h-screen transition-all duration-300 relative z-10", "ml-0", collapsed ? "md:ml-16" : "md:ml-64")}>
         <div className={noPadding ? "" : "p-4 md:p-6"}>{children}</div>
       </main>
@@ -188,13 +102,6 @@ export default function AppLayout({
         onClose={() => setCmdOpen(false)}
         onAction={handlePaletteAction}
       />
-
-      {/* Sticky Radial FAB — right-center, desktop only */}
-      <div className="hidden md:block">
-        <FloatingActionButton
-          onSearchOpen={() => setCmdOpen(true)}
-        />
-      </div>
     </div>
   );
 }

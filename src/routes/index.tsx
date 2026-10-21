@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
-import { Activity, Users, Clock, TrendingUp, FileText, Bot, Zap, ArrowUpRight, FlaskConical, CalendarOff, Wrench, AlertTriangle, Timer, Gavel } from "lucide-react";
+import { Activity, Users, Clock, TrendingUp, FileText, Bot, Zap, ArrowUpRight, FlaskConical, CalendarOff, Wrench, AlertTriangle, Timer, Gavel, ChevronDown } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { requestsStore, STATUS_STYLES } from "@/lib/requests-store";
@@ -70,19 +70,30 @@ function Dashboard() {
               alt="AICTE Official Logo"
               className="w-56 h-56 md:w-72 md:h-72 lg:w-96 lg:h-96 max-h-[40vh] object-contain shrink-0"
             />
-            <div className="text-center">
+            <div className="text-center flex flex-col items-center">
               <h1 className="text-6xl md:text-8xl font-extrabold tracking-tight font-display text-white leading-none">
                 Vigil<span className="text-gradient-red">OS</span>
               </h1>
               <p className="text-base md:text-xl text-muted-foreground mt-3 font-medium tracking-wide">
                 AICTE Complaint & Cross-Bureau Intelligence Platform
               </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById("features-section");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="mt-12 md:mt-16 px-6 py-2.5 rounded-2xl text-sm font-semibold tracking-wide text-white bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:via-rose-500 hover:to-red-500 border border-red-500/40 shadow-[0_0_25px_rgba(220,38,38,0.45)] hover:shadow-[0_0_35px_rgba(220,38,38,0.7)] transition-all duration-300 hover:scale-[1.03] active:scale-[0.98] cursor-pointer flex items-center gap-2 group"
+              >
+                <span>View features</span>
+                <ChevronDown className="w-4 h-4 text-white/80 group-hover:translate-y-0.5 transition-transform" />
+              </button>
             </div>
           </div>
         </div>
 
         {/* Content Section */}
-        <div className="space-y-5 max-w-7xl mx-auto px-4 md:px-6 pb-12 relative z-10">
+        <div id="features-section" className="space-y-5 max-w-7xl mx-auto px-4 md:px-6 pb-12 relative z-10">
           <div className="relative overflow-hidden rounded-2xl border border-border/30 p-7 animate-fade-up noise bg-background/40 backdrop-blur-xl">
             <div className="absolute inset-0 grid-bg opacity-[0.35]" />
             <div className="relative z-10">
