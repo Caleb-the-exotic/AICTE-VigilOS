@@ -1,170 +1,254 @@
-# 🎓 CampusFlow — Multi-Domain Autonomous Campus Agent
+# 🎓 VigilOS — AICTE Complaint & Cross-Bureau Intelligence Platform
 
-```
-  ╔═══════════════════════════════════════════════════════════════════╗
-  ║                                                                   ║
-  ║                C A M P U S F L O W  A G E N T                     ║
-  ║    A production-ready MCP-compliant autonomous campus assistant   ║
-  ║                                                                   ║
-  ╚═══════════════════════════════════════════════════════════════════╝
-```
-
----
-
-## 📋 Table of Contents
-
-- [What Is This?](#-what-is-this)
-- [Key Features](#-key-features)
-- [System Architecture (MCP)](#-system-architecture-mcp)
-- [The 5-Step Autonomous Engine](#-the-5-step-autonomous-engine)
-- [Installation Guide](#-installation-guide)
-- [Running the App](#-running-the-app)
-- [Role-Based Access Control](#-role-based-access-control)
-- [Troubleshooting](#-troubleshooting)
+> AICTE-aligned platform for institutional complaint monitoring, cross-bureau overlap detection, and campus automation — powered by an autonomous agent loop.
 
 ---
 
 ## 🧠 What Is This?
 
-**CampusFlow** is a stateful, robust, and production-ready autonomous AI agent designed to manage campus operations. Instead of a standard chatbot, CampusFlow acts as a fully self-correcting agent that can book labs, process leave requests, resolve IT complaints, and modify campus databases—all through natural language.
-
-By implementing the **Model Context Protocol (MCP)**, the underlying tools are cleanly separated from the AI orchestrator, ensuring a standardized, modular, and highly reliable system.
-
----
-
-## ✨ Key Features
-
-- **MCP Architecture:** Core tools are exposed via a standalone FastMCP server, allowing the LLM orchestrator to communicate via standardized JSON-RPC protocols. Built-in automatic fallbacks ensure zero downtime if the server goes offline.
-- **Natural Language Data Editing:** Teachers and Admins can update Student Attendance or Lab Timetables directly via chat (e.g., *"Mark STU002 present today"* or *"Schedule CS Lab 1 on Friday from 10 to 12"*).
-- **Self-Correcting Loop:** A true `MAX_RETRIES=3` autonomous loop (THINK → PLAN → EXECUTE → REVIEW → UPDATE). The agent reviews its own work against strict campus policies and retries automatically if it fails.
-- **Role-Based Security:** Granular access control for Students, Teachers, and Admins. Students have read-only access to their isolated data, while Teachers/Admins can modify records.
-- **Stateful Persistence:** All chats, logs, requests, and metrics are stored locally in a robust SQLite database (`campusflow.db`).
-- **PDF Exporting:** Users can generate and download fully formatted PDF documents of their conversation history using natural language commands.
-- **Modern Flexbox UI:** A highly polished Streamlit graphical interface featuring glowing cards, live autonomous loop tracking, and collapsible system logs.
-
----
-
-## 🏗️ System Architecture (MCP)
-
-CampusFlow operates using a decoupled **Model Context Protocol (MCP)** architecture:
+**VigilOS** is an integrated institutional monitoring and workflow platform with an autonomous AI backend. It is **not a chatbot** — it uses a self-correcting **THINK → PLAN → EXECUTE → REVIEW → UPDATE** loop to eliminate silos between the Regulation Bureau (RB) and Public Grievance Redressal Cell (PGRC), detect duplicate/overlapping actions, and manage campus requests.
 
 ```
-  ┌──────────────┐
-  │   Streamlit  │
-  │   Web UI     │
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────┐
-  │     LLM      │
-  │ Orchestrator │ (Interprets intent, checks DB)
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────┐
-  │   Executor   │ (Runs the THINK->PLAN->EXECUTE loop)
-  └──────┬───────┘
-         │
-         ▼
-  ┌──────────────┐
-  │  MCP Client  │ (Routes tool calls / Auto-fallbacks)
-  └──────┬───────┘
-         │ HTTP / POST
-         ▼
-  ┌──────────────┐
-  │  MCP Server  │ (FastMCP exposed endpoints)
-  └──────┬───────┘
-         │
-  ┌──────┴───────┬──────────────┬──────────────┐
-  ▼              ▼              ▼              ▼
- Classifier    Policy     Availability    Notifier
-   Tool        Engine      Checker         Tool
+User Query
+    │
+    ▼
+ THINK  ──── Parse goal + incorporate previous feedback
+    │
+ PLAN   ──── LLM creates a JSON action plan
+    │
+ EXECUTE──── Run tools in sequence (classify → policy → notify)
+    │
+ REVIEW ──── Score output quality (1–10)
+    │
+ UPDATE ──── If score < 7: inject feedback and retry
+    │         If score ≥ 7: deliver result
+    ▼
+  Reply
+```
+
+**The loop never changes. The tools do.**
+
+---
+
+## 🏗️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | React 19, TanStack Router, TanStack Query, Tailwind CSS v4, shadcn/ui |
+| **Backend** | FastAPI, Python 3.11+, SQLite (WAL mode) |
+| **AI / LLM** | Groq (llama-3.3-70b-versatile) |
+| **Agent Loop** | Custom THINK→PLAN→EXECUTE→REVIEW→UPDATE (campus/executor.py) |
+| **Scheduler** | APScheduler (background jobs) |
+| **Web Search** | Tavily API |
+| **PDF Export** | ReportLab |
+| **Build Tool** | Vite 7 |
+
+---
+
+## 📁 Project Structure
+
+```
+AICTEProFlow-main/
+│
+├── src/                        # React frontend
+│   ├── routes/                 # TanStack Router pages
+│   │   ├── index.tsx           # Dashboard (home)
+│   │   ├── chat.tsx            # AI Chat (autonomous loop)
+│   │   ├── requests.new.tsx    # New OD request form
+│   │   ├── requests.index.tsx  # My requests list
+│   │   ├── requests.$id.tsx    # Request detail
+│   │   ├── admin.tsx           # Admin panel
+│   │   └── ...                 # Other pages
+│   ├── components/
+│   │   ├── layout/
+│   │   │   ├── AppLayout.tsx   # Main shell
+│   │   │   ├── AppSidebar.tsx  # Navigation sidebar
+│   │   │   └── TopNavbar.tsx   # Top header bar
+│   │   └── ui/                 # shadcn/ui components
+│   └── lib/
+│       ├── api.ts              # Backend API client
+│       ├── auth.tsx            # Auth context
+│       └── ...                 # Stores, utilities
+│
+├── campus/                     # Core autonomous backend
+│   ├── executor.py             # ⭐ Main autonomous loop entry point
+│   ├── db.py                   # SQLite persistence layer
+│   ├── classifier.py           # Intent classifier (LLM)
+│   ├── policy_engine.py        # Rules engine (approve/reject/escalate)
+│   ├── notifier.py             # Notification router
+│   ├── web_researcher.py       # Tavily web search tool
+│   ├── role_system.py          # Role-based access control
+│   ├── auth.py                 # User authentication (SQLite)
+│   ├── pdf_exporter.py         # Chat PDF export
+│   └── ...
+│
+├── agent/                      # General-purpose agent loop
+│   ├── loop.py                 # ⭐ THE CORE: 5-step loop (NEVER change this)
+│   ├── planner.py              # LLM → JSON plan
+│   ├── executor.py             # Plan → tool execution
+│   ├── reviewer.py             # Quality scorer
+│   └── tools/                  # Domain-specific tools
+│
+├── mcp_server/                 # MCP (Model Context Protocol) server
+│   └── server.py               # Tool routing via MCP
+│
+├── scheduler/                  # Background job scheduler
+│   └── jobs.py                 # APScheduler cron jobs
+│
+├── api_server.py               # ⭐ FastAPI bridge (run this!)
+├── requirements.txt            # Python dependencies
+├── .env.example                # Environment variables template
+├── package.json                # Node.js dependencies
+└── vite.config.ts              # Vite build config
 ```
 
 ---
 
-## 🔄 The 5-Step Autonomous Engine
-
-Every complex request goes through our rigorous autonomous evaluation loop:
-
-| Step | What Happens | Why It Matters |
-|------|-------------|---------------|
-| **THINK** | Parses the student query + extracts entities | Context awareness — understands dates, IDs, and rooms. |
-| **PLAN** | Generates a JSON action plan for the tools | Self-direction — the agent sequences its own workflow. |
-| **EXECUTE** | Dispatches requests to the MCP Server | Information chaining — tools feed data to one another. |
-| **REVIEW** | Evaluates the output against strict policies | **This is autonomy** — scores the logic quality out of 10. |
-| **UPDATE** | Self-corrects and tries again if Score < 7 | Directed self-correction, not blind guessing. |
-
----
-
-## 💻 Installation Guide
+## 🚀 Quick Start
 
 ### Prerequisites
+- **Python 3.11+**
+- **Node.js 18+** (or Bun)
+- A **Groq API key** (free at [console.groq.com](https://console.groq.com))
 
-| Requirement | Details |
-|-------------|---------|
-| **Python** | Version 3.10 or higher |
-| **Groq API Key** | Free. Get it at [console.groq.com](https://console.groq.com) |
+---
 
-### Step 1: Clone and Install
+### 1. Clone & Set Up Environment
 
 ```bash
-git clone <your-repo-url>
-cd CampusFlow
-pip install -r requirements.txt
+# Copy the env template
 cp .env.example .env
-```
 
-### Step 2: Configure Secrets
-
-Open the `.env` file and add your actual API keys:
-
-```ini
-GROQ_API_KEY=gsk_your_actual_key_here
-TAVILY_API_KEY=tvly_your_actual_key_here
+# Edit .env and fill in your Groq API key:
+# GROQ_API_KEY=gsk_...
+# VITE_API_BASE_URL=http://localhost:8000
 ```
 
 ---
 
-## ▶️ Running the App
+### 2. Start the Python Backend
 
-CampusFlow requires two separate processes to run simultaneously. Open two terminal windows.
-
-**Terminal 1 — Start the MCP Server:**
 ```bash
-python mcp_server/server.py --host 127.0.0.1 --port 8765
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Start the FastAPI server
+uvicorn api_server:app --reload --port 8000
 ```
 
-**Terminal 2 — Start the Streamlit App:**
+The backend will be running at **http://localhost:8000**
+
+API docs available at **http://localhost:8000/docs**
+
+---
+
+### 3. Start the React Frontend
+
 ```bash
-python -m streamlit run main.py
+# Install Node dependencies
+npm install --legacy-peer-deps
+
+# Start Vite dev server
+npm run dev
 ```
 
-The app will automatically open in your browser at **http://localhost:8501**.
+The frontend will be running at **http://localhost:8080**
 
 ---
 
-## 🔐 Role-Based Access Control
+## 🔑 Default Login
 
-The UI handles distinct operations based on your logged-in role. 
+| Username | Password | Role |
+|----------|----------|------|
+| `admin` | `12345678` | Admin |
 
-*Initial default accounts (Password for all: `12345678`)*:
-
-*   **Admin (`admin`)**: Can view all campus chats, modify global timetables, and override any student attendance.
-*   **Teacher (`teacher_01`)**: Can modify lab timetables and take attendance. Views only their own chat history.
-*   **Student (`STU001` - `STU010`)**: Can book labs, query their own attendance, request leave, and file complaints. Read-only limits enforce system safety.
+Register new users via the UI (student or teacher role).
 
 ---
 
-## 🔧 Troubleshooting
+## 🌍 Environment Variables
 
-| Problem | Solution |
-|---------|----------|
-| **`ModuleNotFoundError: No module named 'fastmcp'`** | Run `pip install fastmcp` or `pip install -r requirements.txt`. |
-| **"Failed to connect to MCP Server" logs** | Ensure Terminal 1 is running the server. Note: The app will continue to function via direct auto-fallbacks! |
-| **"API key missing" error** | Paste your Groq key into the sidebar config menu, or ensure `.env` is loaded. |
-| **Attendance CSV not updating** | Ensure you are logged in as a **Teacher** or **Admin**, otherwise writes are strictly rejected. |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GROQ_API_KEY` | ✅ Yes | Groq LLM API key |
+| `GROQ_MODEL` | No | Model name (default: `llama-3.3-70b-versatile`) |
+| `TAVILY_API_KEY` | No | Web search API key |
+| `VITE_API_BASE_URL` | ✅ Yes | Backend URL for frontend (e.g. `http://localhost:8000`) |
 
 ---
 
-**Built using Python, Streamlit, and the Model Context Protocol.**
+## 🤖 The Autonomous Agent Loop
+
+The heart of AICTEProFlow is `campus/executor.py`, which runs the full autonomous loop:
+
+| Step | What Happens |
+|------|-------------|
+| **THINK** | Classify the student's request (lab/leave/room/complaint/web) |
+| **PLAN** | Extract a structured schema (dates, resources, role) |
+| **EXECUTE** | Run the policy engine (APPROVED / REJECTED / ESCALATED) |
+| **REVIEW** | Score the quality of classification + policy on 6 metrics (1–10) |
+| **UPDATE** | If score < 7: inject feedback and retry (up to 3 attempts) |
+
+This is **different from a chatbot** — the agent self-evaluates and self-corrects without human input.
+
+---
+
+## 📡 API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/health` | Health check |
+| `POST` | `/api/auth/login` | Login |
+| `POST` | `/api/auth/register` | Register |
+| `POST` | `/api/auth/logout` | Logout |
+| `GET` | `/api/sessions` | List chat sessions |
+| `POST` | `/api/sessions` | Create session |
+| `DELETE` | `/api/sessions/{id}` | Delete session |
+| `GET` | `/api/chat/messages/{id}` | Get messages |
+| `POST` | `/api/chat/query` | **Send query → runs autonomous loop** |
+| `GET` | `/api/workflow/{id}` | Get workflow data |
+| `GET` | `/api/workflow/logs/{id}` | Get execution logs |
+| `GET` | `/api/kpi/dashboard` | KPI summary |
+| `GET` | `/api/export/pdf/{id}` | Export chat as PDF |
+
+---
+
+## 🛠️ Supported Request Types
+
+| Type | Examples |
+|------|---------|
+| **OD / Hackathon** | "I need OD for Smart India Hackathon this weekend" |
+| **Lab Booking** | "Book Lab 204 on Friday 3-5 PM for my team" |
+| **Leave Request** | "Apply for 2-day medical leave from March 22-24" |
+| **Room Booking** | "Reserve Seminar Hall A on April 10 for 60 students" |
+| **Complaint** | "AC in Lab 204 is broken, needs urgent fix" |
+| **Web Research** | "What are the latest AI trends in autonomous agents?" |
+
+---
+
+## 🏛️ Roles & Access
+
+| Role | Access |
+|------|--------|
+| **student** | Submit requests, view own history, AI chat |
+| **faculty** | Review student requests, class roster, tracking |
+| **hod** | All faculty access + reports + SLA dashboard |
+| **admin** | Full access: all requests, users, KPIs, AI command center |
+
+---
+
+## 📦 Building for Production
+
+```bash
+# Build frontend
+npm run build
+
+# Run backend in production mode
+uvicorn api_server:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+---
+
+## 📄 License
+
+MIT — Built for AICTE Smart India Hackathon 2025.

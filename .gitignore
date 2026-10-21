@@ -1,26 +1,48 @@
-# Environment variables (contains API keys — never commit this)
-.env
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Python bytecode
-__pycache__/
-*.pyc
-*.pyo
+node_modules
+dist
+dist-ssr
+.output
+.vinxi
+.tanstack/**
+.nitro
+*.local
 
-# Streamlit secrets
-.streamlit/secrets.toml
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
 
-# IDE
-.vscode/
-.idea/
-
-# OS
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
-Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-# CampusBot Specifics
-autonomy_logs.json
-token.json
-client_secret.json
-*.pdf
-/tmp/
-agent/tools/__pycache__/
+# Environment & Secrets
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+campusflow.db
+campusflow.db-shm
+campusflow.db-wal
+chat_history/
+chat_history.json

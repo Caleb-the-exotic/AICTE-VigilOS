@@ -1,13 +1,32 @@
+# VigilOS — Python Backend Requirements
+# Install with: pip install -r requirements.txt
+
+# ── FastAPI backend ──────────────────────────────────────────────
+fastapi
+uvicorn[standard]
+pydantic
+
+# ── Autonomous agent (LLM) ───────────────────────────────────────
 groq
-streamlit
 python-dotenv
+
+# ── Campus tools & persistence ───────────────────────────────────
 PyMuPDF
 gspread
 google-auth
 google-auth-oauthlib
 google-api-python-client
 requests
-apscheduler
-tavily-python
-fastmcp
 reportlab
+
+# ── Scheduler (background jobs) ──────────────────────────────────
+apscheduler
+
+# ── Web researcher (Tavily) ───────────────────────────────────────
+tavily-python
+
+# ── MCP server ───────────────────────────────────────────────────
+fastmcp
+
+# ── PostgreSQL connection ─────────────────────────────────────────
+psycopg2-binary
