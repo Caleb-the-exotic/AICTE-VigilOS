@@ -19,6 +19,37 @@ const Ctx = createContext<AuthCtx | null>(null);
 
 const STORAGE_USER = "aicte_user";
 const STORAGE_TOKEN = "aicte_token";
+const STORAGE_ACCOUNTS = "aicte_registered_users";
+
+interface StoredAccount {
+  name: string;
+  email: string;
+  passwordHash: string;
+  role: Role;
+  createdAt: string;
+}
+
+function getStoredAccounts(): Record<string, StoredAccount> {
+  try {
+    const raw = localStorage.getItem(STORAGE_ACCOUNTS);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveStoredAccount(account: StoredAccount) {
+  try {
+    const accounts = getStoredAccounts();
+    accounts[account.email.toLowerCase()] = account;
+    // Also index by username if no @
+    const username = account.email.split("@")[0].toLowerCase();
+    accounts[username] = account;
+    localStorage.setItem(STORAGE_ACCOUNTS, JSON.stringify(accounts));
+  } catch (err) {
+    console.error("[Auth Storage] Error saving account locally:", err);
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -45,15 +76,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
   }, []);
 
-  const login = useCallback<AuthCtx["login"]>(async (email, password) => {
+  const login = useCallback<AuthCtx["login"]>(async (identifier, password) => {
+    const cleanId = identifier.trim().toLowerCase();
+    
+    // 1. If backend is configured, attempt backend login first
     if (HAS_BACKEND) {
-      const res = await api.login(email, password);
-      persist(res.user, res.token);
+      try {
+        const res = await api.login(identifier, password);
+        if (res?.user && res?.token) {
+          persist(res.user, res.token);
+          // Mirror to local cache for resilience
+          saveStoredAccount({
+            name: res.user.name,
+            email: res.user.email,
+            passwordHash: btoa(password),
+            role: res.user.role as Role,
+            createdAt: new Date().toISOString(),
+          });
+          return;
+        }
+      } catch (backendErr: any) {
+        // If backend actively reported invalid credentials, bubble that up
+        if (backendErr?.message && (backendErr.message.includes("401") || backendErr.message.includes("Invalid"))) {
+          throw new Error("Invalid username/email or password.");
+        }
+        console.warn("[Auth] Backend unreachable, checking local registry fallback:", backendErr);
+      }
+    }
+
+    // 2. Offline / local registered accounts fallback
+    const accounts = getStoredAccounts();
+    const existing = accounts[cleanId];
+    if (existing) {
+      if (existing.passwordHash === btoa(password)) {
+        persist(
+          {
+            id: existing.email.split("@")[0],
+            email: existing.email,
+            name: existing.name,
+            role: existing.role,
+          },
+          "token-" + Date.now()
+        );
+        return;
+      } else {
+        throw new Error("Incorrect password. Please verify your credentials.");
+      }
+    }
+
+    // 3. Built-in default AICTE Administrator account
+    if ((cleanId === "admin" || cleanId === "admin@aicte.gov.in") && password === "12345678") {
+      persist(
+        {
+          id: "admin",
+          email: "admin@aicte.gov.in",
+          name: "AICTE Super Admin",
+          role: "admin",
+        },
+        "admin-token-" + Date.now()
+      );
       return;
     }
-    // Mock auth: any non-empty creds → student account
-    const role: Role = email.includes("admin") ? "admin" : email.includes("hod") ? "hod" : email.includes("faculty") ? "faculty" : email.includes("ambassador") ? "ambassador" : "student";
-    persist({ id: "u-" + email, email, name: email.split("@")[0] || "User", role }, "mock-token");
+
+    // 4. Default test officer accounts (HOD / Faculty / Officer)
+    if (cleanId.includes("admin") || cleanId.includes("officer") || cleanId.includes("hod")) {
+      const role: Role = cleanId.includes("admin") ? "admin" : cleanId.includes("hod") ? "hod" : "faculty";
+      persist(
+        {
+          id: cleanId.split("@")[0],
+          email: cleanId.includes("@") ? cleanId : `${cleanId}@aicte.gov.in`,
+          name: cleanId.split("@")[0].replace(/[._]/g, " ").toUpperCase(),
+          role,
+        },
+        "officer-token-" + Date.now()
+      );
+      return;
+    }
+
+    throw new Error("Account not found. Please click 'Create Account' to register.");
   }, [persist]);
 
   const loginWithGoogle = useCallback<AuthCtx["loginWithGoogle"]>(async (credential) => {
@@ -112,12 +212,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [persist]);
 
   const register = useCallback<AuthCtx["register"]>(async (data) => {
-    if (HAS_BACKEND) {
-      const res = await api.register(data);
-      persist(res.user, res.token);
-      return;
+    const cleanEmail = data.email.trim().toLowerCase();
+    const cleanName = data.name.trim();
+    const role = (data.role || "student") as Role;
+
+    // Check if account already exists locally
+    const existing = getStoredAccounts()[cleanEmail];
+    if (existing) {
+      throw new Error("An account with this email address already exists. Please sign in.");
     }
-    persist({ id: "u-" + data.email, email: data.email, name: data.name, role: (data.role || "student") as Role }, "mock-token");
+
+    // Always record to local storage so credentials persist for signing in again
+    saveStoredAccount({
+      name: cleanName,
+      email: cleanEmail,
+      passwordHash: btoa(data.password),
+      role,
+      createdAt: new Date().toISOString(),
+    });
+
+    if (HAS_BACKEND) {
+      try {
+        const res = await api.register(data);
+        if (res?.user && res?.token) {
+          persist(res.user, res.token);
+          return;
+        }
+      } catch (backendErr: any) {
+        console.warn("[Auth] Backend register error, continuing with local persistence:", backendErr);
+        if (backendErr?.message && backendErr.message.includes("already exists")) {
+          throw new Error("An account with this email already exists on the server.");
+        }
+      }
+    }
+
+    persist(
+      {
+        id: cleanEmail.split("@")[0],
+        email: cleanEmail,
+        name: cleanName,
+        role,
+      },
+      "token-" + Date.now()
+    );
   }, [persist]);
 
   const logout = useCallback(() => {

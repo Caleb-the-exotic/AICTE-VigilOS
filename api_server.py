@@ -148,41 +148,46 @@ class RegisterBody(BaseModel):
 
 @app.post("/api/auth/login")
 def login(body: LoginBody):
-    username = body.email.split("@")[0] if "@" in body.email else body.email
-    ok, role = auth.verify_login(username, body.password)
+    identifier = body.email.strip()
+    ok, user_data = auth.verify_login(identifier, body.password)
     if not ok:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+        raise HTTPException(status_code=401, detail="Invalid email/username or password")
     
-    # Sign JWT for standard login too
-    token = auth.create_jwt(body.email)
+    token = auth.create_jwt(user_data["email"])
     
     return {
         "token": token,
         "user": {
-            "id": username,
-            "email": body.email,
-            "name": username.title(),
-            "role": _map_role(role),
+            "id": user_data["username"],
+            "email": user_data["email"],
+            "name": user_data["name"],
+            "role": _map_role(user_data["role"]),
         },
     }
 
 @app.post("/api/auth/register")
 def register(body: RegisterBody):
-    username = body.email.split("@")[0] if "@" in body.email else body.name.lower().replace(" ", "_")
+    email = body.email.strip()
+    username = email.split("@")[0] if "@" in email else body.name.lower().replace(" ", "_")
     campus_role = _reverse_map_role(body.role or "student")
-    ok, msg = auth.register_user(username, body.password, role=campus_role)
+    ok, result = auth.register_user(
+        username=username,
+        password=body.password,
+        role=campus_role,
+        name=body.name.strip(),
+        email=email
+    )
     if not ok:
-        raise HTTPException(status_code=400, detail=msg)
+        raise HTTPException(status_code=400, detail=result)
     
-    # Sign JWT for register too
-    token = auth.create_jwt(body.email)
+    token = auth.create_jwt(email)
     
     return {
         "token": token,
         "user": {
             "id": username,
-            "email": body.email,
-            "name": body.name,
+            "email": email,
+            "name": body.name.strip(),
             "role": body.role or "student",
         },
     }

@@ -71,15 +71,27 @@ def init_auth_db():
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
             password_hash TEXT NOT NULL,
-            role TEXT NOT NULL
+            role TEXT NOT NULL,
+            name TEXT,
+            email TEXT
         )
     ''')
+    # Auto-migrate existing tables that might lack name/email
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN name TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN email TEXT")
+    except Exception:
+        pass
+
     # Insert hardcoded admin if not exists
     cursor.execute('SELECT username FROM users WHERE username = ?', ('admin',))
     if not cursor.fetchone():
         admin_hash = hash_password('12345678')
-        cursor.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
-                       ('admin', admin_hash, 'admin'))
+        cursor.execute('INSERT INTO users (username, password_hash, role, name, email) VALUES (?, ?, ?, ?, ?)',
+                       ('admin', admin_hash, 'admin', 'System Administrator', 'admin@aicte.gov.in'))
     conn.commit()
     conn.close()
 
@@ -87,34 +99,63 @@ def hash_password(password: str) -> str:
     """Hash password for storage."""
     return hashlib.sha256(password.encode()).hexdigest()
 
-def verify_login(username, password):
-    """Verify user credentials and return (success, role)."""
+def verify_login(identifier: str, password: str):
+    """Verify user credentials by username or email and return (success, user_dict_or_role)."""
+    init_auth_db()
     conn = get_conn()
     cursor = conn.cursor()
-    cursor.execute('SELECT password_hash, role FROM users WHERE username = ?', (username,))
+    # Check by username or email
+    cursor.execute('''
+        SELECT password_hash, role, username, name, email 
+        FROM users 
+        WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)
+    ''', (identifier.strip(), identifier.strip()))
     row = cursor.fetchone()
     conn.close()
     if row and row[0] == hash_password(password):
-        return True, row[1]
+        user_info = {
+            "username": row[2],
+            "role": row[1],
+            "name": row[3] or row[2].title(),
+            "email": row[4] or (identifier if "@" in identifier else f"{row[2]}@aicte.gov.in"),
+        }
+        return True, user_info
     return False, None
 
-def register_user(username, password, role="student"):
-    """Register a new user to the system. Default role is student."""
+def register_user(username: str, password: str, role: str = "student", name: str = None, email: str = None):
+    """Register a new user to the system and persist in database."""
+    init_auth_db()
     if not username or not password:
         return False, "Username and password cannot be empty."
     
+    clean_username = username.strip()
+    clean_email = (email or f"{clean_username}@aicte.gov.in").strip().lower()
+    clean_name = (name or clean_username.title()).strip()
+    
     conn = get_conn()
     cursor = conn.cursor()
-    cursor.execute('SELECT username FROM users WHERE username = ?', (username,))
+    
+    # Check if user already exists
+    cursor.execute('''
+        SELECT username FROM users 
+        WHERE LOWER(username) = LOWER(?) OR (email IS NOT NULL AND LOWER(email) = LOWER(?))
+    ''', (clean_username, clean_email))
     if cursor.fetchone():
         conn.close()
-        return False, "Username already exists."
+        return False, "An account with this email or username already exists. Please sign in instead."
     
     try:
-        cursor.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
-                       (username, hash_password(password), role))
+        cursor.execute(
+            'INSERT INTO users (username, password_hash, role, name, email) VALUES (?, ?, ?, ?, ?)',
+            (clean_username, hash_password(password), role, clean_name, clean_email)
+        )
         conn.commit()
-        return True, "Success"
+        return True, {
+            "username": clean_username,
+            "role": role,
+            "name": clean_name,
+            "email": clean_email,
+        }
     except Exception as e:
         return False, str(e)
     finally:
