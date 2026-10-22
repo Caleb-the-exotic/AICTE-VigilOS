@@ -258,9 +258,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [persist]);
 
   const logout = useCallback(() => {
+    if (typeof window !== "undefined" && window.google?.accounts?.id) {
+      try {
+        window.google.accounts.id.disableAutoSelect();
+      } catch (err) {
+        console.warn("[Auth] Failed to disable Google auto-select:", err);
+      }
+      if (user?.email && window.google.accounts.id.revoke) {
+        try {
+          window.google.accounts.id.revoke(user.email, () => {
+            console.log("[Auth] Successfully revoked Google session for:", user.email);
+          });
+        } catch (err) {
+          console.warn("[Auth] Failed to revoke Google token:", err);
+        }
+      }
+    }
     if (HAS_BACKEND) void api.logout().catch(() => {});
     persist(null);
-  }, [persist]);
+  }, [persist, user]);
 
   const setRole = useCallback((r: Role) => {
     setUser((prev) => {

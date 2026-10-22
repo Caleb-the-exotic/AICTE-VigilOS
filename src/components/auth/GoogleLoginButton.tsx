@@ -40,11 +40,18 @@ export default function GoogleLoginButton() {
           cancel_on_tap_outside: true,
         });
 
+        // Ensure previously logged in account is never auto-selected or cached
+        try {
+          window.google.accounts.id.disableAutoSelect();
+        } catch {
+          // ignore
+        }
+
         window.google.accounts.id.renderButton(container, {
           theme: "filled_black",
           size: "large",
           width: 380,
-          text: "continue_with",
+          text: "signin_with",
           shape: "pill",
           logo_alignment: "left",
         });

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { 
   Shield, Mail, Lock, User, Eye, EyeOff, ArrowRight, 
   Loader2, CheckCircle2, Sparkles, Building2, HelpCircle 
@@ -35,10 +35,23 @@ function LoginPage() {
   const [signUpConfirmPassword, setSignUpConfirmPassword] = useState("");
   const [showSignUpPassword, setShowSignUpPassword] = useState(false);
 
+  // Ensure Google Identity never shows the previous account on the login page
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.google?.accounts?.id?.disableAutoSelect) {
+      try {
+        window.google.accounts.id.disableAutoSelect();
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
   // If already logged in, redirect home
-  if (user) {
-    navigate({ to: "/" });
-  }
+  useEffect(() => {
+    if (user) {
+      navigate({ to: "/" });
+    }
+  }, [user, navigate]);
 
   const handleSignIn = async (e: FormEvent) => {
     e.preventDefault();
@@ -122,25 +135,16 @@ function LoginPage() {
 
           {/* Header & AICTE Branding */}
           <div className="flex flex-col items-center text-center mb-6">
-            <div className="relative mb-3 group">
-              <div className="absolute -inset-1.5 rounded-full bg-gradient-to-r from-red-600 to-rose-600 opacity-30 group-hover:opacity-50 blur-sm transition-all" />
-              <div className="relative w-14 h-14 rounded-2xl bg-background/90 border border-border/80 p-2 grid place-items-center shadow-lg">
-                <img
-                  src="/aicte-logo.png"
-                  alt="AICTE Emblem"
-                  className="w-10 h-10 object-contain drop-shadow"
-                />
-              </div>
+            <div className="flex items-center justify-center gap-3.5 mb-2">
+              <img
+                src="/aicte-logo.png"
+                alt="AICTE Emblem"
+                className="w-14 h-14 sm:w-16 sm:h-16 object-contain shrink-0"
+              />
+              <h1 className="text-4xl sm:text-5xl font-black tracking-tight leading-none">
+                Vigil<span className="text-gradient-red">OS</span>
+              </h1>
             </div>
-
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-[11px] font-semibold text-red-400 tracking-wide mb-1.5">
-              <Shield className="w-3 h-3 text-red-400" />
-              CENTRAL VIGILANCE & OVERSIGHT PORTAL
-            </div>
-
-            <h1 className="text-2xl font-bold tracking-tight">
-              Vigil<span className="text-gradient-red">OS</span>
-            </h1>
             <p className="text-xs text-muted-foreground mt-1 max-w-xs">
               AICTE Complaint Tracking, Cross-Bureau Overlap Prevention & Autonomous Intelligence
             </p>
@@ -450,23 +454,7 @@ function LoginPage() {
           {/* Stylized Google Login Button */}
           <GoogleLoginButton />
 
-          {/* Security & Support footer */}
-          <div className="mt-6 pt-4 border-t border-border/30 flex flex-col items-center text-center gap-1 text-[11px] text-muted-foreground">
-            <div className="flex items-center gap-1.5 text-muted-foreground/80">
-              <Shield className="w-3 h-3 text-red-500" />
-              <span>Protected by AICTE Cyber Security Protocol</span>
-            </div>
-            <div className="flex items-center gap-1 mt-0.5">
-              <span>Need officer clearance?</span>
-              <button
-                type="button"
-                onClick={() => navigate({ to: "/help" })}
-                className="text-red-400 hover:underline flex items-center gap-0.5"
-              >
-                Contact AICTE Helpdesk
-              </button>
-            </div>
-          </div>
+
 
         </div>
       </div>
