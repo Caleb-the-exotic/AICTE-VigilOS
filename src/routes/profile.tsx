@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import { useAuth, formatRole, type Role } from "@/lib/auth";
-import { UserCircle, Upload, ShieldCheck, Monitor, LogOut, Key, Clock, Shield } from "lucide-react";
+import { useTheme } from "@/lib/theme";
+import { UserCircle, Upload, ShieldCheck, Monitor, LogOut, Key, Clock, Shield, Sun, Moon, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { prefsStore } from "@/lib/prefs-store";
 import { toast } from "sonner";
@@ -11,7 +12,9 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/profile")({ component: Profile });
 
 function Profile() {
-  const { user, setRole } = useAuth();
+  const { user, setRole, logout } = useAuth();
+  const { theme, toggle: toggleTheme } = useTheme();
+  const navigate = useNavigate();
   const [prefs, setPrefs] = useState(() => prefsStore.refreshCurrentSession());
   const [show2FA, setShow2FA] = useState(false);
   const [otp, setOtp] = useState("");
@@ -136,6 +139,56 @@ function Profile() {
               <option value="student">👤 Citizen / Complainant</option>
             </select>
           </div>
+        </div>
+
+        {/* Quick Actions Row: Theme, Home/Admin Page, Logout */}
+        <div className="grid grid-cols-3 gap-3">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-secondary/35 hover:bg-secondary/60 border border-border/40 hover:border-primary/50 text-foreground transition-all duration-200 cursor-pointer shadow-sm group active:scale-[0.98]"
+          >
+            {theme === "dark" ? (
+              <Sun className="w-4 h-4 text-primary group-hover:rotate-45 transition-transform" />
+            ) : (
+              <Moon className="w-4 h-4 text-primary group-hover:-rotate-12 transition-transform" />
+            )}
+            <span className="text-xs font-semibold">
+              {theme === "dark" ? "Light Mode" : "Dark Mode"}
+            </span>
+          </button>
+
+          {user.role === "admin" ? (
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/admin" })}
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-secondary/35 hover:bg-secondary/60 border border-border/40 hover:border-primary/50 text-foreground transition-all duration-200 cursor-pointer shadow-sm group active:scale-[0.98]"
+            >
+              <Shield className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+              <span className="text-xs font-semibold">Admin Page</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/" })}
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-secondary/35 hover:bg-secondary/60 border border-border/40 hover:border-primary/50 text-foreground transition-all duration-200 cursor-pointer shadow-sm group active:scale-[0.98]"
+            >
+              <Home className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />
+              <span className="text-xs font-semibold">Home</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              logout();
+              navigate({ to: "/login" });
+            }}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-secondary/35 hover:bg-destructive/15 border border-border/40 hover:border-destructive/40 text-foreground hover:text-destructive transition-all duration-200 cursor-pointer shadow-sm group active:scale-[0.98]"
+          >
+            <LogOut className="w-4 h-4 text-destructive/80 group-hover:text-destructive group-hover:translate-x-0.5 transition-all" />
+            <span className="text-xs font-semibold">Log Out</span>
+          </button>
         </div>
 
         {/* Security Card */}

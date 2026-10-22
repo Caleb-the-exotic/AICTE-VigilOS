@@ -7,7 +7,6 @@ import BottomTabs from "../BottomTabs";
 import { CommandPalette, useCommandPalette } from "../CommandPalette";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { Menu } from "lucide-react";
 
 export default function AppLayout({
   children,
@@ -19,7 +18,6 @@ export default function AppLayout({
   noPadding?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   const { user, loading } = useAuth();
@@ -28,7 +26,6 @@ export default function AppLayout({
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
 
   useEffect(() => { if (!loading && requireAuth && !user) navigate({ to: "/login" }); }, [loading, user, requireAuth, navigate]);
-  useEffect(() => { setMobileOpen(false); }, [pathname]);
 
   // ── Keyboard shortcuts ───────────────────────────────────────────
   useEffect(() => {
@@ -72,22 +69,12 @@ export default function AppLayout({
     <div className="min-h-screen bg-background relative">
       <AnimatedBackground />
 
-      {mobileOpen && <div className="md:hidden fixed inset-0 z-40 bg-background/70 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />}
-
-      <div className={cn("fixed top-0 left-0 h-full z-50 transition-transform duration-300", "md:translate-x-0", mobileOpen ? "translate-x-0" : "-translate-x-full")}>
+      {/* Sidebar — desktop only */}
+      <div className="hidden md:block fixed top-0 left-0 h-full z-50">
         <AppSidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       </div>
 
-      {/* Floating mobile menu button */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className="md:hidden fixed top-3 left-3 z-30 p-2.5 rounded-lg bg-background/80 border border-border/40 shadow-lg backdrop-blur-md text-foreground hover:bg-secondary/80"
-        aria-label="Open menu"
-      >
-        <Menu className="w-4 h-4" />
-      </button>
-
-      <main className={cn(noPadding ? "pt-0" : "pt-4", "pb-16 md:pb-6 min-h-screen transition-all duration-300 relative z-10", "ml-0", collapsed ? "md:ml-16" : "md:ml-64")}>
+      <main className={cn(noPadding ? "pt-0" : "pt-4", "pb-20 md:pb-6 min-h-screen transition-all duration-300 relative z-10", "ml-0", collapsed ? "md:ml-16" : "md:ml-64")}>
         <div className={noPadding ? "" : "p-4 md:p-6"}>{children}</div>
       </main>
 

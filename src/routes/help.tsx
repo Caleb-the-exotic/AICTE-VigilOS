@@ -2,9 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import { 
-  MapPin, Phone, Mail, Clock, Send, 
-  Building2, CheckCircle2, Shield, Globe, ExternalLink,
-  HelpCircle, AlertCircle, FileText
+  MapPin, Phone, Mail, Send,
+  Building2, CheckCircle2, Shield, Globe, ExternalLink
 } from "lucide-react";
 
 export const Route = createFileRoute("/help")({
@@ -112,7 +111,7 @@ function HelpPage() {
                       type="text"
                       id="emailOrPid"
                       required
-                      placeholder="e.g. 1-109723481 or officer@sritcbe.ac.in"
+                      placeholder="e.g. 1-109723481"
                       className="w-full bg-background border border-border/40 rounded-xl px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
                       value={formData.emailOrPid}
                       onChange={(e) => setFormData({ ...formData, emailOrPid: e.target.value })}
@@ -200,7 +199,7 @@ function HelpPage() {
                     <p className="text-xs text-muted-foreground">
                       011-29581000 / 011-29581050
                     </p>
-                    <p className="text-[11px] text-amber-400 font-mono">
+                    <p className="text-[11px] text-muted-foreground font-mono">
                       Toll-Free (Grievance Cell): 1800-11-2246
                     </p>
                   </div>
@@ -216,19 +215,19 @@ function HelpPage() {
                     <div className="space-y-0.5 text-xs">
                       <div>
                         <span className="text-muted-foreground">PGRC Cell: </span>
-                        <a href="mailto:pgrc@aicte-india.org" className="text-primary hover:underline">
+                        <a href="mailto:pgrc@aicte-india.org" className="text-muted-foreground hover:underline">
                           pgrc@aicte-india.org
                         </a>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Regulation Bureau: </span>
-                        <a href="mailto:regulation@aicte-india.org" className="text-primary hover:underline">
+                        <a href="mailto:regulation@aicte-india.org" className="text-muted-foreground hover:underline">
                           regulation@aicte-india.org
                         </a>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Portal Support: </span>
-                        <a href="mailto:support@vigilos.gov.in" className="text-primary hover:underline">
+                        <a href="mailto:support@vigilos.gov.in" className="text-muted-foreground hover:underline">
                           support@vigilos.gov.in
                         </a>
                       </div>
@@ -236,29 +235,11 @@ function HelpPage() {
                   </div>
                 </div>
 
-                {/* Operating Timings */}
-                <div className="flex gap-3.5">
-                  <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/25 flex items-center justify-center shrink-0">
-                    <Clock className="w-4 h-4 text-primary" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <div className="text-xs font-bold uppercase tracking-wider text-foreground">Office Working Hours</div>
-                    <p className="text-xs text-muted-foreground">
-                      Monday – Friday: 9:30 AM – 5:30 PM (IST)
-                    </p>
-                    <p className="text-[11px] text-emerald-400">
-                      VigilOS Online System: 24/7 Intake &amp; Case Tracking
-                    </p>
-                  </div>
-                </div>
-              </div>
+            </div>
             </div>
 
             {/* Regional Coverage & Official Portals */}
             <div className="space-y-3 pt-4 border-t border-border/20">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Coordinating across 8 AICTE Regional Offices (Northern, Southern, Western, Eastern, South-Western, Central, North-Western, and Camp Offices).
-              </p>
               <div className="space-y-1.5">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Official Portals</div>
                 <div className="flex items-center gap-2 flex-wrap">
