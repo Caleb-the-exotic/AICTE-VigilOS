@@ -7,7 +7,7 @@ import {
   Sun, Moon, LogOut, FileStack, Bell, Sparkles, Gavel
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/lib/auth";
+import { useAuth, formatRole } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { mailStore } from "@/lib/mail-store";
 
@@ -97,7 +97,7 @@ export default function AppSidebar({ collapsed, onToggle }: Props) {
           {!collapsed && (
             <div className="text-left min-w-0 flex-1">
               <div className="text-xs font-semibold leading-none truncate">{user?.name || "Guest"}</div>
-              <div className="text-[10px] text-muted-foreground capitalize leading-none mt-1">{user?.role || "—"}</div>
+              <div className="text-[10px] text-primary/80 font-medium leading-none mt-1">{formatRole(user?.role)}</div>
             </div>
           )}
         </Link>

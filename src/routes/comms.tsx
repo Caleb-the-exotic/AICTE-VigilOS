@@ -105,9 +105,9 @@ function CommsHubPage() {
                 <div className="space-y-1">
                   {[
                     { k: "inbox" as Folder, icon: Inbox, label: "Inbox", count: mailStore.unread(), activeColor: "text-red-500 bg-red-500/10 font-bold" },
-                    { k: "starred" as Folder, icon: Star, label: "Starred", activeColor: "text-green-500 bg-green-500/10 font-bold" },
+                    { k: "starred" as Folder, icon: Star, label: "Starred", activeColor: "text-red-400 bg-red-500/10 font-bold" },
                     { k: "sent" as Folder, icon: Send, label: "Sent", activeColor: "text-red-500 bg-red-500/10 font-bold" },
-                    { k: "drafts" as Folder, icon: Pencil, label: "Drafts", activeColor: "text-green-500 bg-green-500/10 font-bold" },
+                    { k: "drafts" as Folder, icon: Pencil, label: "Drafts", activeColor: "text-red-400 bg-red-500/10 font-bold" },
                     { k: "trash" as Folder, icon: Trash2, label: "Trash", activeColor: "text-red-500 bg-red-500/10 font-bold" },
                   ].map((f) => {
                     const isSelected = mailFolder === f.k;
@@ -146,10 +146,10 @@ function CommsHubPage() {
                           onClick={() => { setMailFolder(`label:${l}`); setMailSelected(null); }}
                           className={cn(
                             "w-full flex items-center gap-3 px-3.5 py-2 rounded-full text-sm text-left transition-all hover:bg-secondary/60 text-muted-foreground",
-                            isSelected ? "text-green-500 bg-green-500/10 font-bold" : "hover:text-foreground"
+                            isSelected ? "text-red-400 bg-red-500/10 font-bold" : "hover:text-foreground"
                           )}
                         >
-                          <Tag className="w-4 h-4 text-green-500 shrink-0" />
+                          <Tag className="w-4 h-4 text-red-400 shrink-0" />
                           <span className="truncate">{l}</span>
                         </button>
                       );
@@ -193,7 +193,7 @@ function CommsHubPage() {
                           onClick={() => { mailStore.toggleStar(mailCurrent.id); forceUpdateMail((x) => x + 1); }} 
                           className="p-2 rounded-full hover:bg-secondary/40 text-muted-foreground hover:text-foreground cursor-pointer"
                         >
-                          <Star className={cn("w-5 h-5", mailCurrent.starred ? "fill-green-400 text-green-400" : "text-muted-foreground")} />
+                          <Star className={cn("w-5 h-5", mailCurrent.starred ? "fill-red-400 text-red-400" : "text-muted-foreground")} />
                         </button>
                       </div>
                     </div>
@@ -207,7 +207,7 @@ function CommsHubPage() {
                         {mailCurrent.labels && mailCurrent.labels.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 pt-1">
                             {mailCurrent.labels.map((l) => (
-                              <span key={l} className="text-[10px] uppercase font-bold bg-green-500/10 text-green-400 px-2 py-0.5 rounded-md border border-green-500/20">
+                              <span key={l} className="text-[10px] uppercase font-bold bg-red-500/10 text-red-400 px-2 py-0.5 rounded-md border border-red-500/20">
                                 {l}
                               </span>
                             ))}
@@ -350,7 +350,7 @@ function CommsHubPage() {
                                     onClick={() => { mailStore.toggleStar(m.id); forceUpdateMail((x) => x + 1); }}
                                     className="text-muted-foreground hover:text-foreground cursor-pointer"
                                   >
-                                    <Star className={cn("w-4 h-4", m.starred ? "fill-green-400 text-green-400" : "text-muted-foreground/30")} />
+                                    <Star className={cn("w-4 h-4", m.starred ? "fill-red-400 text-red-400" : "text-muted-foreground/30")} />
                                   </button>
                                 </div>
 

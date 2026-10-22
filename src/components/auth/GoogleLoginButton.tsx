@@ -113,8 +113,8 @@ export default function GoogleLoginButton() {
 
   return (
     <div className="w-full flex flex-col items-center">
-      {/* Outer stylized glass frame with red hover glow */}
-      <div className="w-full relative group rounded-xl p-[1px] bg-gradient-to-r from-border/70 via-red-500/20 to-border/70 hover:from-red-500/40 hover:via-rose-500/40 hover:to-red-500/40 transition-all duration-300">
+      {/* Outer stylized glass frame with red hover glow - fixed width so it never elongates */}
+      <div className="w-full max-w-[380px] relative group rounded-xl p-[1px] bg-gradient-to-r from-border/70 via-red-500/20 to-border/70 hover:from-red-500/40 hover:via-rose-500/40 hover:to-red-500/40 transition-all duration-300">
         <div className="w-full bg-secondary/40 backdrop-blur-md rounded-[11px] p-1 flex items-center justify-center min-h-[46px] relative overflow-hidden">
           {/* Actual Google rendered button container */}
           <div

@@ -1,13 +1,13 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Home, FileText, Bot, Bell, UserCircle } from "lucide-react";
+import { Home, Gavel, MessageSquare, Bell, UserCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
   { to: "/", icon: Home, label: "Home" },
-  { to: "/requests-hub", icon: FileText, label: "Requests" },
-  { to: "/comms", icon: Bot, label: "AI" },
+  { to: "/cases", icon: Gavel, label: "Cases" },
+  { to: "/comms", icon: MessageSquare, label: "Messages" },
   { to: "/notifications", icon: Bell, label: "Alerts" },
-  { to: "/profile", icon: UserCircle, label: "Me" },
+  { to: "/profile", icon: UserCircle, label: "Profile" },
 ];
 
 export default function BottomTabs() {

@@ -234,6 +234,16 @@ def logout(authorization: Optional[str] = Header(None)):
         _token_store.pop(token, None)
     return {"ok": True}
 
+class UpdateRoleBody(BaseModel):
+    role: str
+
+@app.post("/api/auth/role")
+def update_user_role_endpoint(body: UpdateRoleBody, user: dict = Depends(_get_current_user)):
+    target_id = user.get("email") or user.get("username") or user.get("id")
+    campus_role = _reverse_map_role(body.role)
+    auth.update_user_role(target_id, campus_role)
+    return {"status": "ok", "role": body.role}
+
 # ═══════════════════════════════════════════════════════════════
 # CHAT SESSIONS
 # ═══════════════════════════════════════════════════════════════
@@ -676,17 +686,25 @@ def _map_role(campus_role: str) -> str:
     return {
         "student": "student",
         "teacher": "faculty",
+        "faculty": "faculty",
+        "officer": "faculty",
+        "hod": "hod",
+        "bureau_head": "hod",
         "admin": "admin",
-    }.get(campus_role, "student")
+        "ambassador": "ambassador",
+    }.get(campus_role, campus_role if campus_role else "faculty")
 
 def _reverse_map_role(frontend_role: str) -> str:
     """Convert frontend role → CampusFlow role."""
     return {
         "student": "student",
         "faculty": "teacher",
+        "officer": "teacher",
         "hod": "teacher",
+        "bureau_head": "teacher",
         "admin": "admin",
-    }.get(frontend_role, "student")
+        "ambassador": "student",
+    }.get(frontend_role, frontend_role if frontend_role else "teacher")
 
 
 # ═══════════════════════════════════════════════════════════════

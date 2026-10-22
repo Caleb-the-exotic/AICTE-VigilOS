@@ -3,7 +3,6 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import AppSidebar from "./AppSidebar";
 import AnimatedBackground from "../AnimatedBackground";
 import ShortcutsModal from "../ShortcutsModal";
-import OnboardingTour from "../OnboardingTour";
 import BottomTabs from "../BottomTabs";
 import { CommandPalette, useCommandPalette } from "../CommandPalette";
 import { useAuth } from "@/lib/auth";
@@ -94,7 +93,6 @@ export default function AppLayout({
 
       <BottomTabs />
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)} />}
-      {user && <OnboardingTour />}
 
       {/* Global Command Palette */}
       <CommandPalette

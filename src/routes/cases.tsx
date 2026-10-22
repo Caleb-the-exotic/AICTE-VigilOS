@@ -127,7 +127,7 @@ function KpiTile({ label, value, icon: Icon, color, pulse, sub }: {
   return (
     <div className="glass-card p-4 flex flex-col gap-2 hover:border-white/20 transition-all duration-200 group relative overflow-hidden">
       {pulse && (
-        <div className="absolute inset-0 rounded-xl bg-amber-500/5 animate-pulse pointer-events-none" />
+        <div className="absolute inset-0 rounded-xl bg-red-500/5 animate-pulse pointer-events-none" />
       )}
       <div className="flex items-center justify-between relative z-10">
         <div className={cn("w-8 h-8 rounded-lg grid place-items-center", color || "bg-primary/15")}>
@@ -294,8 +294,8 @@ function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void 
           <div className="grid grid-cols-3 gap-2">
             {[
               { label: "Total Cases", value: cases.length, color: "text-white" },
-              { label: "Active", value: cases.filter(c => c.status !== "disposed").length, color: "text-amber-400" },
-              { label: "Disposed", value: cases.filter(c => c.status === "disposed").length, color: "text-emerald-400" },
+              { label: "Active", value: cases.filter(c => c.status !== "disposed").length, color: "text-red-400" },
+              { label: "Disposed", value: cases.filter(c => c.status === "disposed").length, color: "text-white/60" },
             ].map(s => (
               <div key={s.label} className="glass-card p-3 text-center">
                 <div className={cn("text-xl font-bold", s.color)}>{s.value}</div>
@@ -315,8 +315,8 @@ function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void 
               <div className="space-y-2">
                 {rbCases.length === 0 && <div className="text-[11px] text-white/30 py-2">No active RB cases</div>}
                 {rbCases.map(c => (
-                  <div key={c.case_id} className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-2.5">
-                    <div className="text-[10px] font-mono text-orange-300/80">{c.case_id}</div>
+                  <div key={c.case_id} className="bg-red-500/5 border border-red-500/20 rounded-lg p-2.5">
+                    <div className="text-[10px] font-mono text-red-300/80">{c.case_id}</div>
                     <div className="text-xs font-medium text-white/80 mt-0.5 leading-tight">{c.title}</div>
                     <div className="flex items-center gap-1.5 mt-1.5">
                       <StatusBadge status={c.status} />
@@ -335,8 +335,8 @@ function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void 
               <div className="space-y-2">
                 {pgrcCases.length === 0 && <div className="text-[11px] text-white/30 py-2">No active PGRC cases</div>}
                 {pgrcCases.map(c => (
-                  <div key={c.case_id} className="bg-cyan-500/5 border border-cyan-500/20 rounded-lg p-2.5">
-                    <div className="text-[10px] font-mono text-cyan-300/80">{c.case_id}</div>
+                  <div key={c.case_id} className="bg-rose-500/5 border border-rose-500/20 rounded-lg p-2.5">
+                    <div className="text-[10px] font-mono text-rose-300/80">{c.case_id}</div>
                     <div className="text-xs font-medium text-white/80 mt-0.5 leading-tight">{c.title}</div>
                     <div className="flex items-center gap-1.5 mt-1.5">
                       <StatusBadge status={c.status} />
@@ -357,8 +357,8 @@ function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void 
               </div>
               <div className="space-y-2">
                 {roCases.map(c => (
-                  <div key={c.case_id} className="bg-purple-500/5 border border-purple-500/20 rounded-lg p-2.5">
-                    <div className="text-[10px] font-mono text-purple-300/80">{c.case_id}</div>
+                  <div key={c.case_id} className="bg-white/5 border border-white/10 rounded-lg p-2.5">
+                    <div className="text-[10px] font-mono text-white/50">{c.case_id}</div>
                     <div className="text-xs font-medium text-white/80 mt-0.5">{c.title}</div>
                     <div className="mt-1.5"><StatusBadge status={c.status} /></div>
                   </div>
@@ -471,8 +471,8 @@ function CasesDashboard() {
     const mid = active.filter(c => (c.ageing_days ?? 0) >= 15 && (c.ageing_days ?? 0) <= 30).length;
     const gt30 = active.filter(c => (c.ageing_days ?? 0) > 30).length;
     return [
-      { label: "< 15 days", count: lt15, color: "bg-emerald-500" },
-      { label: "15–30 days", count: mid, color: "bg-amber-500" },
+      { label: "< 15 days", count: lt15, color: "bg-white/40" },
+      { label: "15–30 days", count: mid, color: "bg-rose-500" },
       { label: "> 30 days", count: gt30, color: "bg-red-500" },
     ];
   }, [cases]);
@@ -486,8 +486,8 @@ function CasesDashboard() {
         {/* ── Page Header ──────────────────────────────────────────── */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/30 to-red-500/20 grid place-items-center border border-amber-500/30">
-              <Gavel className="w-5 h-5 text-amber-400" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600/30 to-red-500/20 grid place-items-center border border-red-500/30">
+              <Gavel className="w-5 h-5 text-red-400" />
             </div>
             <div>
               <h1 className="text-xl font-bold">AICTE Complaint Dashboard</h1>
@@ -498,7 +498,7 @@ function CasesDashboard() {
           </div>
           <div className="flex items-center gap-2">
             {!HAS_BACKEND && (
-              <span className="text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/25 px-2 py-1 rounded-full">
+              <span className="text-[10px] bg-white/10 text-white/60 border border-white/15 px-2 py-1 rounded-full">
                 Demo Mode
               </span>
             )}
@@ -522,42 +522,42 @@ function CasesDashboard() {
             <KpiTile label="Total Received" value={kpi.total} icon={FileText} sub="All bureaus" />
           </div>
           <div className="col-span-2 md:col-span-1">
-            <KpiTile label="Under Process" value={kpi.under_process} icon={Clock} color="bg-amber-500/20" sub="Active pipeline" />
+            <KpiTile label="Under Process" value={kpi.under_process} icon={Clock} color="bg-red-500/20" sub="Active pipeline" />
           </div>
           <div className="col-span-2 md:col-span-1">
             <KpiTile label="Escalated" value={kpi.escalated} icon={AlertTriangle} color="bg-red-500/20" sub="Priority cases" />
           </div>
           <div className="col-span-2 md:col-span-1">
-            <KpiTile label="Disposed" value={kpi.disposed} icon={CheckCircle2} color="bg-emerald-500/20" sub="Resolved" />
+            <KpiTile label="Disposed" value={kpi.disposed} icon={CheckCircle2} color="bg-white/10" sub="Resolved" />
           </div>
           <div className="col-span-2 md:col-span-1">
-            <KpiTile label="Transferred" value={kpi.transferred} icon={ArrowUpRight} color="bg-violet-500/20" sub="Bureau → Bureau" />
+            <KpiTile label="Transferred" value={kpi.transferred} icon={ArrowUpRight} color="bg-rose-500/20" sub="Bureau → Bureau" />
           </div>
           <div className="col-span-2 md:col-span-1">
             <KpiTile label="SLA Breached" value={kpi.sla_breached} icon={AlertOctagon} color="bg-red-600/30" pulse={kpi.sla_breached > 0} sub="Past deadline" />
           </div>
           <div className="col-span-2">
             <div className={cn(
-              "glass-card p-4 flex flex-col gap-2 hover:border-amber-500/30 transition-all duration-200 group relative overflow-hidden",
-              kpi.overlapping_institutions > 0 && "border-amber-500/40 bg-amber-500/5"
+              "glass-card p-4 flex flex-col gap-2 hover:border-red-500/30 transition-all duration-200 group relative overflow-hidden",
+              kpi.overlapping_institutions > 0 && "border-red-500/40 bg-red-500/5"
             )}>
               {kpi.overlapping_institutions > 0 && (
-                <div className="absolute inset-0 bg-amber-500/5 animate-pulse pointer-events-none rounded-xl" />
+                <div className="absolute inset-0 bg-red-500/5 animate-pulse pointer-events-none rounded-xl" />
               )}
               <div className="flex items-center justify-between relative z-10">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/20 grid place-items-center">
-                  <Siren className="w-4 h-4 text-amber-400 animate-pulse" />
+                <div className="w-8 h-8 rounded-lg bg-red-500/20 grid place-items-center">
+                  <Siren className="w-4 h-4 text-red-400 animate-pulse" />
                 </div>
                 {kpi.overlapping_institutions > 0 && (
-                  <span className="text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-bold">
+                  <span className="text-[9px] bg-red-500/20 text-red-300 border border-red-500/30 px-1.5 py-0.5 rounded-full font-bold">
                     ALERT
                   </span>
                 )}
               </div>
               <div className="relative z-10">
-                <div className="text-2xl font-bold tabular-nums text-amber-300">{kpi.overlapping_institutions}</div>
+                <div className="text-2xl font-bold tabular-nums text-red-300">{kpi.overlapping_institutions}</div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">Overlapping Institutions</div>
-                <div className="text-[10px] text-amber-400/60 mt-0.5">RB ∩ PGRC concurrent</div>
+                <div className="text-[10px] text-red-400/60 mt-0.5">RB ∩ PGRC concurrent</div>
               </div>
             </div>
           </div>
@@ -570,17 +570,17 @@ function CasesDashboard() {
               <BarChart3 className="w-4 h-4 text-primary" /> Bureau Workload
             </h2>
             <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />RB: {kpi.by_bureau.RB}</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-cyan-400 inline-block" />PGRC: {kpi.by_bureau.PGRC}</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-400 inline-block" />RO: {kpi.by_bureau.RO}</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />RB: {kpi.by_bureau.RB}</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />PGRC: {kpi.by_bureau.PGRC}</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-white/40 inline-block" />RO: {kpi.by_bureau.RO}</span>
             </div>
           </div>
           <div className="flex h-3 rounded-full overflow-hidden">
             {kpi.total > 0 && (
               <>
-                <div className="bg-orange-500 transition-all" style={{ width: `${(kpi.by_bureau.RB / kpi.total) * 100}%` }} title={`RB: ${kpi.by_bureau.RB}`} />
-                <div className="bg-cyan-500 transition-all" style={{ width: `${(kpi.by_bureau.PGRC / kpi.total) * 100}%` }} title={`PGRC: ${kpi.by_bureau.PGRC}`} />
-                <div className="bg-purple-500 transition-all" style={{ width: `${(kpi.by_bureau.RO / kpi.total) * 100}%` }} title={`RO: ${kpi.by_bureau.RO}`} />
+                <div className="bg-red-600 transition-all" style={{ width: `${(kpi.by_bureau.RB / kpi.total) * 100}%` }} title={`RB: ${kpi.by_bureau.RB}`} />
+                <div className="bg-rose-400 transition-all" style={{ width: `${(kpi.by_bureau.PGRC / kpi.total) * 100}%` }} title={`PGRC: ${kpi.by_bureau.PGRC}`} />
+                <div className="bg-white/30 transition-all" style={{ width: `${(kpi.by_bureau.RO / kpi.total) * 100}%` }} title={`RO: ${kpi.by_bureau.RO}`} />
               </>
             )}
           </div>
@@ -677,15 +677,15 @@ function CasesDashboard() {
           <div className="space-y-3">
             {overlapInstitutions.length === 0 ? (
               <div className="glass-card p-8 text-center">
-                <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
+                <CheckCircle2 className="w-10 h-10 text-white/50 mx-auto mb-2" />
                 <div className="text-sm text-white/70">No cross-bureau overlaps detected</div>
                 <div className="text-xs text-muted-foreground mt-1">All institutions have isolated bureau proceedings.</div>
               </div>
             ) : (
               <>
                 <div className="flex items-center gap-2 px-1">
-                  <AlertTriangle className="w-4 h-4 text-amber-400" />
-                  <span className="text-sm font-semibold text-amber-300">
+                  <AlertTriangle className="w-4 h-4 text-red-400" />
+                  <span className="text-sm font-semibold text-red-300">
                     {overlapInstitutions.length} institution{overlapInstitutions.length > 1 ? "s" : ""} require cross-bureau coordination
                   </span>
                 </div>
@@ -741,15 +741,15 @@ function CasesDashboard() {
                   onClick={() => setSelectedProfile(pid)}
                   className={cn(
                     "glass-card p-4 text-left hover:border-primary/30 transition-all group",
-                    hasOverlap && "border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50"
+                    hasOverlap && "border-red-500/30 bg-red-500/5 hover:border-red-500/50"
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <div className={cn("w-8 h-8 rounded-lg grid place-items-center shrink-0",
-                        hasOverlap ? "bg-amber-500/20" : "bg-primary/10 group-hover:bg-primary/20"
+                        hasOverlap ? "bg-red-500/20" : "bg-primary/10 group-hover:bg-primary/20"
                       )}>
-                        {hasOverlap ? <Siren className="w-4 h-4 text-amber-400" /> : <Building2 className="w-4 h-4 text-primary" />}
+                        {hasOverlap ? <Siren className="w-4 h-4 text-red-400" /> : <Building2 className="w-4 h-4 text-primary" />}
                       </div>
                       <div>
                         <div className="text-sm font-medium text-white">{name}</div>
@@ -757,14 +757,14 @@ function CasesDashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {hasOverlap && <span className="text-[9px] font-bold text-amber-400 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded-full">OVERLAP</span>}
+                      {hasOverlap && <span className="text-[9px] font-bold text-red-300 bg-red-500/20 border border-red-500/30 px-1.5 py-0.5 rounded-full">OVERLAP</span>}
                       <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>
                   <div className="flex items-center gap-3 mt-3 flex-wrap">
                     <span className="text-[10px] text-muted-foreground flex items-center gap-1"><MapPin className="w-2.5 h-2.5" />{region}</span>
                     <span className="text-[10px] text-muted-foreground">{instCases.length} total cases</span>
-                    <span className="text-[10px] text-amber-400">{active.length} active</span>
+                    <span className="text-[10px] text-red-400">{active.length} active</span>
                   </div>
                   <div className="flex gap-1.5 mt-2">
                     {Array.from(new Set(instCases.map(c => c.bureau))).map(b => <BureauBadge key={b} bureau={b} />)}
@@ -783,9 +783,9 @@ function CasesDashboard() {
               <h3 className="text-sm font-semibold mb-4 flex items-center gap-1.5"><Layers className="w-4 h-4 text-primary" />Bureau Distribution</h3>
               <div className="space-y-3">
                 {[
-                  { label: "Regulation Bureau (RB)", count: kpi.by_bureau.RB, color: "bg-orange-500", textColor: "text-orange-400" },
-                  { label: "PGRC (Grievance Cell)", count: kpi.by_bureau.PGRC, color: "bg-cyan-500", textColor: "text-cyan-400" },
-                  { label: "Regional Offices (RO)", count: kpi.by_bureau.RO, color: "bg-purple-500", textColor: "text-purple-400" },
+                  { label: "Regulation Bureau (RB)", count: kpi.by_bureau.RB, color: "bg-red-600", textColor: "text-red-400" },
+                  { label: "PGRC (Grievance Cell)", count: kpi.by_bureau.PGRC, color: "bg-rose-400", textColor: "text-rose-300" },
+                  { label: "Regional Offices (RO)", count: kpi.by_bureau.RO, color: "bg-white/30", textColor: "text-white/60" },
                 ].map(b => (
                   <div key={b.label}>
                     <div className="flex items-center justify-between mb-1">

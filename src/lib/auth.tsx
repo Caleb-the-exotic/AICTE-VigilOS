@@ -3,6 +3,16 @@ import { api, HAS_BACKEND, type ApiUser } from "./api";
 
 export type Role = "student" | "ambassador" | "faculty" | "hod" | "admin";
 
+export function formatRole(role?: string | null): string {
+  if (!role) return "Approval Officer";
+  const r = role.toLowerCase();
+  if (r === "admin") return "Super Admin";
+  if (r === "hod" || r === "bureau_head") return "Bureau Head";
+  if (r === "faculty" || r === "officer" || r === "student") return "Approval Officer";
+  if (r === "ambassador") return "Nodal Liaison";
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
 export interface User extends ApiUser {}
 
 interface AuthCtx {
@@ -58,7 +68,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_USER);
-      if (raw) setUser(JSON.parse(raw));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.role === "student") {
+          parsed.role = "faculty";
+          localStorage.setItem(STORAGE_USER, JSON.stringify(parsed));
+        }
+        setUser(parsed);
+      }
     } catch {
       // ignore
     }
@@ -187,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const email = payload.email;
           const name = payload.name || email.split("@")[0];
           const username = email.split("@")[0];
-          const role: Role = (email.toLowerCase().includes("admin") || email.toLowerCase().includes("caleb")) ? "admin" : "student";
+          const role: Role = (email.toLowerCase().includes("admin") || email.toLowerCase().includes("caleb")) ? "admin" : "faculty";
           persist(
             {
               id: username,
@@ -206,7 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // 3. Graceful fallback
     persist(
-      { id: "u-google", email: "google@college.edu", name: "Google User", role: "student" },
+      { id: "u-google", email: "google@college.edu", name: "Google User", role: "faculty" },
       credential || "mock-token-google"
     );
   }, [persist]);
@@ -214,7 +231,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback<AuthCtx["register"]>(async (data) => {
     const cleanEmail = data.email.trim().toLowerCase();
     const cleanName = data.name.trim();
-    const role = (data.role || "student") as Role;
+    const role = (data.role || "faculty") as Role;
 
     // Check if account already exists locally
     const existing = getStoredAccounts()[cleanEmail];
@@ -283,6 +300,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!prev) return prev;
       const next = { ...prev, role: r };
       localStorage.setItem(STORAGE_USER, JSON.stringify(next));
+      try {
+        const accounts = getStoredAccounts();
+        if (accounts[next.email.toLowerCase()]) {
+          accounts[next.email.toLowerCase()].role = r;
+          localStorage.setItem(STORAGE_ACCOUNTS, JSON.stringify(accounts));
+        }
+      } catch {/**/}
+      if (HAS_BACKEND) {
+        api.updateRole(r).catch(() => {});
+      }
       return next;
     });
   }, []);

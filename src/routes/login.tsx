@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, type FormEvent } from "react";
 import { 
-  Shield, Mail, Lock, User, Eye, EyeOff, ArrowRight, 
-  Loader2, CheckCircle2, Sparkles, Building2, HelpCircle 
+  Mail, Lock, User, Eye, EyeOff, ArrowRight, 
+  Loader2, Sparkles, Building2 
 } from "lucide-react";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import GoogleLoginButton from "@/components/auth/GoogleLoginButton";
@@ -30,7 +30,7 @@ function LoginPage() {
   // Sign up state
   const [signUpName, setSignUpName] = useState("");
   const [signUpEmail, setSignUpEmail] = useState("");
-  const [signUpRole, setSignUpRole] = useState<Role>("student");
+  const [signUpRole, setSignUpRole] = useState<Role>("faculty");
   const [signUpPassword, setSignUpPassword] = useState("");
   const [signUpConfirmPassword, setSignUpConfirmPassword] = useState("");
   const [showSignUpPassword, setShowSignUpPassword] = useState(false);
@@ -110,14 +110,8 @@ function LoginPage() {
     }
   };
 
-  const fillQuickDemo = (email: string, pass: string) => {
-    setSignInEmail(email);
-    setSignInPassword(pass);
-    toast.info(`Filled credentials for ${email}`);
-  };
-
   return (
-    <div className="min-h-screen relative flex flex-col justify-center items-center px-4 py-8 bg-background">
+    <div className="min-h-screen relative flex flex-col justify-center items-center px-4 py-4 sm:py-6 bg-background">
       <AnimatedBackground />
 
       {/* Decorative ambient background lighting */}
@@ -125,10 +119,10 @@ function LoginPage() {
       <div className="absolute bottom-1/4 left-1/3 w-64 h-64 bg-rose-700/10 rounded-full blur-[100px] pointer-events-none" />
 
       {/* Main Login Dashboard Container with Subtle Red Glow */}
-      <div className="relative z-10 w-full max-w-[470px] mx-auto animate-fade-in">
+      <div className={cn("relative z-10 w-full mx-auto transition-all duration-300 animate-fade-in", mode === "signup" ? "max-w-[660px]" : "max-w-[460px]")}>
         
         {/* Glow Container */}
-        <div className="relative rounded-2xl bg-card/85 backdrop-blur-2xl border border-red-500/25 p-6 sm:p-8 shadow-[0_0_50px_-10px_rgba(239,68,68,0.25),0_0_20px_-5px_rgba(220,38,38,0.18)] transition-all duration-300">
+        <div className="relative rounded-2xl bg-card/85 backdrop-blur-2xl border border-red-500/25 p-5 sm:p-7 shadow-[0_0_50px_-10px_rgba(239,68,68,0.25),0_0_20px_-5px_rgba(220,38,38,0.18)] transition-all duration-300">
           
           {/* Subtle top edge ember gradient line */}
           <div className="absolute -top-[1px] left-10 right-10 h-[2px] bg-gradient-to-r from-transparent via-red-500/80 to-transparent" />
@@ -248,9 +242,9 @@ function LoginPage() {
                   />
                   <span>Remember this device</span>
                 </label>
-                <span className="text-[11px] text-muted-foreground/60">SHA-256 Auth</span>
               </div>
 
+              {/* Submit button */}
               {/* Submit button */}
               <button
                 type="submit"
@@ -269,105 +263,56 @@ function LoginPage() {
                   </>
                 )}
               </button>
-
-              {/* Quick demo credentials helper */}
-              <div className="pt-2 border-t border-border/30">
-                <div className="text-[11px] text-muted-foreground/80 mb-1.5 flex items-center justify-between">
-                  <span>Fast Demo Credentials:</span>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => fillQuickDemo("admin@aicte.gov.in", "12345678")}
-                    className="px-2.5 py-1 rounded-md bg-secondary/50 hover:bg-secondary text-[11px] text-muted-foreground hover:text-foreground border border-border/50 transition-colors"
-                  >
-                    🔑 Super Admin
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillQuickDemo("officer.approval@aicte.gov.in", "officer123")}
-                    className="px-2.5 py-1 rounded-md bg-secondary/50 hover:bg-secondary text-[11px] text-muted-foreground hover:text-foreground border border-border/50 transition-colors"
-                  >
-                    📋 Approval Officer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillQuickDemo("hod.vigilance@aicte.gov.in", "hod12345")}
-                    className="px-2.5 py-1 rounded-md bg-secondary/50 hover:bg-secondary text-[11px] text-muted-foreground hover:text-foreground border border-border/50 transition-colors"
-                  >
-                    🏛️ Bureau Head
-                  </button>
-                </div>
-              </div>
             </form>
           ) : (
             /* ───────────────────────────────────────────────────────────── */
-            /* CREATE ACCOUNT FORM */
+            /* CREATE ACCOUNT FORM (Wide 2-column layout without scrolling) */
             /* ───────────────────────────────────────────────────────────── */
-            <form onSubmit={handleSignUp} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="text"
-                    value={signUpName}
-                    onChange={(e) => setSignUpName(e.target.value)}
-                    placeholder="Dr. Rajesh Sharma"
-                    required
-                    className="w-full pl-10 pr-4 py-2.5 bg-secondary/30 hover:bg-secondary/40 focus:bg-background border border-border/70 focus:border-red-500/60 rounded-xl text-sm placeholder:text-muted-foreground/50 text-foreground outline-none transition-all focus:ring-2 focus:ring-red-500/20"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                  Official Email Address
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground">
-                    <Mail className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="email"
-                    value={signUpEmail}
-                    onChange={(e) => setSignUpEmail(e.target.value)}
-                    placeholder="r.sharma@aicte.gov.in"
-                    required
-                    className="w-full pl-10 pr-4 py-2.5 bg-secondary/30 hover:bg-secondary/40 focus:bg-background border border-border/70 focus:border-red-500/60 rounded-xl text-sm placeholder:text-muted-foreground/50 text-foreground outline-none transition-all focus:ring-2 focus:ring-red-500/20"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                  Institutional Role / Bureau
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground">
-                    <Building2 className="w-4 h-4" />
-                  </div>
-                  <select
-                    value={signUpRole}
-                    onChange={(e) => setSignUpRole(e.target.value as Role)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-secondary/30 hover:bg-secondary/40 focus:bg-background border border-border/70 focus:border-red-500/60 rounded-xl text-sm text-foreground outline-none transition-all focus:ring-2 focus:ring-red-500/20 appearance-none cursor-pointer"
-                  >
-                    <option value="student" className="bg-card text-foreground">Officer / Complaint Case Handler</option>
-                    <option value="hod" className="bg-card text-foreground">Bureau Head / Department HOD</option>
-                    <option value="faculty" className="bg-card text-foreground">Regional Office (RO) Coordinator</option>
-                    <option value="ambassador" className="bg-card text-foreground">State Liaison / Ambassador</option>
-                    <option value="admin" className="bg-card text-foreground">Vigilance Administrator (Full Privileges)</option>
-                  </select>
-                </div>
-              </div>
-
+            <form onSubmit={handleSignUp} className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Full Name */}
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    Full Name
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      value={signUpName}
+                      onChange={(e) => setSignUpName(e.target.value)}
+                      placeholder="Dr. Rajesh Sharma"
+                      required
+                      className="w-full pl-10 pr-3 py-2 bg-secondary/30 hover:bg-secondary/40 focus:bg-background border border-border/70 focus:border-red-500/60 rounded-xl text-sm placeholder:text-muted-foreground/50 text-foreground outline-none transition-all focus:ring-2 focus:ring-red-500/20"
+                    />
+                  </div>
+                </div>
+
+                {/* Official Email */}
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    Official Email Address
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground">
+                      <Mail className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="email"
+                      value={signUpEmail}
+                      onChange={(e) => setSignUpEmail(e.target.value)}
+                      placeholder="r.sharma@aicte.gov.in"
+                      required
+                      className="w-full pl-10 pr-3 py-2 bg-secondary/30 hover:bg-secondary/40 focus:bg-background border border-border/70 focus:border-red-500/60 rounded-xl text-sm placeholder:text-muted-foreground/50 text-foreground outline-none transition-all focus:ring-2 focus:ring-red-500/20"
+                    />
+                  </div>
+                </div>
+
+                {/* Password */}
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
                     Password
                   </label>
                   <div className="relative">
@@ -380,13 +325,22 @@ function LoginPage() {
                       onChange={(e) => setSignUpPassword(e.target.value)}
                       placeholder="Min 6 chars"
                       required
-                      className="w-full pl-9 pr-3 py-2 bg-secondary/30 hover:bg-secondary/40 focus:bg-background border border-border/70 focus:border-red-500/60 rounded-xl text-sm placeholder:text-muted-foreground/50 text-foreground outline-none transition-all focus:ring-2 focus:ring-red-500/20"
+                      className="w-full pl-9 pr-9 py-2 bg-secondary/30 hover:bg-secondary/40 focus:bg-background border border-border/70 focus:border-red-500/60 rounded-xl text-sm placeholder:text-muted-foreground/50 text-foreground outline-none transition-all focus:ring-2 focus:ring-red-500/20"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowSignUpPassword(!showSignUpPassword)}
+                      className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-muted-foreground hover:text-foreground"
+                      aria-label="Toggle password visibility"
+                    >
+                      {showSignUpPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
                   </div>
                 </div>
 
+                {/* Confirm Password */}
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
                     Confirm Password
                   </label>
                   <div className="relative">
@@ -403,26 +357,36 @@ function LoginPage() {
                     />
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                <button
-                  type="button"
-                  onClick={() => setShowSignUpPassword(!showSignUpPassword)}
-                  className="hover:text-foreground transition-colors"
-                >
-                  {showSignUpPassword ? "Hide passwords" : "Show passwords"}
-                </button>
-                <span className="text-emerald-400 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3" /> Auto-persisted to DB
-                </span>
+                {/* Institutional Role / Bureau */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    Institutional Role / Bureau
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground">
+                      <Building2 className="w-4 h-4" />
+                    </div>
+                    <select
+                      value={signUpRole}
+                      onChange={(e) => setSignUpRole(e.target.value as Role)}
+                      className="w-full pl-10 pr-4 py-2 bg-secondary/30 hover:bg-secondary/40 focus:bg-background border border-border/70 focus:border-red-500/60 rounded-xl text-sm text-foreground outline-none transition-all focus:ring-2 focus:ring-red-500/20 appearance-none cursor-pointer"
+                    >
+                      <option value="faculty" className="bg-card text-foreground">📋 Approval Officer (Case Handler)</option>
+                      <option value="hod" className="bg-card text-foreground">🏛️ Bureau Head (RB / PGRC / RO)</option>
+                      <option value="admin" className="bg-card text-foreground">🔑 Super Admin (Central Vigilance)</option>
+                      <option value="ambassador" className="bg-card text-foreground">🌐 State / Regional Nodal Officer</option>
+                      <option value="student" className="bg-card text-foreground">👤 Citizen / Complainant</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               {/* Submit button */}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-2.5 px-4 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-600 active:scale-[0.99] transition-all shadow-md shadow-red-600/25 flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer mt-2"
+                className="w-full py-2.5 px-4 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-600 active:scale-[0.99] transition-all shadow-md shadow-red-600/25 flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer mt-1"
               >
                 {loading ? (
                   <>
@@ -440,7 +404,7 @@ function LoginPage() {
           )}
 
           {/* Divider */}
-          <div className="relative my-5">
+          <div className="relative my-3.5 sm:my-4">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-border/60" />
             </div>
@@ -452,7 +416,9 @@ function LoginPage() {
           </div>
 
           {/* Stylized Google Login Button */}
-          <GoogleLoginButton />
+          <div className="w-full flex justify-center">
+            <GoogleLoginButton />
+          </div>
 
 
 

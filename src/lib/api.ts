@@ -56,6 +56,7 @@ export const api = {
     }),
 
   logout: () => request<{ ok: true }>("/api/auth/logout", { method: "POST" }),
+  updateRole: (role: string) => request<{ status: string; role: string }>("/api/auth/role", { method: "POST", body: JSON.stringify({ role }) }),
 
   // ===== Chat sessions =====
   listSessions: () => request<ChatSession[]>("/api/sessions"),

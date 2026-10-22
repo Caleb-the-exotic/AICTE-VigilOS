@@ -185,6 +185,20 @@ def verify_google_login(email: str, name: str):
     except Exception as e:
         print("[Google Auth] Error registering user in DB:", e)
         # Even if DB insert fails (e.g. read-only DB), still allow authentication with default role
-        return True, 'student'
+        return True, 'faculty'
     finally:
         conn.close()
+
+def update_user_role(identifier: str, role: str):
+    """Update role for a user by username or email."""
+    init_auth_db()
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE users 
+        SET role = ? 
+        WHERE LOWER(username) = LOWER(?) OR (email IS NOT NULL AND LOWER(email) = LOWER(?))
+    ''', (role, identifier.strip(), identifier.strip()))
+    conn.commit()
+    conn.close()
+    return True

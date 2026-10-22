@@ -31,7 +31,7 @@ const DEFAULTS: UserPrefs = {
     { event: "Weekly digest", email: true, inApp: false, push: false },
   ],
   language: "en",
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata",
+  timezone: "Asia/Kolkata",
   twoFactor: false,
   sessions: [
     { id: "s1", device: "Chrome · Windows", ip: "192.168.1.4", lastActive: new Date().toISOString(), current: true },
@@ -69,5 +69,11 @@ export const prefsStore = {
   revokeSession(id: string) {
     const cur = this.get();
     this.set({ sessions: cur.sessions.filter((s) => s.id !== id) });
+  },
+  refreshCurrentSession() {
+    const cur = this.get();
+    const nowIso = new Date().toISOString();
+    const updated = cur.sessions.map((s) => s.current ? { ...s, lastActive: nowIso } : s);
+    return this.set({ sessions: updated });
   },
 };
