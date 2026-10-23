@@ -202,3 +202,14 @@ def update_user_role(identifier: str, role: str):
     conn.commit()
     conn.close()
     return True
+
+def list_all_users():
+    """List all registered users from auth DB."""
+    init_auth_db()
+    conn = get_conn()
+    cursor = conn.cursor()
+    cursor.execute('SELECT username, role, name, email FROM users ORDER BY username ASC')
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"username": r[0], "role": r[1], "name": r[2], "email": r[3]} for r in rows]
+

@@ -70,6 +70,14 @@ export const api = {
       body: JSON.stringify({ session_id: sessionId, query }),
     }),
 
+  // ===== Live Chat =====
+  getLiveChatMessages: () => request<LiveChatMessage[]>("/api/live-chat/messages"),
+  sendLiveChatMessage: (text: string, sender_name?: string, sender_role?: string) =>
+    request<LiveChatMessage>("/api/live-chat/messages", {
+      method: "POST",
+      body: JSON.stringify({ text, sender_name, sender_role }),
+    }),
+
   // ===== Workflow =====
   getWorkflow: (sessionId: string) => request<Json>(`/api/workflow/${sessionId}`),
   getWorkflowLogs: (sessionId: string) => request<WorkflowLog[]>(`/api/workflow/logs/${sessionId}`),
@@ -110,6 +118,17 @@ export const api = {
     request<{ available: boolean; queue_size?: number; worker_alive?: boolean; total_events_logged?: number }>(
       "/api/admin/event-bus"
     ),
+
+  adminGetUsers: () =>
+    request<Array<{ username: string; name: string; email: string; role: ApiUser["role"] }>>(
+      "/api/admin/users"
+    ),
+
+  adminUpdateUserRole: (email: string, role: string) =>
+    request<{ status: string; email: string; role: string }>("/api/admin/users/role", {
+      method: "POST",
+      body: JSON.stringify({ email, role }),
+    }),
 };
 
 // ===== Types =====
@@ -144,6 +163,15 @@ export interface KpiData {
   rejected: number;
   avg_response_seconds: number;
   active_users: number;
+}
+
+export interface LiveChatMessage {
+  id: string;
+  sender_id: string;
+  sender_name: string;
+  sender_role?: string;
+  text: string;
+  created_at: string;
 }
 
 // ===== Multi-Agent Kernel Types (Phase 3/4) =====

@@ -199,6 +199,15 @@ def init_db():
             created_at  TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS live_chat_messages (
+            id          TEXT PRIMARY KEY,
+            sender_id   TEXT NOT NULL,
+            sender_name TEXT NOT NULL,
+            sender_role TEXT,
+            text        TEXT NOT NULL,
+            created_at  TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS requests (
             id              TEXT PRIMARY KEY,
             session_id      TEXT REFERENCES sessions(id) ON DELETE CASCADE,
@@ -427,6 +436,75 @@ def get_messages(session_id: str) -> list[dict]:
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ── LIVE CHAT PERSISTENCE ────────────────────────────────────────
+
+def save_live_chat_message(sender_id: str, sender_name: str, sender_role: str, text: str) -> dict:
+    msg_id = "msg-" + str(uuid.uuid4())[:8] + "-" + str(int(datetime.datetime.now().timestamp() * 1000))
+    now = datetime.datetime.now().isoformat()
+    conn = get_conn()
+    with conn:
+        try:
+            conn.execute(
+                """INSERT INTO live_chat_messages (id, sender_id, sender_name, sender_role, text, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (msg_id, sender_id, sender_name, sender_role, text, now)
+            )
+        except Exception:
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS live_chat_messages (
+                id          TEXT PRIMARY KEY,
+                sender_id   TEXT NOT NULL,
+                sender_name TEXT NOT NULL,
+                sender_role TEXT,
+                text        TEXT NOT NULL,
+                created_at  TEXT NOT NULL
+            );
+            """)
+            conn.execute(
+                """INSERT INTO live_chat_messages (id, sender_id, sender_name, sender_role, text, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (msg_id, sender_id, sender_name, sender_role, text, now)
+            )
+    conn.close()
+    return {
+        "id": msg_id,
+        "sender_id": sender_id,
+        "sender_name": sender_name,
+        "sender_role": sender_role,
+        "text": text,
+        "created_at": now,
+    }
+
+
+def get_live_chat_messages(limit: int = 200) -> list[dict]:
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id, sender_id, sender_name, sender_role, text, created_at FROM live_chat_messages ORDER BY created_at ASC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception:
+        with conn:
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS live_chat_messages (
+                id          TEXT PRIMARY KEY,
+                sender_id   TEXT NOT NULL,
+                sender_name TEXT NOT NULL,
+                sender_role TEXT,
+                text        TEXT NOT NULL,
+                created_at  TEXT NOT NULL
+            );
+            """)
+        rows = conn.execute(
+            "SELECT id, sender_id, sender_name, sender_role, text, created_at FROM live_chat_messages ORDER BY created_at ASC LIMIT ?",
+            (limit,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 
 # ── REQUEST CRUD ─────────────────────────────────────────────────

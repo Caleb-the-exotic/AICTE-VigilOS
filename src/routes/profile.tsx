@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
-import { useAuth, formatRole, type Role } from "@/lib/auth";
+import { useAuth, formatRole } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { UserCircle, Upload, ShieldCheck, Monitor, LogOut, Key, Clock, Shield, Sun, Moon, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/profile")({ component: Profile });
 
 function Profile() {
-  const { user, setRole, logout } = useAuth();
+  const { user, logout } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [prefs, setPrefs] = useState(() => prefsStore.refreshCurrentSession());
@@ -47,11 +47,6 @@ function Profile() {
     setShow2FA(false);
     setOtp("");
     toast.success("Two-factor enabled");
-  };
-
-  const handleRoleChange = (newRole: Role) => {
-    setRole(newRole);
-    toast.success(`Role updated to ${formatRole(newRole)}`);
   };
 
   const formatSessionTime = (isoString: string, isCurrent?: boolean) => {
@@ -122,22 +117,25 @@ function Profile() {
             </div>
           </div>
 
-          {/* Role / Designation Selector */}
-          <div className="flex flex-col items-start sm:items-end gap-1.5 ml-auto">
-            <label className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+          {/* Official Designation Display (Read-Only) */}
+          <div className="flex flex-col items-start sm:items-end gap-1.5 ml-auto w-full sm:w-auto">
+            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
               <Shield className="w-3.5 h-3.5 text-primary" /> Official Role Designation
-            </label>
-            <select
-              value={user.role}
-              onChange={(e) => handleRoleChange(e.target.value as Role)}
-              className="h-9 px-3 rounded-lg bg-secondary/50 border border-border/50 text-xs font-medium text-foreground hover:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer transition-all"
-            >
-              <option value="faculty">📋 Approval Officer (Case Handler)</option>
-              <option value="hod">🏛️ Bureau Head (RB / PGRC / RO)</option>
-              <option value="admin">🔑 Super Admin (Central Vigilance)</option>
-              <option value="ambassador">🌐 State / Regional Nodal Officer</option>
-              <option value="student">👤 Citizen / Complainant</option>
-            </select>
+            </span>
+            <div className="h-10 px-4 rounded-xl bg-secondary/60 border border-border/50 text-xs font-semibold text-foreground flex items-center gap-2.5 min-w-[240px] w-full sm:w-auto shadow-sm select-none">
+              {user.role === "admin" && <span>🔑</span>}
+              {user.role === "hod" && <span>🏛️</span>}
+              {user.role === "faculty" && <span>📋</span>}
+              {user.role === "ambassador" && <span>🌐</span>}
+              {user.role === "student" && <span>👤</span>}
+              <span className="truncate">
+                {user.role === "faculty" && "Approval Officer (Case Handler)"}
+                {user.role === "hod" && "Bureau Head (RB / PGRC / RO)"}
+                {user.role === "admin" && "Super Admin (Central Vigilance)"}
+                {user.role === "ambassador" && "State / Regional Nodal Officer"}
+                {user.role === "student" && "Citizen / Complainant"}
+              </span>
+            </div>
           </div>
         </div>
 

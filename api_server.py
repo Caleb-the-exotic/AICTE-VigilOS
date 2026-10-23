@@ -244,6 +244,33 @@ def update_user_role_endpoint(body: UpdateRoleBody, user: dict = Depends(_get_cu
     auth.update_user_role(target_id, campus_role)
     return {"status": "ok", "role": body.role}
 
+class AdminUpdateUserRoleBody(BaseModel):
+    email: str
+    role: str
+
+@app.get("/api/admin/users")
+def admin_get_all_users(user: dict = Depends(_get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Super Admin privileges required")
+    users = auth.list_all_users()
+    return [
+        {
+            "username": u["username"],
+            "name": u.get("name") or u["username"],
+            "email": u.get("email") or f"{u['username']}@aicte-india.org",
+            "role": _map_role(u["role"]),
+        }
+        for u in users
+    ]
+
+@app.post("/api/admin/users/role")
+def admin_update_user_role(body: AdminUpdateUserRoleBody, user: dict = Depends(_get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Super Admin privileges required")
+    campus_role = _reverse_map_role(body.role)
+    auth.update_user_role(body.email, campus_role)
+    return {"status": "ok", "email": body.email, "role": body.role}
+
 # ═══════════════════════════════════════════════════════════════
 # CHAT SESSIONS
 # ═══════════════════════════════════════════════════════════════
@@ -451,6 +478,45 @@ def get_job_result(job_id: str, user: dict = Depends(_get_current_user)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+# ═══════════════════════════════════════════════════════════════
+# LIVE CHAT (REALTIME DISPATCH & CITIZEN/OFFICER COMMUNICATOR)
+# ═══════════════════════════════════════════════════════════════
+class LiveChatMessageIn(BaseModel):
+    text: str
+    sender_name: Optional[str] = None
+    sender_role: Optional[str] = None
+
+@app.get("/api/live-chat/messages")
+def get_live_chat_endpoint(limit: int = 200):
+    """Retrieve all live chat messages ordered chronologically with timestamps."""
+    return db.get_live_chat_messages(limit=limit)
+
+@app.post("/api/live-chat/messages")
+def send_live_chat_endpoint(body: LiveChatMessageIn, authorization: Optional[str] = Header(None)):
+    """Save a live chat message with timestamp and return persisted payload."""
+    sender_id = "user"
+    sender_name = body.sender_name or "Officer"
+    sender_role = body.sender_role or "officer"
+
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            curr_user = _get_current_user(authorization)
+            sender_id = curr_user.get("id") or curr_user.get("username") or sender_id
+            if not body.sender_name:
+                sender_name = curr_user.get("name") or curr_user.get("username") or sender_name
+            if not body.sender_role:
+                sender_role = curr_user.get("role") or sender_role
+        except Exception:
+            pass
+
+    msg = db.save_live_chat_message(
+        sender_id=sender_id,
+        sender_name=sender_name,
+        sender_role=sender_role,
+        text=body.text.strip(),
+    )
+    return msg
 
 # ═══════════════════════════════════════════════════════════════
 # WORKFLOW / LOGS

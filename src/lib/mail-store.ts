@@ -5,28 +5,36 @@ export interface Mail {
   ts: number; read: boolean; starred: boolean; folder: "inbox" | "sent" | "drafts" | "trash";
   threadId?: string; inReplyTo?: string; labels?: string[]; attachments?: MailAttachment[];
 }
-const KEY = "aicte_mail_v2";
+const KEY = "aicte_mail_v3";
 
 function read(): Mail[] {
-  if (typeof window === "undefined") return seed();
+  if (typeof window === "undefined") return [];
   try {
+    // Purge legacy v2 cache if present
+    localStorage.removeItem("aicte_mail_v2");
     const raw = localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const parsed: Mail[] = JSON.parse(raw);
+      // Clean out any seed / mock IDs
+      const cleaned = parsed.filter(
+        (m) =>
+          !["m1", "m2", "m3", "m4"].includes(m.id) &&
+          m.from !== "noreply@vigilos.gov.in" &&
+          m.from !== "scheduler@vigilos.gov.in" &&
+          m.from !== "hod.cse@college.edu"
+      );
+      if (cleaned.length !== parsed.length) {
+        localStorage.setItem(KEY, JSON.stringify(cleaned));
+      }
+      return cleaned;
+    }
   } catch {/**/}
-  const s = seed();
-  localStorage.setItem(KEY, JSON.stringify(s));
-  return s;
+  return [];
 }
 function write(rows: Mail[]) { localStorage.setItem(KEY, JSON.stringify(rows)); window.dispatchEvent(new Event("mail-updated")); }
 
 function seed(): Mail[] {
-  const t = Date.now();
-  return [
-    { id: "m1", threadId: "th1", from: "noreply@vigilos.gov.in", to: "me", subject: "OD Request REQ-1024 approved", body: "Your OD request for SIH Finals has been approved by Dr. Sharma.\n\nCarry your college ID at all times.", ts: t - 3600_000, read: false, starred: false, folder: "inbox", labels: ["OD"] },
-    { id: "m2", threadId: "th2", from: "hod.cse@college.edu", to: "me", subject: "Reminder: AICTE compliance review", body: "Please ensure all OD records for Sep–Nov are uploaded by Friday.", ts: t - 7200_000, read: false, starred: true, folder: "inbox", labels: ["Important"] },
-    { id: "m3", threadId: "th3", from: "scheduler@vigilos.gov.in", to: "me", subject: "Lab 3 booking confirmed", body: "Lab 3 is reserved tomorrow 10:00–12:00.", ts: t - 86400_000, read: true, starred: false, folder: "inbox" },
-    { id: "m4", threadId: "th4", from: "me", to: "advisor@college.edu", subject: "Question about attendance rule", body: "Hi sir, does an approved OD count toward the 75% rule?", ts: t - 2 * 86400_000, read: true, starred: false, folder: "sent" },
-  ];
+  return [];
 }
 
 export const DEFAULT_LABELS = ["Important", "OD", "Admin", "Personal"];
