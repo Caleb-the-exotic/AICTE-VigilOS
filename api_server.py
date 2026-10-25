@@ -16,9 +16,10 @@ import os
 import uuid
 import datetime
 import secrets
-from typing import Optional
+import time
+from typing import Optional, List
 
-from fastapi import FastAPI, HTTPException, Depends, Header, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, Header, Query, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
@@ -32,7 +33,7 @@ load_dotenv()
 
 
 # ── Campus backend imports ───────────────────────────────────────
-from campus import db, auth, pdf_exporter, role_service
+from campus import db, auth, pdf_exporter, role_service, gmail_mailer
 from campus.executor import run as campus_run
 
 # ── Multi-Agent Kernel & Event Bus ──────────────────────────────
@@ -64,6 +65,7 @@ if _EVENT_BUS_AVAILABLE:
 
 # ── In-memory token store (swap for Redis/DB in prod) ────────────
 _token_store: dict[str, dict] = {}   # token → {username, role, name}
+_2fa_store: dict[str, dict] = {}     # email → {otp, expires_at, attempts, user_id, name}
 
 # ── Groq client factory ──────────────────────────────────────────
 def _make_groq() -> Groq:
@@ -94,10 +96,19 @@ app.add_middleware(
 )
 
 # ── Auth helper ──────────────────────────────────────────────────
-def _get_current_user(authorization: Optional[str] = Header(None)) -> dict:
-    if not authorization or not authorization.startswith("Bearer "):
+def _get_current_user(
+    authorization: Optional[str] = Header(None),
+    token_query: Optional[str] = Query(None, alias="token"),
+) -> dict:
+    raw_token = None
+    if authorization and authorization.startswith("Bearer "):
+        raw_token = authorization.split(" ", 1)[1]
+    elif token_query:
+        raw_token = token_query
+
+    if not raw_token:
         raise HTTPException(status_code=401, detail="Missing or invalid token")
-    token = authorization.split(" ", 1)[1]
+    token = raw_token
     
     user = None
     # 1. Try decoding token as JWT
@@ -149,6 +160,7 @@ def _get_current_user(authorization: Optional[str] = Header(None)) -> dict:
         "region_code": user.get("region_code") or "HQ",
         "region": user.get("region_name") or user.get("region", "HQ (New Delhi)"),
         "status": status,
+        "two_factor_enabled": bool(user.get("two_factor_enabled", False)),
         "permissions": user.get("permissions", []),
     }
 
@@ -185,6 +197,43 @@ def login(body: LoginBody):
     if not ok:
         raise HTTPException(status_code=401, detail=result or "Invalid email/username or password")
     
+    # Check if Two-Factor Authentication (2FA) is enabled for this account
+    user_id = result["id"]
+    if role_service.is_user_2fa_enabled(user_id):
+        user_email = (result.get("email") or result.get("normalized_email", "")).strip().lower()
+        if not user_email:
+            raise HTTPException(status_code=400, detail="Account has no registered email for two-factor verification.")
+
+        otp = f"{secrets.randbelow(900000) + 100000}"
+        expires_at = time.time() + 600  # 10 minutes
+        _2fa_store[user_email] = {
+            "otp": otp,
+            "expires_at": expires_at,
+            "attempts": 0,
+            "user_id": user_id,
+            "name": result.get("name", "User"),
+        }
+
+        try:
+            gmail_mailer.send_otp_email(
+                to_email=user_email,
+                otp_code=otp,
+                name=result.get("name"),
+                purpose="Two-Factor Authentication (2FA) Sign-In"
+            )
+        except Exception as e:
+            print(f"[2FA Login Error] Failed to send OTP: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to dispatch 2FA verification email: {str(e)}"
+            )
+
+        return {
+            "requires_2fa": True,
+            "email": user_email,
+            "message": f"A 6-digit verification code has been dispatched to {user_email}.",
+        }
+
     token = auth.create_jwt(result)
     _token_store[token] = result
     
@@ -252,6 +301,375 @@ def logout(authorization: Optional[str] = Header(None)):
         token = authorization.split(" ", 1)[1]
         _token_store.pop(token, None)
     return {"ok": True}
+
+# ── In-memory OTP store ───────────────────────────────────────────
+# email -> {"otp": "123456", "expires_at": float, "attempts": int, "name": str}
+_otp_store: dict[str, dict] = {}
+
+class SendOtpBody(BaseModel):
+    email: str
+    purpose: Optional[str] = "Password Reset"
+
+class VerifyResetPasswordBody(BaseModel):
+    email: str
+    otp: str
+    new_password: str
+
+class SettingsResetPasswordBody(BaseModel):
+    otp: str
+    new_password: str
+
+@app.post("/api/auth/otp/send")
+def send_otp(body: SendOtpBody):
+    """
+    Generate and send a 6-digit OTP to the registered user's email via Gmail API v1.
+    """
+    raw_email = body.email.strip()
+    norm_email = raw_email.lower()
+
+    # Verify user exists in SQLite
+    user = role_service.get_user_by_email(norm_email)
+    if not user:
+        # Also check if username or partial email was passed
+        conn = db.get_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT normalized_email, name FROM users WHERE normalized_email LIKE ? OR name LIKE ? LIMIT 1", (f"{norm_email}%", f"%{raw_email}%"))
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            norm_email = row["normalized_email"]
+            user = role_service.get_user_by_email(norm_email)
+
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No AICTE VigilOS account is registered with '{raw_email}'."
+        )
+
+    # Generate cryptographically secure 6-digit OTP
+    otp = f"{secrets.randbelow(900000) + 100000}"
+    expires_at = time.time() + 600  # 10 minutes
+
+    _otp_store[norm_email] = {
+        "otp": otp,
+        "expires_at": expires_at,
+        "attempts": 0,
+        "name": user.get("name", "User"),
+    }
+
+    # Send OTP via Gmail API
+    try:
+        gmail_mailer.send_otp_email(
+            to_email=norm_email,
+            otp_code=otp,
+            name=user.get("name"),
+            purpose=body.purpose or "Password Reset"
+        )
+    except Exception as e:
+        print(f"[OTP Send Error] Failed to send email via Gmail API: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to deliver verification email. Error: {str(e)}"
+        )
+
+    return {
+        "ok": True,
+        "message": f"A 6-digit verification code has been sent to {norm_email}.",
+        "email": norm_email,
+    }
+
+@app.post("/api/auth/otp/verify-reset")
+def verify_otp_and_reset_password(body: VerifyResetPasswordBody):
+    """
+    Verify OTP and reset password for the given email.
+    """
+    norm_email = body.email.strip().lower()
+    entry = _otp_store.get(norm_email)
+
+    if not entry:
+        raise HTTPException(
+            status_code=400,
+            detail="No verification code was requested for this email, or it has expired."
+        )
+
+    if time.time() > entry["expires_at"]:
+        _otp_store.pop(norm_email, None)
+        raise HTTPException(
+            status_code=400,
+            detail="The verification code has expired. Please request a new code."
+        )
+
+    if entry["attempts"] >= 5:
+        _otp_store.pop(norm_email, None)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many invalid attempts. For security, please request a new verification code."
+        )
+
+    if entry["otp"] != body.otp.strip():
+        entry["attempts"] += 1
+        remaining = 5 - entry["attempts"]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Incorrect verification code. {remaining} attempt(s) remaining."
+        )
+
+    if len(body.new_password) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail="New password must be at least 6 characters long."
+        )
+
+    # Perform password update in SQLite database
+    try:
+        role_service.update_user_password_by_email(norm_email, body.new_password)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # Clear OTP upon successful consumption
+    _otp_store.pop(norm_email, None)
+
+    return {
+        "ok": True,
+        "message": "Your password has been successfully reset. You can now sign in with your new credentials."
+    }
+
+@app.post("/api/auth/settings/send-otp")
+def settings_send_otp(user: dict = Depends(_get_current_user)):
+    """
+    Send OTP to authenticated user's registered email for in-settings password reset.
+    """
+    email = user.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Authenticated user has no registered email.")
+
+    otp = f"{secrets.randbelow(900000) + 100000}"
+    expires_at = time.time() + 600
+
+    _otp_store[email.lower()] = {
+        "otp": otp,
+        "expires_at": expires_at,
+        "attempts": 0,
+        "name": user.get("name", "User"),
+    }
+
+    try:
+        gmail_mailer.send_otp_email(
+            to_email=email,
+            otp_code=otp,
+            name=user.get("name"),
+            purpose="In-Settings Password Reset"
+        )
+    except Exception as e:
+        print(f"[Settings OTP Error] {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to deliver verification code: {str(e)}"
+        )
+
+    return {
+        "ok": True,
+        "message": f"Verification code sent to {email}."
+    }
+
+@app.post("/api/auth/settings/reset-password")
+def settings_reset_password(body: SettingsResetPasswordBody, user: dict = Depends(_get_current_user)):
+    """
+    Verify OTP and reset password for authenticated user in Settings.
+    """
+    email = user.get("email", "").lower()
+    entry = _otp_store.get(email)
+
+    if not entry:
+        raise HTTPException(
+            status_code=400,
+            detail="No verification code was requested, or it has expired."
+        )
+
+    if time.time() > entry["expires_at"]:
+        _otp_store.pop(email, None)
+        raise HTTPException(
+            status_code=400,
+            detail="The verification code has expired. Please request a new code."
+        )
+
+    if entry["attempts"] >= 5:
+        _otp_store.pop(email, None)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many invalid attempts. Please request a new code."
+        )
+
+    if entry["otp"] != body.otp.strip():
+        entry["attempts"] += 1
+        remaining = 5 - entry["attempts"]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Incorrect verification code. {remaining} attempt(s) remaining."
+        )
+
+    if len(body.new_password) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail="Password must be at least 6 characters long."
+        )
+
+    try:
+        role_service.update_user_password(user["id"], body.new_password)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    _otp_store.pop(email, None)
+
+    return {
+        "ok": True,
+        "message": "Password successfully changed!"
+    }
+
+# ═══════════════════════════════════════════════════════════════
+# TWO-FACTOR AUTHENTICATION (2FA) ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+class Login2FABody(BaseModel):
+    email: str
+    otp: str
+
+class Resend2FABody(BaseModel):
+    email: str
+
+class Toggle2FABody(BaseModel):
+    enabled: bool
+
+@app.post("/api/auth/login/2fa")
+def login_2fa(body: Login2FABody):
+    """
+    Verify 2FA OTP code sent to user email and return authenticated session.
+    """
+    norm_email = body.email.strip().lower()
+    entry = _2fa_store.get(norm_email)
+
+    if not entry:
+        raise HTTPException(
+            status_code=400,
+            detail="No pending two-factor verification session found. Please enter your credentials again."
+        )
+
+    if time.time() > entry["expires_at"]:
+        _2fa_store.pop(norm_email, None)
+        raise HTTPException(
+            status_code=400,
+            detail="The verification code has expired. Please sign in again."
+        )
+
+    if entry["attempts"] >= 5:
+        _2fa_store.pop(norm_email, None)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many invalid verification attempts. Please sign in again."
+        )
+
+    if entry["otp"] != body.otp.strip():
+        entry["attempts"] += 1
+        remaining = 5 - entry["attempts"]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Incorrect 2FA verification code. {remaining} attempt(s) remaining."
+        )
+
+    user_id = entry["user_id"]
+    _2fa_store.pop(norm_email, None)
+
+    user = role_service.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User account not found.")
+
+    user_info = {
+        "id": user["id"],
+        "username": user["normalized_email"].split("@")[0],
+        "name": user["name"],
+        "email": user["normalized_email"],
+        "role": user["role_key"],
+        "role_label": user.get("role_name", user["role_key"]),
+        "bureau_code": user.get("bureau_code") or "HQ",
+        "bureau": user.get("bureau_name") or "National Portal",
+        "region_code": user.get("region_code") or "HQ",
+        "region": user.get("region_name") or "HQ (New Delhi)",
+        "status": user["status"],
+        "two_factor_enabled": True,
+        "permissions": user.get("permissions", []),
+    }
+
+    token = auth.create_jwt(user_info)
+    _token_store[token] = user_info
+
+    return {
+        "token": token,
+        "user": user_info,
+    }
+
+@app.post("/api/auth/login/2fa/resend")
+def resend_2fa(body: Resend2FABody):
+    """
+    Resend 2FA OTP code via Gmail API.
+    """
+    norm_email = body.email.strip().lower()
+    entry = _2fa_store.get(norm_email)
+    user = None
+    if entry:
+        user = role_service.get_user_by_id(entry["user_id"])
+    else:
+        user = role_service.get_user_by_email(norm_email)
+
+    if not user:
+        raise HTTPException(status_code=404, detail=f"No account found for {norm_email}.")
+
+    otp = f"{secrets.randbelow(900000) + 100000}"
+    expires_at = time.time() + 600
+    _2fa_store[norm_email] = {
+        "otp": otp,
+        "expires_at": expires_at,
+        "attempts": 0,
+        "user_id": user["id"],
+        "name": user.get("name", "User"),
+    }
+
+    try:
+        gmail_mailer.send_otp_email(
+            to_email=norm_email,
+            otp_code=otp,
+            name=user.get("name"),
+            purpose="Two-Factor Authentication (2FA) Sign-In"
+        )
+    except Exception as e:
+        print(f"[2FA Resend Error] {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to resend 2FA verification email: {str(e)}"
+        )
+
+    return {
+        "ok": True,
+        "message": f"A fresh verification code has been sent to {norm_email}."
+    }
+
+@app.post("/api/auth/2fa/toggle")
+def toggle_2fa(body: Toggle2FABody, user: dict = Depends(_get_current_user)):
+    """
+    Enable or disable 2FA for the authenticated user.
+    """
+    user_id = user["id"]
+    try:
+        role_service.set_user_2fa(user_id, body.enabled)
+        # Update user session store if present
+        for tok, u in _token_store.items():
+            if u.get("id") == user_id:
+                u["two_factor_enabled"] = body.enabled
+        return {
+            "ok": True,
+            "enabled": body.enabled,
+            "message": f"Two-Factor Authentication is now {'enabled' if body.enabled else 'disabled'}."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ═══════════════════════════════════════════════════════════════
 # RBAC & USER GOVERNANCE ENDPOINTS
@@ -898,6 +1316,107 @@ def list_cases(
         return cases
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Export Cases to PDF ─────────────────────────────────────────
+class CasesExportPayload(BaseModel):
+    cases: Optional[List[dict]] = None
+    bureau: Optional[str] = "ALL"
+    status: Optional[str] = "ALL"
+    region: Optional[str] = "ALL"
+    search: Optional[str] = ""
+
+@app.post("/api/aicte/cases/export/pdf")
+def export_cases_pdf_post(
+    payload: CasesExportPayload,
+    user: dict = Depends(_get_current_user),
+):
+    """Generate and return a downloadable official AICTE Cases Registry PDF report."""
+    try:
+        cases = payload.cases
+        if cases is None:
+            user_role = user.get("role")
+            user_bureau = (user.get("bureau_code") or "").upper()
+            user_region = (user.get("region_code") or "").upper()
+
+            effective_bureau = payload.bureau if payload.bureau and payload.bureau != "ALL" else None
+            effective_region = payload.region if payload.region and payload.region != "ALL" else None
+            effective_status = payload.status if payload.status and payload.status != "ALL" else None
+
+            if user_role == "super_admin":
+                pass
+            elif user_role in ("bureau_head", "approval_officer"):
+                if user_bureau and user_bureau != "HQ":
+                    effective_bureau = user_bureau
+            elif user_role == "nodal_officer":
+                if user_region and user_region != "HQ":
+                    effective_region = user_region
+
+            cases = db.list_aicte_cases(
+                bureau=effective_bureau,
+                status=effective_status,
+                region=effective_region,
+                limit=500,
+            )
+
+        # Annotate ageing and SLA
+        now = datetime.datetime.now()
+        for c in cases:
+            if "ageing_days" not in c or c.get("ageing_days") is None:
+                created = c.get("created_at", "")
+                try:
+                    delta = now - datetime.datetime.fromisoformat(created)
+                    c["ageing_days"] = delta.days
+                except Exception:
+                    c["ageing_days"] = 0
+            if "sla_breached" not in c:
+                sla_dl = c.get("sla_deadline", "")
+                if sla_dl and c.get("status") not in ("disposed",):
+                    try:
+                        c["sla_breached"] = now > datetime.datetime.fromisoformat(sla_dl)
+                    except Exception:
+                        c["sla_breached"] = False
+                else:
+                    c["sla_breached"] = False
+
+        pdf_bytes = pdf_exporter.generate_cases_pdf(
+            cases=cases,
+            user_name=user.get("name") or user.get("username", "Officer"),
+            user_role=user.get("role", "super_admin"),
+            user_bureau=user.get("bureau", "National Portal"),
+            user_region=user.get("region", "HQ (New Delhi)"),
+            filters={
+                "bureau": payload.bureau or "ALL",
+                "region": payload.region or "ALL",
+                "status": payload.status or "ALL",
+                "search": payload.search or "",
+            }
+        )
+
+        filename = f"AICTE_Cases_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/aicte/cases/export/pdf")
+def export_cases_pdf_get(
+    bureau: Optional[str] = "ALL",
+    status: Optional[str] = "ALL",
+    region: Optional[str] = "ALL",
+    search: Optional[str] = "",
+    user: dict = Depends(_get_current_user),
+):
+    """GET endpoint for direct browser download of AICTE cases PDF."""
+    payload = CasesExportPayload(bureau=bureau, status=status, region=region, search=search)
+    return export_cases_pdf_post(payload=payload, user=user)
 
 
 # ── Single Case Detail ────────────────────────────────────────────

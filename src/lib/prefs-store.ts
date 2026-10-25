@@ -20,7 +20,25 @@ export interface UserPrefs {
   speechPitch: number;
   speechVolume: number;
 }
-const KEY = "aicte_prefs_v1";
+
+function getCurrentDeviceName(): string {
+  if (typeof navigator === "undefined") return "Active Browser Session";
+  const ua = navigator.userAgent;
+  let browser = "Browser";
+  if (ua.includes("Firefox")) browser = "Firefox";
+  else if (ua.includes("Edg")) browser = "Edge";
+  else if (ua.includes("Chrome")) browser = "Chrome";
+  else if (ua.includes("Safari") && !ua.includes("Chrome")) browser = "Safari";
+
+  let os = "System";
+  if (ua.includes("Windows")) os = "Windows";
+  else if (ua.includes("Mac")) os = "macOS";
+  else if (ua.includes("Linux")) os = "Linux";
+  else if (ua.includes("Android")) os = "Android";
+  else if (ua.includes("iPhone") || ua.includes("iPad")) os = "iOS";
+
+  return `${browser} · ${os}`;
+}
 
 const DEFAULTS: UserPrefs = {
   notif: [
@@ -34,8 +52,7 @@ const DEFAULTS: UserPrefs = {
   timezone: "Asia/Kolkata",
   twoFactor: false,
   sessions: [
-    { id: "s1", device: "Chrome · Windows", ip: "192.168.1.4", lastActive: new Date().toISOString(), current: true },
-    { id: "s2", device: "Safari · iPhone", ip: "10.0.0.3", lastActive: new Date(Date.now() - 86400000).toISOString() },
+    { id: "s1", device: getCurrentDeviceName(), ip: "127.0.0.1", lastActive: new Date().toISOString(), current: true },
   ],
   delegate: null,
   unifiedInbox: true,
@@ -50,30 +67,97 @@ const DEFAULTS: UserPrefs = {
   speechVolume: 1,
 };
 
-export const prefsStore = {
-  get(): UserPrefs {
-    if (typeof window === "undefined") return DEFAULTS;
+function getAccountKey(userEmailOrId?: string): string {
+  if (userEmailOrId && typeof userEmailOrId === "string" && userEmailOrId.trim()) {
+    return userEmailOrId.trim().toLowerCase();
+  }
+  if (typeof window !== "undefined") {
     try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) return { ...DEFAULTS, ...JSON.parse(raw) };
+      const uStr = localStorage.getItem("aicte_user");
+      if (uStr) {
+        const u = JSON.parse(uStr);
+        if (u?.email) return String(u.email).trim().toLowerCase();
+        if (u?.id) return String(u.id).trim().toLowerCase();
+      }
     } catch {/**/}
-    return DEFAULTS;
+  }
+  return "guest";
+}
+
+function getStorageKey(userEmailOrId?: string): string {
+  const account = getAccountKey(userEmailOrId);
+  return `aicte_prefs_v2_${account}`;
+}
+
+export const prefsStore = {
+  get(userEmailOrId?: string): UserPrefs {
+    if (typeof window === "undefined") return DEFAULTS;
+    const storageKey = getStorageKey(userEmailOrId);
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        // Clean out any legacy mock Safari iPhone session from stored preferences
+        const filteredSessions = (parsed.sessions || DEFAULTS.sessions).filter(
+          (s: Session) =>
+            s.id !== "s2" &&
+            !s.device.toLowerCase().includes("safari · iphone") &&
+            !s.device.toLowerCase().includes("safari iphone")
+        );
+        return {
+          ...DEFAULTS,
+          ...parsed,
+          sessions: filteredSessions.length > 0 ? filteredSessions : [
+            { id: "s1", device: getCurrentDeviceName(), ip: "127.0.0.1", lastActive: new Date().toISOString(), current: true },
+          ],
+        };
+      }
+    } catch {/**/}
+
+    return {
+      ...DEFAULTS,
+      sessions: [
+        { id: "s1", device: getCurrentDeviceName(), ip: "127.0.0.1", lastActive: new Date().toISOString(), current: true },
+      ],
+    };
   },
-  set(p: Partial<UserPrefs>) {
-    const cur = this.get();
-    const next = { ...cur, ...p };
-    localStorage.setItem(KEY, JSON.stringify(next));
-    window.dispatchEvent(new Event("prefs-updated"));
+
+  set(patch: Partial<UserPrefs>, userEmailOrId?: string): UserPrefs {
+    if (typeof window === "undefined") return DEFAULTS;
+    const storageKey = getStorageKey(userEmailOrId);
+    const cur = this.get(userEmailOrId);
+    const next: UserPrefs = { ...cur, ...patch };
+
+    // Clean out mock Safari iPhone session if present
+    if (next.sessions) {
+      next.sessions = next.sessions.filter(
+        (s) =>
+          s.id !== "s2" &&
+          !s.device.toLowerCase().includes("safari · iphone") &&
+          !s.device.toLowerCase().includes("safari iphone")
+      );
+    }
+
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(next));
+      window.dispatchEvent(new Event("prefs-updated"));
+    } catch {/**/}
     return next;
   },
-  revokeSession(id: string) {
-    const cur = this.get();
-    this.set({ sessions: cur.sessions.filter((s) => s.id !== id) });
+
+  getAvatar(userEmailOrId?: string): string | undefined {
+    return this.get(userEmailOrId).avatarDataUrl;
   },
-  refreshCurrentSession() {
-    const cur = this.get();
+
+  revokeSession(id: string, userEmailOrId?: string) {
+    const cur = this.get(userEmailOrId);
+    this.set({ sessions: cur.sessions.filter((s) => s.id !== id) }, userEmailOrId);
+  },
+
+  refreshCurrentSession(userEmailOrId?: string) {
+    const cur = this.get(userEmailOrId);
     const nowIso = new Date().toISOString();
     const updated = cur.sessions.map((s) => s.current ? { ...s, lastActive: nowIso } : s);
-    return this.set({ sessions: updated });
+    return this.set({ sessions: updated }, userEmailOrId);
   },
 };

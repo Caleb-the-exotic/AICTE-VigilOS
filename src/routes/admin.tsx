@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { 
   Shield, Users, ShieldAlert, ChevronDown, Check, 
   Search, ShieldCheck, ArrowLeft, Filter, Building2,
@@ -480,12 +480,13 @@ function AdminPanel() {
   }
 
   const filtered = users.filter((u) => {
+    const q = (search || "").toLowerCase();
     const matchesSearch =
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      u.bureau.toLowerCase().includes(search.toLowerCase()) ||
-      u.region.toLowerCase().includes(search.toLowerCase()) ||
-      formatRole(u.role).toLowerCase().includes(search.toLowerCase());
+      (u.name || "").toLowerCase().includes(q) ||
+      (u.email || "").toLowerCase().includes(q) ||
+      (u.bureau || "").toLowerCase().includes(q) ||
+      (u.region || "").toLowerCase().includes(q) ||
+      (formatRole(u.role) || "").toLowerCase().includes(q);
 
     const matchesRole = roleFilter === "all" || u.role === roleFilter;
     return matchesSearch && matchesRole;
@@ -682,8 +683,8 @@ function AdminPanel() {
                     ) : (
                       filtered.map((u) => {
                         const roleMeta = ROLE_OPTIONS.find((r) => r.role === u.role) || ROLE_OPTIONS[2];
-                        const isSelf = user?.email.toLowerCase() === u.email.toLowerCase();
-                        const isMasterAdmin = u.email.toLowerCase() === "2204caleb2007@gmail.com";
+                        const isSelf = Boolean(user?.email && u.email && user.email.toLowerCase() === u.email.toLowerCase());
+                        const isMasterAdmin = Boolean(u.email && u.email.toLowerCase() === "2204caleb2007@gmail.com");
 
                         return (
                           <tr key={u.id || u.email} className="hover:bg-secondary/20 transition-colors">
@@ -691,7 +692,7 @@ function AdminPanel() {
                             <td className="px-4 py-3 font-medium">
                               <div className="flex items-center gap-2.5">
                                 <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 grid place-items-center text-xs font-bold text-primary shrink-0">
-                                  {u.name.slice(0, 1).toUpperCase()}
+                                  {(u.name || "U").slice(0, 1).toUpperCase()}
                                 </div>
                                 <div>
                                   <div className="text-white/95 text-xs font-bold">{u.name}</div>
@@ -735,7 +736,7 @@ function AdminPanel() {
                                   className="w-64 bg-card/95 backdrop-blur-xl border border-border/60 rounded-xl shadow-2xl p-1.5 z-[9999] space-y-1"
                                 >
                                   <div className="px-2.5 py-1 text-[10px] uppercase font-bold text-muted-foreground tracking-wider border-b border-border/20 mb-1">
-                                    Change Role for {u.name.split(" ")[0]}
+                                    Change Role for {(u.name || "User").split(" ")[0]}
                                   </div>
                                   {ROLE_OPTIONS.map((opt) => {
                                     const isCurrent = u.role === opt.role;
@@ -764,59 +765,135 @@ function AdminPanel() {
                               </DropdownMenu>
                             </td>
 
-                            {/* Bureau Selector */}
-                            <td className="px-4 py-3 text-xs">
-                              <select
-                                value={u.bureau_code || "HQ"}
-                                onChange={(e) => handleBureauChange(u, e.target.value)}
-                                className="h-7 px-2 rounded-lg bg-background/80 border border-border/40 text-foreground/90 text-xs font-medium focus:outline-none focus:border-primary cursor-pointer hover:bg-secondary/50 transition-colors"
-                                title="Change Bureau / Department"
-                              >
-                                {bureaus.length > 0 ? (
-                                  bureaus.map((b) => (
-                                    <option key={b.code} value={b.code}>
-                                      {b.code} ({b.name.split(" ")[0]})
-                                    </option>
-                                  ))
-                                ) : (
-                                  <>
-                                    <option value="HQ">HQ</option>
-                                    <option value="RB">RB</option>
-                                    <option value="PGRC">PGRC</option>
-                                    <option value="RO">RO</option>
-                                    <option value="LIAISON">LIAISON</option>
-                                  </>
-                                )}
-                              </select>
+                            {/* Bureau Selector Dropdown */}
+                            <td className="px-4 py-3">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/40 bg-secondary/40 hover:bg-secondary/70 hover:border-border/60 text-foreground/90 text-xs font-semibold transition-all cursor-pointer shadow-xs outline-none select-none active:scale-[0.98] focus-visible:ring-1 focus-visible:ring-primary"
+                                    title="Click to change Bureau / Department"
+                                  >
+                                    <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                    <span className="font-mono font-bold">{u.bureau_code || "HQ"}</span>
+                                    <span className="text-[11px] text-muted-foreground max-w-[100px] truncate hidden xl:inline">
+                                      · {(bureaus.find((b) => b.code === u.bureau_code)?.name || u.bureau || "HQ").split(" ")[0]}
+                                    </span>
+                                    <ChevronDown className="w-3.5 h-3.5 ml-0.5 text-muted-foreground/70 shrink-0" />
+                                  </button>
+                                </DropdownMenuTrigger>
+
+                                <DropdownMenuContent
+                                  align="start"
+                                  side="bottom"
+                                  sideOffset={6}
+                                  avoidCollisions={true}
+                                  collisionPadding={16}
+                                  className="w-72 bg-card/95 backdrop-blur-xl border border-border/60 rounded-xl shadow-2xl p-1.5 z-[9999] space-y-1"
+                                >
+                                  <div className="px-2.5 py-1 text-[10px] uppercase font-bold text-muted-foreground tracking-wider border-b border-border/20 mb-1 flex items-center justify-between">
+                                    <span>Select Bureau / Cell</span>
+                                    <span className="font-normal opacity-60 truncate max-w-[100px]">{(u.name || "User").split(" ")[0]}</span>
+                                  </div>
+                                  {(bureaus.length > 0 ? bureaus : [
+                                    { id: "bur_hq", code: "HQ", name: "Central Vigilance HQ" },
+                                    { id: "bur_rb", code: "RB", name: "Regulation Bureau" },
+                                    { id: "bur_pgrc", code: "PGRC", name: "Public Grievance Redressal Cell" },
+                                    { id: "bur_ro", code: "RO", name: "Regional Office Cell" },
+                                    { id: "bur_liaison", code: "LIAISON", name: "State Liaison" },
+                                  ]).map((b) => {
+                                    const isCurrent = (u.bureau_code || "HQ").toUpperCase() === b.code.toUpperCase();
+                                    return (
+                                      <DropdownMenuItem
+                                        key={b.code}
+                                        onClick={() => handleBureauChange(u, b.code)}
+                                        className={cn(
+                                          "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer text-left outline-none",
+                                          isCurrent
+                                            ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                                            : "text-foreground/90 hover:bg-secondary/70 hover:text-foreground focus:bg-secondary/70 focus:text-foreground"
+                                        )}
+                                      >
+                                        <div className="flex items-center gap-2.5 truncate">
+                                          <span
+                                            className={cn(
+                                              "px-1.5 py-0.5 rounded text-[10px] font-bold font-mono border shrink-0",
+                                              isCurrent
+                                                ? "bg-white/20 text-white border-white/30"
+                                                : "bg-secondary/60 text-muted-foreground border-border/30"
+                                            )}
+                                          >
+                                            {b.code}
+                                          </span>
+                                          <div className="truncate font-semibold">{b.name}</div>
+                                        </div>
+                                        {isCurrent && <Check className="w-3.5 h-3.5 text-primary-foreground shrink-0 ml-1.5" />}
+                                      </DropdownMenuItem>
+                                    );
+                                  })}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </td>
 
-                            {/* Region Selector */}
-                            <td className="px-4 py-3 text-xs">
-                              <select
-                                value={u.region_code || "HQ"}
-                                onChange={(e) => handleRegionChange(u, e.target.value)}
-                                className="h-7 px-2 rounded-lg bg-background/80 border border-border/40 text-muted-foreground text-xs font-medium focus:outline-none focus:border-primary cursor-pointer hover:bg-secondary/50 transition-colors"
-                                title="Change Regional Jurisdiction"
-                              >
-                                {regions.length > 0 ? (
-                                  regions.map((r) => (
-                                    <option key={r.code} value={r.code}>
-                                      {r.name}
-                                    </option>
-                                  ))
-                                ) : (
-                                  <>
-                                    <option value="HQ">HQ</option>
-                                    <option value="NORTHERN">Northern</option>
-                                    <option value="SOUTHERN">Southern</option>
-                                    <option value="WESTERN">Western</option>
-                                    <option value="EASTERN">Eastern</option>
-                                    <option value="CENTRAL">Central</option>
-                                    <option value="NORTH_WEST">North-West</option>
-                                    <option value="SOUTH_WEST">South-West</option>
-                                  </>
-                                )}
-                              </select>
+                            {/* Region Selector Dropdown */}
+                            <td className="px-4 py-3">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/40 bg-secondary/40 hover:bg-secondary/70 hover:border-border/60 text-foreground/90 text-xs font-semibold transition-all cursor-pointer shadow-xs outline-none select-none active:scale-[0.98] focus-visible:ring-1 focus-visible:ring-primary"
+                                    title="Click to change Regional Jurisdiction"
+                                  >
+                                    <MapPin className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                    <span className="font-semibold truncate max-w-[120px]">
+                                      {regions.find((r) => r.code === u.region_code)?.name?.replace(" Region", "") || u.region || u.region_code || "HQ"}
+                                    </span>
+                                    <ChevronDown className="w-3.5 h-3.5 ml-0.5 text-muted-foreground/70 shrink-0" />
+                                  </button>
+                                </DropdownMenuTrigger>
+
+                                <DropdownMenuContent
+                                  align="start"
+                                  side="bottom"
+                                  sideOffset={6}
+                                  avoidCollisions={true}
+                                  collisionPadding={16}
+                                  className="w-64 bg-card/95 backdrop-blur-xl border border-border/60 rounded-xl shadow-2xl p-1.5 z-[9999] space-y-1"
+                                >
+                                  <div className="px-2.5 py-1 text-[10px] uppercase font-bold text-muted-foreground tracking-wider border-b border-border/20 mb-1 flex items-center justify-between">
+                                    <span>Regional Jurisdiction</span>
+                                    <span className="font-normal opacity-60 truncate max-w-[100px]">{(u.name || "User").split(" ")[0]}</span>
+                                  </div>
+                                  {(regions.length > 0 ? regions : [
+                                    { id: "reg_hq", code: "HQ", name: "HQ (New Delhi)" },
+                                    { id: "reg_north", code: "NORTHERN", name: "Northern Region" },
+                                    { id: "reg_south", code: "SOUTHERN", name: "Southern Region" },
+                                    { id: "reg_west", code: "WESTERN", name: "Western Region" },
+                                    { id: "reg_east", code: "EASTERN", name: "Eastern Region" },
+                                    { id: "reg_central", code: "CENTRAL", name: "Central Region" },
+                                  ]).map((r) => {
+                                    const isCurrent = (u.region_code || "HQ").toUpperCase() === r.code.toUpperCase();
+                                    return (
+                                      <DropdownMenuItem
+                                        key={r.code}
+                                        onClick={() => handleRegionChange(u, r.code)}
+                                        className={cn(
+                                          "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer text-left outline-none",
+                                          isCurrent
+                                            ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                                            : "text-foreground/90 hover:bg-secondary/70 hover:text-foreground focus:bg-secondary/70 focus:text-foreground"
+                                        )}
+                                      >
+                                        <div className="flex items-center gap-2 truncate">
+                                          <MapPin className={cn("w-3.5 h-3.5 shrink-0", isCurrent ? "text-primary-foreground" : "text-muted-foreground")} />
+                                          <div className="truncate font-semibold">{r.name}</div>
+                                        </div>
+                                        {isCurrent && <Check className="w-3.5 h-3.5 text-primary-foreground shrink-0 ml-1.5" />}
+                                      </DropdownMenuItem>
+                                    );
+                                  })}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </td>
 
                             {/* Status Toggle Badge */}

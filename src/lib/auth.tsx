@@ -16,10 +16,14 @@ export function formatRole(role?: string | null): string {
 
 export interface User extends ApiUser {}
 
+export type LoginResult = { requires2FA?: boolean; email?: string } | void;
+
 interface AuthCtx {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  login2FA: (email: string, otp: string) => Promise<void>;
+  resend2FA: (email: string) => Promise<void>;
   loginWithGoogle: (credential: string) => Promise<void>;
   register: (data: { name: string; email: string; password: string; role?: Role }) => Promise<void>;
   logout: () => void;
@@ -109,6 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const res = await api.login(identifier, password);
+      if (res?.requires_2fa) {
+        return { requires2FA: true, email: res.email };
+      }
       if (res?.user && res?.token) {
         if (res.user.status && res.user.status !== "active") {
           throw new Error(`Your account status is ${res.user.status}. Access restricted.`);
@@ -129,6 +136,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [persist]);
 
+  const login2FA = useCallback<AuthCtx["login2FA"]>(async (email, otp) => {
+    if (!email || !otp) {
+      throw new Error("Email and 6-digit verification code are required.");
+    }
+    try {
+      const res = await api.login2FA(email, otp);
+      if (res?.user && res?.token) {
+        if (res.user.status && res.user.status !== "active") {
+          throw new Error(`Your account status is ${res.user.status}. Access restricted.`);
+        }
+        persist(res.user, res.token);
+        return;
+      }
+      throw new Error("Two-factor authentication failed.");
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      throw new Error(msg.replace(/^\d+\s+[^:]+:\s*/, "") || "Verification code is invalid or has expired.");
+    }
+  }, [persist]);
+
+  const resend2FA = useCallback<AuthCtx["resend2FA"]>(async (email) => {
+    if (!email) throw new Error("Email is required to resend verification code.");
+    await api.resend2FA(email);
+  }, []);
+
   const loginWithGoogle = useCallback<AuthCtx["loginWithGoogle"]>(async (credential) => {
     if (!credential) throw new Error("Google authentication credential missing.");
 
@@ -146,6 +178,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const msg = err?.message || String(err);
       if (msg.includes("403") || msg.includes("inactive") || msg.includes("unauthorized")) {
         throw new Error("Google login rejected: Account is inactive or unauthorized.");
+      }
+      if (msg.includes("offline") || msg.includes("unreachable") || msg.includes("Failed to fetch")) {
+        throw new Error("Cannot connect to VigilOS Backend (http://localhost:8000). Please start backend with 'python api_server.py'.");
       }
       throw new Error(msg.replace(/^\d+\s+[^:]+:\s*/, "") || "Google login failed.");
     }
@@ -180,7 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <Ctx.Provider value={{ user, loading, login, loginWithGoogle, register, logout, setRole }}>
+    <Ctx.Provider value={{ user, loading, login, login2FA, resend2FA, loginWithGoogle, register, logout, setRole }}>
       {children}
     </Ctx.Provider>
   );

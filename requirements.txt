@@ -5,6 +5,7 @@
 fastapi
 uvicorn[standard]
 pydantic
+PyJWT
 
 # ── Autonomous agent (LLM) ───────────────────────────────────────
 groq

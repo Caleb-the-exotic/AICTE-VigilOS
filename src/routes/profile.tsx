@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { prefsStore } from "@/lib/prefs-store";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import ChangePasswordModal from "@/components/profile/ChangePasswordModal";
+import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/profile")({ component: Profile });
 
@@ -15,15 +17,28 @@ function Profile() {
   const { user, logout } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
   const navigate = useNavigate();
-  const [prefs, setPrefs] = useState(() => prefsStore.refreshCurrentSession());
-  const [show2FA, setShow2FA] = useState(false);
-  const [otp, setOtp] = useState("");
+  const [prefs, setPrefs] = useState(() => prefsStore.refreshCurrentSession(user?.email));
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [toggling2FA, setToggling2FA] = useState(false);
 
   useEffect(() => {
-    const f = () => setPrefs(prefsStore.get());
+    if (user?.email) {
+      setPrefs(prefsStore.get(user.email));
+    }
+  }, [user?.email]);
+
+  useEffect(() => {
+    if (user?.two_factor_enabled !== undefined) {
+      prefsStore.set({ twoFactor: Boolean(user.two_factor_enabled) }, user.email);
+      setPrefs(prefsStore.get(user.email));
+    }
+  }, [user?.two_factor_enabled, user?.email]);
+
+  useEffect(() => {
+    const f = () => setPrefs(prefsStore.get(user?.email));
     window.addEventListener("prefs-updated", f);
     return () => window.removeEventListener("prefs-updated", f);
-  }, []);
+  }, [user?.email]);
 
   if (!user) return null;
 
@@ -32,21 +47,37 @@ function Profile() {
     if (!f) return;
     const reader = new FileReader();
     reader.onload = () => {
-      prefsStore.set({ avatarDataUrl: reader.result as string });
-      toast.success("Avatar updated");
+      const dataUrl = reader.result as string;
+      prefsStore.set({ avatarDataUrl: dataUrl }, user.email);
+      setPrefs(prefsStore.get(user.email));
+      toast.success(`Profile picture updated for ${user.name}`);
     };
     reader.readAsDataURL(f);
   };
 
-  const enable2FA = () => {
-    if (otp.length !== 6) {
-      toast.error("Enter 6-digit code");
-      return;
+  const removeAvatar = () => {
+    prefsStore.set({ avatarDataUrl: undefined }, user.email);
+    setPrefs(prefsStore.get(user.email));
+    toast.success("Profile picture removed");
+  };
+
+  const handleToggle2FA = async (enable: boolean) => {
+    if (!user) return;
+    setToggling2FA(true);
+    try {
+      await api.toggle2FA(enable);
+      prefsStore.set({ twoFactor: enable }, user.email);
+      setPrefs(prefsStore.get(user.email));
+      if (enable) {
+        toast.success("Two-Factor Authentication is now enabled. You will receive an email OTP upon future sign-ins.");
+      } else {
+        toast.success("Two-Factor Authentication has been disabled.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update Two-Factor Authentication setting.");
+    } finally {
+      setToggling2FA(false);
     }
-    prefsStore.set({ twoFactor: true });
-    setShow2FA(false);
-    setOtp("");
-    toast.success("Two-factor enabled");
   };
 
   const formatSessionTime = (isoString: string, isCurrent?: boolean) => {
@@ -113,6 +144,15 @@ function Profile() {
                 <span className="text-[11px] text-muted-foreground font-mono">
                   ID: {user.id || user.email.split("@")[0]}
                 </span>
+                {prefs.avatarDataUrl && (
+                  <button
+                    type="button"
+                    onClick={removeAvatar}
+                    className="text-[11px] text-destructive hover:underline cursor-pointer ml-1 font-semibold"
+                  >
+                    Remove Photo
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -194,7 +234,7 @@ function Profile() {
           <h2 className="text-sm font-semibold flex items-center gap-2">
             <Key className="w-4 h-4 text-primary" /> Security
           </h2>
-          <Button variant="outline" size="sm" onClick={() => toast.info("Password reset email sent (mock)")}>
+          <Button variant="outline" size="sm" onClick={() => setShowChangePassword(true)}>
             Change password
           </Button>
           <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/40 border border-border/30">
@@ -203,44 +243,29 @@ function Profile() {
                 <ShieldCheck className="w-4 h-4 text-primary" /> Two-factor authentication
               </div>
               <div className="text-[11px] text-muted-foreground">
-                {prefs.twoFactor ? "Enabled · authenticator app" : "Add an extra layer of protection"}
+                {prefs.twoFactor ? "Enabled · Email OTP verification" : "Add an extra layer of protection via email OTP"}
               </div>
             </div>
             {prefs.twoFactor ? (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  prefsStore.set({ twoFactor: false });
-                  toast.success("2FA disabled");
-                }}
+                disabled={toggling2FA}
+                onClick={() => handleToggle2FA(false)}
               >
-                Disable
+                {toggling2FA ? "Updating..." : "Disable"}
               </Button>
             ) : (
-              <Button variant="neon" size="sm" onClick={() => setShow2FA(true)}>
-                Enable
+              <Button
+                variant="neon"
+                size="sm"
+                disabled={toggling2FA}
+                onClick={() => handleToggle2FA(true)}
+              >
+                {toggling2FA ? "Activating..." : "Enable"}
               </Button>
             )}
           </div>
-          {show2FA && (
-            <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 text-xs space-y-2">
-              <div>Scan this QR with Google Authenticator, then enter the 6-digit code:</div>
-              <div className="font-mono bg-secondary/60 p-3 rounded text-center">[ QR placeholder ]</div>
-              <div className="flex gap-2">
-                <input
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  maxLength={6}
-                  placeholder="000000"
-                  className="flex-1 h-9 px-3 rounded-lg bg-input border border-border/30 font-mono tracking-widest text-center"
-                />
-                <Button variant="neon" size="sm" onClick={enable2FA}>
-                  Verify
-                </Button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Active Sessions Card (Timezone moved here, with accurate real-time display) */}
@@ -292,8 +317,8 @@ function Profile() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      prefsStore.revokeSession(s.id);
-                      setPrefs(prefsStore.get());
+                      prefsStore.revokeSession(s.id, user.email);
+                      setPrefs(prefsStore.get(user.email));
                       toast.success("Session revoked");
                     }}
                     title="Revoke session"
@@ -305,6 +330,13 @@ function Profile() {
             ))}
           </div>
         </div>
+
+        {/* Change Password Modal via OTP */}
+        <ChangePasswordModal
+          isOpen={showChangePassword}
+          onClose={() => setShowChangePassword(false)}
+          userEmail={user.email}
+        />
       </div>
     </AppLayout>
   );

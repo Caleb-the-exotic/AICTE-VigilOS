@@ -5,13 +5,15 @@ import {
   FileText, Filter, Gavel, GitMerge, Globe, Layers,
   RefreshCw, Search, Shield, Siren, TrendingUp, Users,
   X, ChevronRight, ArrowUpRight, Eye, AlertOctagon,
-  BarChart3, MapPin, Calendar, Link2, Zap, Info,
+  BarChart3, MapPin, Calendar, Link2, Zap, Info, Loader2,
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { HAS_BACKEND, API_BASE_URL } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useAuth } from "@/lib/auth";
+import { exportCasesAsPdf } from "@/lib/pdf-export";
 import { getInstitutionByPid, getStoredInstitutions } from "@/lib/institutions";
 
 export const Route = createFileRoute("/cases")({ component: CasesDashboard });
@@ -498,9 +500,11 @@ function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void 
 // ── Main Dashboard Component ──────────────────────────────────────
 function CasesDashboard() {
   const nav = useNavigate();
+  const { user } = useAuth();
   const [kpi, setKpi] = useState<KPIs>(mockKpis());
   const [cases, setCases] = useState<AICTECase[]>(mockCases());
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Filters
   const [bureauFilter, setBureauFilter] = useState<Bureau>("ALL");
@@ -602,6 +606,27 @@ function CasesDashboard() {
 
   const REGIONS = useMemo(() => ["ALL", ...Array.from(new Set(cases.map(c => c.region))).sort()], [cases]);
 
+  const handleExportPdf = useCallback(async () => {
+    setExporting(true);
+    try {
+      await exportCasesAsPdf({
+        cases: filteredCases,
+        bureauFilter,
+        statusFilter,
+        regionFilter,
+        searchQ,
+        userName: user?.name || "Officer",
+        userRole: user?.role || "super_admin",
+        userBureau: user?.bureau || "National Portal",
+        userRegion: user?.region || "HQ (New Delhi)",
+      });
+    } catch (err: any) {
+      toast.error("Export failed: " + (err?.message || "Unknown error"));
+    } finally {
+      setExporting(false);
+    }
+  }, [filteredCases, bureauFilter, statusFilter, regionFilter, searchQ, user]);
+
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto space-y-5">
@@ -633,8 +658,19 @@ function CasesDashboard() {
               <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
               Refresh
             </button>
-            <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/25 text-xs text-primary hover:bg-primary/25 transition-all">
-              <Download className="w-3.5 h-3.5" /> Export
+            <button
+              id="export-cases-btn"
+              onClick={handleExportPdf}
+              disabled={exporting}
+              title="Export current filtered cases list as official AICTE PDF report"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/25 text-xs text-primary hover:bg-primary/25 transition-all disabled:opacity-50"
+            >
+              {exporting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Download className="w-3.5 h-3.5" />
+              )}
+              {exporting ? "Exporting..." : "Export"}
             </button>
           </div>
         </div>

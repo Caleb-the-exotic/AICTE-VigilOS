@@ -22,7 +22,7 @@ if not exist .env (
 echo Starting backend + frontend...
 
 rem --- Start backend (FastAPI) ---
-start "backend" /b cmd /c "py -3.12 -m uvicorn api_server:app --reload --host 127.0.0.1 --port %API_PORT% || python -m uvicorn api_server:app --reload --host 127.0.0.1 --port %API_PORT%"
+start "backend" /b cmd /c "if exist venv\Scripts\python.exe ( venv\Scripts\python.exe -m uvicorn api_server:app --reload --host 127.0.0.1 --port %API_PORT% ) else ( py -m uvicorn api_server:app --reload --host 127.0.0.1 --port %API_PORT% || python -m uvicorn api_server:app --reload --host 127.0.0.1 --port %API_PORT% )"
 
 rem --- Start frontend (Vite) ---
 start "frontend" /b cmd /c "pnpm run dev -- --host 0.0.0.0 --port %VITE_PORT%"

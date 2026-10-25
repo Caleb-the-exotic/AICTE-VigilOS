@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { useAuth, formatRole } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 import { mailStore } from "@/lib/mail-store";
+import { prefsStore } from "@/lib/prefs-store";
 
 interface NavItem {
   title: string;
@@ -91,8 +92,12 @@ export default function AppSidebar({ collapsed, onToggle }: Props) {
 
         {/* Profile Link */}
         <Link to="/profile" className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground", collapsed && "justify-center px-0")} title={collapsed ? user?.name : undefined}>
-          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-primary to-primary/50 grid place-items-center text-[9px] font-bold text-primary-foreground shrink-0">
-            {(user?.name || "U").slice(0, 1).toUpperCase()}
+          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-primary to-primary/50 grid place-items-center text-[9px] font-bold text-primary-foreground shrink-0 overflow-hidden">
+            {prefsStore.getAvatar(user?.email) ? (
+              <img src={prefsStore.getAvatar(user?.email)} alt={user?.name || "avatar"} className="w-full h-full object-cover" />
+            ) : (
+              (user?.name || "U").slice(0, 1).toUpperCase()
+            )}
           </div>
           {!collapsed && (
             <div className="text-left min-w-0 flex-1">

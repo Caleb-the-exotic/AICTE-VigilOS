@@ -42,19 +42,12 @@ Backend authorization is authoritative and centralized in [`campus/role_service.
 
 ## 👥 Canonical Personnel Seeded in SQLite
 
-All canonical accounts have been migrated to normalized SQLite records:
+All canonical accounts are in normalized SQLite records:
 
-1. **Caleb** (`2204caleb2007@gmail.com`) — Master Super Admin (Central Vigilance & Platform Authority, HQ)
-2. **System Administrator** (`admin@aicte-india.org`) — Super Admin (Vigilance Operations, HQ)
-3. **Bureau Head (Demo)** (`admin@aicte.gov.in`) — Bureau Head (Regulation Bureau, RB)
-4. **Approval Officer (Demo)** (`officer@aicte.gov.in`) — Approval Officer (Public Grievance Redressal Cell, PGRC)
-5. **Hariprasath** (`hariprasath134208@gmail.com`) — Approval Officer (Regulation Bureau, Southern)
-6. **Monisha Yathavan** (`monishayathavan@gmail.com`) — Approval Officer (PGRC, Southern)
-7. **Swetha NC** (`swethanc21@gmail.com`) — Approval Officer (Regulation Bureau, Southern)
-8. **Deepan Thangavel** (`deepanthangavel0611@gmail.com`) — Regional Nodal Officer (State Liaison, Southern)
-9. **Surya Prakash D** (`suryaprakashd22007@gmail.com`) — Approval Officer (PGRC, Southern)
+1. **System Administrator** (`admin@aicte-india.org`) — Super Admin (Vigilance Operations, HQ)
+2. **Bureau Head (Demo)** (`admin@aicte.gov.in`) — Bureau Head (Regulation Bureau, RB)
+3. **Approval Officer (Demo)** (`officer@aicte.gov.in`) — Approval Officer (Public Grievance Redressal Cell, PGRC)
 
----
 
 ## 🔄 Unified Authentication & Identity Resolution
 

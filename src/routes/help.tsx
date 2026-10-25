@@ -3,8 +3,9 @@ import { useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import { 
   MapPin, Phone, Mail, Send,
-  Building2, CheckCircle2, Shield, Globe, ExternalLink
+  Building2, CheckCircle2, Shield, Globe, ExternalLink, Loader2
 } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/help")({
   head: () => ({ 
@@ -21,19 +22,62 @@ function HelpPage() {
     firstName: "",
     lastName: "",
     emailOrPid: "",
-    category: "Grievance Inquiry",
+    category: "Portal Access / Technical Bug",
     message: ""
   });
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.firstName || !formData.lastName || !formData.message) return;
-    setSubmitted(true);
-    setTimeout(() => {
-      setSubmitted(false);
-      setFormData({ firstName: "", lastName: "", emailOrPid: "", category: "Grievance Inquiry", message: "" });
-    }, 4000);
+    if (!formData.firstName.trim() || !formData.lastName.trim() || !formData.message.trim()) {
+      toast.error("Please fill in all required fields.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await fetch("https://formspree.io/f/xwllvdvd", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          firstName: formData.firstName.trim(),
+          lastName: formData.lastName.trim(),
+          name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
+          emailOrPid: formData.emailOrPid.trim(),
+          email: formData.emailOrPid.includes("@") ? formData.emailOrPid.trim() : undefined,
+          category: formData.category,
+          message: formData.message.trim(),
+          _subject: `[VigilOS Helpdesk] ${formData.category} - ${formData.firstName.trim()} ${formData.lastName.trim()}`,
+        }),
+      });
+
+      if (response.ok) {
+        setSubmitted(true);
+        toast.success("Support ticket sent to Helpdesk successfully!");
+        setTimeout(() => {
+          setSubmitted(false);
+          setFormData({
+            firstName: "",
+            lastName: "",
+            emailOrPid: "",
+            category: "Portal Access / Technical Bug",
+            message: ""
+          });
+        }, 5000);
+      } else {
+        const data = await response.json().catch(() => ({}));
+        const errorMsg = data?.error || data?.errors?.[0]?.message || "Failed to submit inquiry. Please try again.";
+        toast.error(errorMsg);
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Network error. Unable to reach helpdesk service.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -125,13 +169,13 @@ function HelpPage() {
                       id="category"
                       value={formData.category}
                       onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      className="w-full bg-background border border-border/40 rounded-xl px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                      className="w-full bg-background border border-border/40 rounded-xl px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all cursor-pointer"
                     >
-                      <option value="Grievance Inquiry">Public Grievance (PGRC) Inquiry</option>
-                      <option value="Regulation Inquiry">Regulation Bureau (RB) Compliance</option>
-                      <option value="Overlap Case">Cross-Bureau Case Overlap Escalation</option>
-                      <option value="Technical Support">Portal Access / Technical Bug</option>
-                      <option value="Regional Office">Regional Office (RO) Coordination</option>
+                      <option value="Portal Access / Technical Bug">Portal Access / Technical Bug</option>
+                      <option value="Public Grievance (PGRC) Inquiry">Public Grievance (PGRC) Inquiry</option>
+                      <option value="Regulation Bureau (RB) Compliance">Regulation Bureau (RB) Compliance</option>
+                      <option value="Cross-Bureau Case Overlap Escalation">Cross-Bureau Case Overlap Escalation</option>
+                      <option value="Regional Office (RO) Coordination">Regional Office (RO) Coordination</option>
                     </select>
                   </div>
                 </div>
@@ -153,10 +197,20 @@ function HelpPage() {
 
                 <button
                   type="submit"
-                  className="w-full bg-primary hover:bg-primary/95 text-primary-foreground font-semibold py-3 px-6 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:scale-[1.005] active:scale-[0.99] transition-all cursor-pointer text-sm"
+                  disabled={submitting}
+                  className="w-full bg-primary hover:bg-primary/95 text-primary-foreground font-semibold py-3 px-6 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-primary/20 hover:scale-[1.005] active:scale-[0.99] transition-all cursor-pointer text-sm disabled:opacity-60"
                 >
-                  <Send className="w-4 h-4" />
-                  Submit Support Ticket
+                  {submitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Sending Support Ticket…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Submit Support Ticket</span>
+                    </>
+                  )}
                 </button>
               </form>
             )}

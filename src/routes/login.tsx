@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect, type FormEvent } from "react";
 import { 
   Mail, Lock, User, Eye, EyeOff, ArrowRight, 
@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import GoogleLoginButton from "@/components/auth/GoogleLoginButton";
+import ForgotPasswordModal from "@/components/auth/ForgotPasswordModal";
+import TwoFactorModal from "@/components/auth/TwoFactorModal";
 import { useAuth, type Role } from "@/lib/auth";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -34,6 +36,9 @@ function LoginPage() {
   const [signInPassword, setSignInPassword] = useState("");
   const [showSignInPassword, setShowSignInPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [showTwoFactor, setShowTwoFactor] = useState(false);
+  const [twoFactorEmail, setTwoFactorEmail] = useState("");
 
   // Sign up state
   const [signUpName, setSignUpName] = useState("");
@@ -56,7 +61,12 @@ function LoginPage() {
     }
     setLoading(true);
     try {
-      await login(signInEmail.trim(), signInPassword);
+      const res = await login(signInEmail.trim(), signInPassword);
+      if (res?.requires2FA) {
+        setTwoFactorEmail(res.email || signInEmail.trim());
+        setShowTwoFactor(true);
+        return;
+      }
       toast.success("Welcome back to VigilOS!");
       navigate({ to: "/" });
     } catch (err: any) {
@@ -228,7 +238,11 @@ function LoginPage() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Password</label>
-                  <button type="button" onClick={() => toast.info("For credential reset, contact your Bureau Administrator or email support@aicte-india.org")} className="text-[11px] text-red-400 hover:text-red-300 transition-colors">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowForgotPassword(true)} 
+                    className="text-[11px] text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+                  >
                     Forgot password?
                   </button>
                 </div>
@@ -324,8 +338,53 @@ function LoginPage() {
           <div className="w-full flex justify-center">
             <GoogleLoginButton />
           </div>
+
+          {/* Legal / Policy Footer Links */}
+          <div className="pt-4 mt-3 border-t border-border/30 flex items-center justify-center gap-3 text-xs text-muted-foreground">
+            <Link 
+              to="/privacy" 
+              className="hover:text-primary transition-colors hover:underline"
+            >
+              Privacy Policy
+            </Link>
+            <span className="text-border">•</span>
+            <Link 
+              to="/terms" 
+              className="hover:text-primary transition-colors hover:underline"
+            >
+              Terms of Service
+            </Link>
+            <span className="text-border">•</span>
+            <Link 
+              to="/" 
+              className="hover:text-primary transition-colors hover:underline"
+            >
+              Home
+            </Link>
+          </div>
         </div>
       </div>
+
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+        initialEmail={signInEmail}
+        onSuccess={(resetEmail) => {
+          setSignInEmail(resetEmail);
+          setMode("signin");
+          toast.success("Password reset successfully! Please sign in with your new password.");
+        }}
+      />
+
+      <TwoFactorModal
+        isOpen={showTwoFactor}
+        email={twoFactorEmail}
+        onClose={() => setShowTwoFactor(false)}
+        onSuccess={() => {
+          setShowTwoFactor(false);
+          navigate({ to: "/" });
+        }}
+      />
     </div>
   );
 }

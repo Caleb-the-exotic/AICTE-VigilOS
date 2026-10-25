@@ -114,6 +114,7 @@ def verify_login(identifier: str, password: str):
         "region_code": user.get("region_code") or "HQ",
         "region": user.get("region_name") or "HQ (New Delhi)",
         "status": user["status"],
+        "two_factor_enabled": user.get("two_factor_enabled", False),
         "permissions": user.get("permissions", []),
     }
     return True, user_info
@@ -138,6 +139,7 @@ def verify_google_login(email: str, name: str, sub: str = None):
         "region_code": user.get("region_code") or "HQ",
         "region": user.get("region_name") or "HQ (New Delhi)",
         "status": user["status"],
+        "two_factor_enabled": user.get("two_factor_enabled", False),
         "permissions": user.get("permissions", []),
     }
     return True, user_info

@@ -41,6 +41,7 @@ def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
     cur.execute('''
         SELECT 
             u.id, u.name, u.normalized_email, u.status, u.created_at, u.updated_at,
+            u.two_factor_enabled,
             r.key as role_key, r.display_name as role_name,
             b.code as bureau_code, b.name as bureau_name,
             reg.code as region_code, reg.name as region_name,
@@ -58,6 +59,7 @@ def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
         return None
 
     user = dict(row)
+    user["two_factor_enabled"] = bool(row["two_factor_enabled"]) if "two_factor_enabled" in row.keys() and row["two_factor_enabled"] else False
     # Fetch permissions
     role_key = user.get("role_key")
     perms = []
@@ -558,4 +560,134 @@ def register_user(name: str, email: str, password: str, role_key: str = "citizen
         password=password,
         actor_id="self_registration"
     )
+
+def update_user_password_by_email(email: str, new_password: str) -> bool:
+    """Update user's password hash in SQLite database by email."""
+    if not email or not new_password:
+        raise ValueError("Email and password are required.")
+    if len(new_password) < 6:
+        raise ValueError("Password must be at least 6 characters.")
+
+    norm_email = email.strip().lower()
+    conn = get_conn()
+    cur = conn.cursor()
+    now = datetime.datetime.now().isoformat()
+    new_hash = hash_password(new_password)
+
+    try:
+        cur.execute("SELECT id FROM users WHERE normalized_email = ?", (norm_email,))
+        user_row = cur.fetchone()
+        if not user_row:
+            # Check if username matching email without domain
+            cur.execute("SELECT id FROM users WHERE normalized_email LIKE ?", (f"{norm_email.split('@')[0]}%",))
+            user_row = cur.fetchone()
+
+        if not user_row:
+            raise ValueError(f"No account found associated with '{email}'.")
+
+        uid = user_row["id"]
+        cur.execute("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", (new_hash, now, uid))
+
+        # Ensure credentials auth_account exists
+        cur.execute("""
+            INSERT OR IGNORE INTO auth_accounts (id, user_id, provider, provider_subject, created_at)
+            VALUES (?, ?, 'credentials', ?, ?)
+        """, (str(uuid.uuid4()), uid, norm_email, now))
+
+        cur.execute("""
+            INSERT INTO assignment_audit (user_id, changed_by, action, created_at)
+            VALUES (?, ?, 'PASSWORD_RESET_OTP', ?)
+        """, (uid, uid, now))
+
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+def update_user_password(user_id: str, new_password: str) -> bool:
+    """Update user's password hash in SQLite database by user ID."""
+    if not user_id or not new_password:
+        raise ValueError("User ID and password are required.")
+    if len(new_password) < 6:
+        raise ValueError("Password must be at least 6 characters.")
+
+    conn = get_conn()
+    cur = conn.cursor()
+    now = datetime.datetime.now().isoformat()
+    new_hash = hash_password(new_password)
+
+    try:
+        cur.execute("SELECT id, normalized_email FROM users WHERE id = ?", (user_id,))
+        user_row = cur.fetchone()
+        if not user_row:
+            raise ValueError("User record not found.")
+
+        cur.execute("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?", (new_hash, now, user_id))
+
+        cur.execute("""
+            INSERT INTO assignment_audit (user_id, changed_by, action, created_at)
+            VALUES (?, ?, 'PASSWORD_CHANGE_SETTINGS', ?)
+        """, (user_id, user_id, now))
+
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+def ensure_2fa_column():
+    """Ensure two_factor_enabled column exists in users table."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(users)")
+    cols = [col["name"] for col in cur.fetchall()]
+    if "two_factor_enabled" not in cols:
+        try:
+            cur.execute("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0")
+            conn.commit()
+        except Exception:
+            pass
+    conn.close()
+
+def set_user_2fa(user_id: str, enabled: bool) -> bool:
+    """Enable or disable 2FA for a user."""
+    ensure_2fa_column()
+    conn = get_conn()
+    cur = conn.cursor()
+    now = datetime.datetime.now().isoformat()
+    val = 1 if enabled else 0
+    try:
+        cur.execute("UPDATE users SET two_factor_enabled = ?, updated_at = ? WHERE id = ?", (val, now, user_id))
+        cur.execute("""
+            INSERT INTO assignment_audit (user_id, changed_by, action, created_at)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, user_id, f"2FA_{'ENABLED' if enabled else 'DISABLED'}", now))
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+def is_user_2fa_enabled(user_id_or_email: str) -> bool:
+    """Check if 2FA is enabled for a user by id or email."""
+    ensure_2fa_column()
+    conn = get_conn()
+    cur = conn.cursor()
+    clean = user_id_or_email.strip().lower()
+    cur.execute("SELECT two_factor_enabled FROM users WHERE id = ? OR normalized_email = ? LIMIT 1", (clean, clean))
+    row = cur.fetchone()
+    conn.close()
+    if row and "two_factor_enabled" in row.keys() and row["two_factor_enabled"]:
+        return bool(row["two_factor_enabled"])
+    return False
+
+# Ensure column exists on module import
+ensure_2fa_column()
 

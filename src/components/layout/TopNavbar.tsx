@@ -1,14 +1,23 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { LogOut, Sun, Moon, Menu, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth, formatRole } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
+import { prefsStore } from "@/lib/prefs-store";
 
 export default function TopNavbar({ sidebarCollapsed, onMenuClick }: { sidebarCollapsed: boolean; onMenuClick?: () => void }) {
   const { user, logout } = useAuth();
   const { theme, toggle: toggleTheme } = useTheme();
   const navigate = useNavigate();
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(() => prefsStore.getAvatar(user?.email));
+
+  useEffect(() => {
+    setAvatarUrl(prefsStore.getAvatar(user?.email));
+    const sync = () => setAvatarUrl(prefsStore.getAvatar(user?.email));
+    window.addEventListener("prefs-updated", sync);
+    return () => window.removeEventListener("prefs-updated", sync);
+  }, [user?.email]);
 
   return (
     <header
@@ -35,8 +44,12 @@ export default function TopNavbar({ sidebarCollapsed, onMenuClick }: { sidebarCo
         <div className="w-px h-6 bg-border/40 mx-1 hidden md:block" />
 
         <Link to="/profile" className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-secondary/60 transition-all">
-          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-primary/50 grid place-items-center text-[11px] font-bold text-primary-foreground">
-            {(user?.name || "U").slice(0, 1).toUpperCase()}
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-primary/50 grid place-items-center text-[11px] font-bold text-primary-foreground overflow-hidden">
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={user?.name || "avatar"} className="w-full h-full object-cover" />
+            ) : (
+              (user?.name || "U").slice(0, 1).toUpperCase()
+            )}
           </div>
           <div className="text-left hidden md:block">
             <div className="text-xs font-medium leading-tight">{user?.name || "Guest"}</div>

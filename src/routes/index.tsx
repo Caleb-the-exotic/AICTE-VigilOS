@@ -1,6 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
-import { ArrowUpRight, Gavel, ChevronDown, ShieldAlert, Bell, Building2 } from "lucide-react";
+import { ArrowUpRight, Gavel, ChevronDown, ShieldAlert, Bell, Building2, ShieldCheck, Scale, ExternalLink } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { requestsStore } from "@/lib/requests-store";
@@ -174,6 +174,43 @@ function Dashboard() {
                 </div>
               </div>
             </div>
+
+            {/* Homepage Legal & Institutional Footer */}
+            <footer className="mt-16 pt-8 pb-12 border-t border-border/30 text-xs text-muted-foreground flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <img src="/aicte-logo.png" alt="AICTE Emblem" className="w-8 h-8 object-contain opacity-80" />
+                <div>
+                  <p className="font-semibold text-foreground">AICTE VigilOS Platform</p>
+                  <p className="text-[11px] text-muted-foreground">Complaint Oversight & Cross-Bureau Intelligence • PS26264</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center gap-4 text-xs">
+                <Link to="/privacy" className="hover:text-primary transition-colors flex items-center gap-1 hover:underline">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Privacy Policy</span>
+                </Link>
+                <span className="text-border">•</span>
+                <Link to="/terms" className="hover:text-primary transition-colors flex items-center gap-1 hover:underline">
+                  <Scale className="w-3.5 h-3.5" />
+                  <span>Terms of Service</span>
+                </Link>
+                <span className="text-border">•</span>
+                <a 
+                  href="https://aicte-vigil-os.vercel.app/" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="hover:text-foreground transition-colors flex items-center gap-1"
+                >
+                  <span>Cloud Portal</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+
+              <div className="text-[11px] text-muted-foreground/80 text-center md:text-right">
+                <span>© {new Date().getFullYear()} AICTE VigilOS. All rights reserved.</span>
+              </div>
+            </footer>
           </div>
 
         </div>

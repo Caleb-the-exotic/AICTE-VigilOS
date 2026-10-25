@@ -15,22 +15,49 @@ function authHeaders(): Record<string, string> {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  if (!HAS_BACKEND) throw new Error("NO_BACKEND");
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...authHeaders(),
-      ...(init.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`${res.status} ${res.statusText}: ${text}`);
+  const url = `${API_BASE_URL}${path}`;
+  try {
+    const res = await fetch(url, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders(),
+        ...(init.headers || {}),
+      },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`${res.status} ${res.statusText}: ${text}`);
+    }
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("application/json")) return (await res.json()) as T;
+    return (await res.text()) as unknown as T;
+  } catch (err: any) {
+    if (err.name === "TypeError" && (err.message === "Failed to fetch" || String(err).includes("Failed to fetch"))) {
+      // Attempt fallback via relative proxy if direct URL failed
+      if (API_BASE_URL) {
+        try {
+          const proxyRes = await fetch(path, {
+            ...init,
+            headers: {
+              "Content-Type": "application/json",
+              ...authHeaders(),
+              ...(init.headers || {}),
+            },
+          });
+          if (proxyRes.ok) {
+            const ct = proxyRes.headers.get("content-type") || "";
+            if (ct.includes("application/json")) return (await proxyRes.json()) as T;
+            return (await proxyRes.text()) as unknown as T;
+          }
+        } catch {/**/}
+      }
+      throw new Error(
+        "Backend server is offline or unreachable on http://localhost:8000. Please start the backend with 'python api_server.py' or '1run_all_local.bat'."
+      );
+    }
+    throw err;
   }
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) return (await res.json()) as T;
-  return (await res.text()) as unknown as T;
 }
 
 // ===== Auth =====
@@ -38,9 +65,27 @@ export const api = {
   health: () => request<{ status: string }>("/api/health"),
 
   login: (email: string, password: string) =>
-    request<{ token: string; user: ApiUser }>("/api/auth/login", {
+    request<{ token?: string; user?: ApiUser; requires_2fa?: boolean; email?: string; message?: string }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
+    }),
+
+  login2FA: (email: string, otp: string) =>
+    request<{ token: string; user: ApiUser }>("/api/auth/login/2fa", {
+      method: "POST",
+      body: JSON.stringify({ email, otp }),
+    }),
+
+  resend2FA: (email: string) =>
+    request<{ ok: boolean; message: string }>("/api/auth/login/2fa/resend", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  toggle2FA: (enabled: boolean) =>
+    request<{ ok: boolean; enabled: boolean; message: string }>("/api/auth/2fa/toggle", {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
     }),
 
   loginWithGoogle: (credential: string) =>
@@ -57,6 +102,30 @@ export const api = {
 
   logout: () => request<{ ok: true }>("/api/auth/logout", { method: "POST" }),
   updateRole: (role: string) => request<{ status: string; role: string }>("/api/auth/role", { method: "POST", body: JSON.stringify({ role }) }),
+
+  // ===== OTP & Password Reset =====
+  sendOtp: (email: string, purpose?: string) =>
+    request<{ ok: boolean; message: string; email: string }>("/api/auth/otp/send", {
+      method: "POST",
+      body: JSON.stringify({ email, purpose }),
+    }),
+
+  verifyOtpAndResetPassword: (email: string, otp: string, new_password: string) =>
+    request<{ ok: boolean; message: string }>("/api/auth/otp/verify-reset", {
+      method: "POST",
+      body: JSON.stringify({ email, otp, new_password }),
+    }),
+
+  settingsSendOtp: () =>
+    request<{ ok: boolean; message: string }>("/api/auth/settings/send-otp", {
+      method: "POST",
+    }),
+
+  settingsResetPassword: (otp: string, new_password: string) =>
+    request<{ ok: boolean; message: string }>("/api/auth/settings/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ otp, new_password }),
+    }),
 
   // ===== Chat sessions =====
   listSessions: () => request<ChatSession[]>("/api/sessions"),
@@ -184,6 +253,7 @@ export interface ApiUser {
   region_code?: string;
   region?: string;
   status?: string;
+  two_factor_enabled?: boolean;
   permissions?: string[];
 }
 export interface ChatSession {
