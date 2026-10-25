@@ -23,12 +23,11 @@ interface UserItem {
 
 const DEFAULT_OFFICERS: UserItem[] = [
   { id: "admin-1", name: "System Administrator", email: "admin@aicte-india.org", role: "admin", bureau: "IT & Vigilance Cell", region: "HQ (New Delhi)" },
-  { id: "bhead-1", name: "Dr. Ramesh Gupta", email: "ramesh.gupta@aicte-india.org", role: "hod", bureau: "RB (Regulation Bureau)", region: "HQ (New Delhi)" },
-  { id: "off-1", name: "Ms. Priya Verma", email: "priya.verma@aicte-india.org", role: "faculty", bureau: "PGRC", region: "Northern" },
-  { id: "off-2", name: "Mr. Suresh Iyer", email: "suresh.iyer@aicte-india.org", role: "faculty", bureau: "RB", region: "Western" },
-  { id: "off-3", name: "Dr. Anita Sharma", email: "anita.sharma@aicte-india.org", role: "faculty", bureau: "PGRC", region: "Western" },
-  { id: "nodal-1", name: "Deepak Nair", email: "deepak.nair@aicte-india.org", role: "ambassador", bureau: "State Liaison", region: "Eastern" },
-  { id: "cit-1", name: "Kavita Singh", email: "kavita.singh@aicte-india.org", role: "student", bureau: "Citizen / Complainant Cell", region: "Southern" },
+  { id: "off-1", name: "Hariprasath", email: "hariprasath134208@gmail.com", role: "faculty", bureau: "RB (Regulation Bureau)", region: "Southern" },
+  { id: "off-2", name: "Monisha Yathavan", email: "monishayathavan@gmail.com", role: "faculty", bureau: "PGRC", region: "Southern" },
+  { id: "off-3", name: "Swetha NC", email: "swethanc21@gmail.com", role: "faculty", bureau: "RB", region: "Southern" },
+  { id: "off-4", name: "Deepan Thangavel", email: "deepanthangavel0611@gmail.com", role: "ambassador", bureau: "State Liaison", region: "Southern" },
+  { id: "off-5", name: "Surya Prakash D", email: "suryaprakashd22007@gmail.com", role: "faculty", bureau: "PGRC", region: "Southern" },
 ];
 
 const ROLE_OPTIONS: { role: Role; label: string; emoji: string; desc: string; badgeClass: string }[] = [

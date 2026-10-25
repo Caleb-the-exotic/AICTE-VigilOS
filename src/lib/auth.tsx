@@ -61,11 +61,40 @@ function saveStoredAccount(account: StoredAccount) {
   }
 }
 
+// Pre-seeded officer accounts (password: password@123)
+const SEED_ACCOUNTS: StoredAccount[] = [
+  { name: "Hariprasath", email: "hariprasath134208@gmail.com", passwordHash: btoa("password@123"), role: "faculty", createdAt: "2024-01-01T00:00:00Z" },
+  { name: "Monisha Yathavan", email: "monishayathavan@gmail.com", passwordHash: btoa("password@123"), role: "faculty", createdAt: "2024-01-01T00:00:00Z" },
+  { name: "Swetha NC", email: "swethanc21@gmail.com", passwordHash: btoa("password@123"), role: "faculty", createdAt: "2024-01-01T00:00:00Z" },
+  { name: "Deepan Thangavel", email: "deepanthangavel0611@gmail.com", passwordHash: btoa("password@123"), role: "ambassador", createdAt: "2024-01-01T00:00:00Z" },
+  { name: "Surya Prakash D", email: "suryaprakashd22007@gmail.com", passwordHash: btoa("password@123"), role: "faculty", createdAt: "2024-01-01T00:00:00Z" },
+];
+
+function seedDefaultAccounts() {
+  try {
+    const accounts = getStoredAccounts();
+    let changed = false;
+    for (const seed of SEED_ACCOUNTS) {
+      const key = seed.email.toLowerCase();
+      if (!accounts[key]) {
+        accounts[key] = seed;
+        accounts[seed.email.split("@")[0].toLowerCase()] = seed;
+        changed = true;
+      }
+    }
+    if (changed) localStorage.setItem(STORAGE_ACCOUNTS, JSON.stringify(accounts));
+  } catch {
+    // ignore
+  }
+}
+
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    seedDefaultAccounts();
     try {
       const raw = localStorage.getItem(STORAGE_USER);
       if (raw) {
@@ -81,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setLoading(false);
   }, []);
+
 
   const persist = useCallback((u: User | null, token?: string) => {
     if (u) {
