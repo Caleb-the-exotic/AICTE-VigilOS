@@ -20,8 +20,9 @@ export default function GoogleLoginButton() {
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     // Clear any stale Google-related state before redirecting
     try {
-      if (window.google?.accounts?.id?.disableAutoSelect) {
-        window.google.accounts.id.disableAutoSelect();
+      const g = (window as any).google;
+      if (g?.accounts?.id?.disableAutoSelect) {
+        g.accounts.id.disableAutoSelect();
       }
     } catch {
       // ignore

@@ -9,6 +9,12 @@ import { cn } from "@/lib/utils";
 import { useAuth, formatRole, type Role } from "@/lib/auth";
 import { api, HAS_BACKEND } from "@/lib/api";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/admin")({ component: AdminPanel });
 
@@ -43,7 +49,6 @@ function AdminPanel() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("all");
-  const [activeDropdownUser, setActiveDropdownUser] = useState<string | null>(null);
 
   const loadInitialUsers = (): UserItem[] => {
     const overrides: Record<string, Role> = {};
@@ -110,20 +115,6 @@ function AdminPanel() {
 
   const [users, setUsers] = useState<UserItem[]>(loadInitialUsers);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest("[data-role-dropdown]")) {
-        setActiveDropdownUser(null);
-      }
-    };
-    if (activeDropdownUser) {
-      window.addEventListener("click", handleClickOutside);
-    }
-    return () => window.removeEventListener("click", handleClickOutside);
-  }, [activeDropdownUser]);
-
   // Load from backend if online
   useEffect(() => {
     if (HAS_BACKEND && user?.role === "admin") {
@@ -162,7 +153,6 @@ function AdminPanel() {
     setUsers((prev) =>
       prev.map((u) => (u.email.toLowerCase() === targetLower ? { ...u, role: newRole } : u))
     );
-    setActiveDropdownUser(null);
 
     // 2. Persist in admin role overrides
     try {
@@ -351,7 +341,6 @@ function AdminPanel() {
                   </tr>
                 ) : (
                   filtered.map((u) => {
-                    const isDropdownOpen = activeDropdownUser === u.email;
                     const roleMeta = ROLE_OPTIONS.find((r) => r.role === u.role) || ROLE_OPTIONS[2];
 
                     return (
@@ -376,41 +365,47 @@ function AdminPanel() {
                           {u.email}
                         </td>
 
-                        {/* Role Selector Dropdown (Managed by Admin) */}
-                        <td className="px-4 py-3 relative" data-role-dropdown>
-                          <button
-                            type="button"
-                            onClick={() => setActiveDropdownUser(isDropdownOpen ? null : u.email)}
-                            className={cn(
-                              "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-xs",
-                              roleMeta.badgeClass,
-                              "hover:brightness-110 active:scale-[0.98]"
-                            )}
-                            title="Click to change role for this user"
-                          >
-                            <span>{roleMeta.emoji}</span>
-                            <span>{roleMeta.label}</span>
-                            <ChevronDown className={cn("w-3.5 h-3.5 ml-1 transition-transform opacity-70", isDropdownOpen && "rotate-180")} />
-                          </button>
+                        {/* Role Selector Dropdown (Managed by Admin - Portalled to body) */}
+                        <td className="px-4 py-3">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer shadow-xs outline-none select-none",
+                                  roleMeta.badgeClass,
+                                  "hover:brightness-110 active:scale-[0.98] focus-visible:ring-1 focus-visible:ring-primary"
+                                )}
+                                title="Click to change role for this user"
+                              >
+                                <span>{roleMeta.emoji}</span>
+                                <span>{roleMeta.label}</span>
+                                <ChevronDown className="w-3.5 h-3.5 ml-1 transition-transform opacity-70" />
+                              </button>
+                            </DropdownMenuTrigger>
 
-                          {/* Role Selection Dropdown Menu */}
-                          {isDropdownOpen && (
-                            <div className="absolute left-4 top-[calc(100%+4px)] w-64 bg-card/95 backdrop-blur-xl border border-border/60 rounded-xl shadow-2xl p-1.5 z-50 animate-scale-in space-y-1">
+                            <DropdownMenuContent
+                              align="start"
+                              side="bottom"
+                              sideOffset={6}
+                              avoidCollisions={true}
+                              collisionPadding={16}
+                              className="w-64 bg-card/95 backdrop-blur-xl border border-border/60 rounded-xl shadow-2xl p-1.5 z-[9999] space-y-1"
+                            >
                               <div className="px-2.5 py-1 text-[10px] uppercase font-bold text-muted-foreground tracking-wider border-b border-border/20 mb-1">
                                 Change Role for {u.name.split(" ")[0]}
                               </div>
                               {ROLE_OPTIONS.map((opt) => {
                                 const isCurrent = u.role === opt.role;
                                 return (
-                                  <button
+                                  <DropdownMenuItem
                                     key={opt.role}
-                                    type="button"
                                     onClick={() => handleRoleChange(u.email, opt.role)}
                                     className={cn(
-                                      "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer text-left",
+                                      "w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer text-left outline-none",
                                       isCurrent
                                         ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                                        : "text-foreground/90 hover:bg-secondary/70 hover:text-foreground"
+                                        : "text-foreground/90 hover:bg-secondary/70 hover:text-foreground focus:bg-secondary/70 focus:text-foreground"
                                     )}
                                   >
                                     <div className="flex items-center gap-2 truncate">
@@ -420,11 +415,11 @@ function AdminPanel() {
                                       </div>
                                     </div>
                                     {isCurrent && <Check className="w-3.5 h-3.5 text-primary-foreground shrink-0 ml-1.5" />}
-                                  </button>
+                                  </DropdownMenuItem>
                                 );
                               })}
-                            </div>
-                          )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </td>
 
                         {/* Bureau */}

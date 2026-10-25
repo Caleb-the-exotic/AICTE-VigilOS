@@ -305,15 +305,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [persist]);
 
   const logout = useCallback(() => {
-    if (typeof window !== "undefined" && window.google?.accounts?.id) {
+    const g = typeof window !== "undefined" ? (window as any).google : undefined;
+    if (g?.accounts?.id) {
       try {
-        window.google.accounts.id.disableAutoSelect();
+        g.accounts.id.disableAutoSelect();
       } catch (err) {
         console.warn("[Auth] Failed to disable Google auto-select:", err);
       }
-      if (user?.email && window.google.accounts.id.revoke) {
+      if (user?.email && g.accounts.id.revoke) {
         try {
-          window.google.accounts.id.revoke(user.email, () => {
+          g.accounts.id.revoke(user.email, () => {
             console.log("[Auth] Successfully revoked Google session for:", user.email);
           });
         } catch (err) {
