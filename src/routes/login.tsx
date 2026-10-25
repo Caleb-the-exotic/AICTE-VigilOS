@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, type FormEvent } from "react";
 import { 
   Mail, Lock, User, Eye, EyeOff, ArrowRight, 
-  Loader2, Sparkles, Building2 
+  Loader2, Sparkles, Building2, X
 } from "lucide-react";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import GoogleLoginButton from "@/components/auth/GoogleLoginButton";
@@ -27,6 +27,7 @@ function LoginPage() {
 
   const [mode, setMode] = useState<AuthMode>("signin");
   const [loading, setLoading] = useState(false);
+  const [showDemoDrawer, setShowDemoDrawer] = useState(false);
 
   // Sign in state
   const [signInEmail, setSignInEmail] = useState("");
@@ -37,7 +38,7 @@ function LoginPage() {
   // Sign up state
   const [signUpName, setSignUpName] = useState("");
   const [signUpEmail, setSignUpEmail] = useState("");
-  const [signUpRole, setSignUpRole] = useState<Role>("faculty");
+  const [signUpRole, setSignUpRole] = useState<Role>("approval_officer");
   const [signUpPassword, setSignUpPassword] = useState("");
   const [signUpConfirmPassword, setSignUpConfirmPassword] = useState("");
   const [showSignUpPassword, setShowSignUpPassword] = useState(false);
@@ -90,43 +91,80 @@ function LoginPage() {
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-red-600/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-1/4 left-1/3 w-64 h-64 bg-rose-700/10 rounded-full blur-[100px] pointer-events-none" />
 
-      {/* ── Demo credentials buttons – positioned to the left side of the login container (signin only) ── */}
-      {mode === "signin" && (
-        <div 
-          className="hidden lg:flex flex-col gap-2 fixed top-1/2 -translate-y-1/2 w-[165px] z-20 animate-fade-in"
-          style={{ left: "max(1.25rem, calc(50% - 415px))" }}
-        >
-          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/60 px-1 mb-0.5">
+      {/* ── Incognito Toggle Button (Top-Left Corner) ── */}
+      <button
+        type="button"
+        onClick={() => setShowDemoDrawer((prev) => !prev)}
+        className={cn(
+          "fixed top-4 left-2 sm:left-4 z-50 p-2.5 rounded-xl bg-card/90 backdrop-blur-xl border transition-all duration-200 active:scale-95 cursor-pointer shadow-lg group flex items-center justify-center",
+          showDemoDrawer
+            ? "border-border/60 bg-secondary text-white shadow-md"
+            : "border-border/40 text-muted-foreground hover:text-white hover:bg-secondary/60 hover:border-border/60"
+        )}
+        title={showDemoDrawer ? "Hide Demo Credentials" : "Show Demo Credentials (Incognito)"}
+        aria-label="Toggle Incognito Demo Credentials"
+      >
+        {/* Incognito Fedora Hat & Spy Glasses Silhouette Icon */}
+        <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+          <path d="M12 2C8.5 2 7 4.5 7 5.5H3a1 1 0 0 0-.9 1.4l1.8 3.6C4.4 11.2 5 11.5 6 11.5h12c1 0 1.6-.3 2.1-1L21.9 6.9A1 1 0 0 0 21 5.5h-4C17 4.5 15.5 2 12 2zm0 1.8c2.2 0 3.2 1.5 3.5 2.2H8.5c.3-.7 1.3-2.2 3.5-2.2z" />
+          <path d="M6.5 13A3.5 3.5 0 0 0 3 16.5C3 18.4 4.6 20 6.5 20c1.6 0 3-.1 3.5-1.5.5.4 1.2.5 2 .5s1.5-.1 2-.5c.5 1.4 1.9 1.5 3.5 1.5 1.9 0 3.5-1.6 3.5-3.5A3.5 3.5 0 0 0 17.5 13c-1.6 0-3 .9-3.4 2.2-.6-.2-1.3-.2-2.1-.2s-1.5 0-2.1.2C9.5 13.9 8.1 13 6.5 13zm0 1.8c1 0 1.8.8 1.8 1.7 0 1-.8 1.8-1.8 1.8-1 0-1.8-.8-1.8-1.8 0-.9.8-1.7 1.8-1.7zm11 0c1 0 1.8.8 1.8 1.7 0 1-.8 1.8-1.8 1.8-1 0-1.8-.8-1.8-1.8 0-.9.8-1.7 1.8-1.7z" />
+        </svg>
+      </button>
+
+      {/* ── Demo credentials drawer – pushed to far left, clean neutral styling without red stroke/glow ── */}
+      <div 
+        className={cn(
+          "fixed left-2 top-16 z-40 w-[170px] p-3 rounded-2xl bg-card/95 backdrop-blur-2xl border border-border/40 shadow-2xl flex flex-col gap-2 transition-all duration-300 ease-out",
+          showDemoDrawer 
+            ? "translate-x-0 opacity-100 pointer-events-auto" 
+            : "-translate-x-[160%] opacity-0 pointer-events-none"
+        )}
+      >
+        <div className="flex items-center justify-between pb-1 border-b border-border/30">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/80">
             Demo Credentials
           </p>
+          <button
+            type="button"
+            onClick={() => setShowDemoDrawer(false)}
+            className="text-muted-foreground hover:text-white p-0.5 rounded transition-colors cursor-pointer"
+            title="Close Drawer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
-          {DEMO_BUTTONS.map((c) => (
-            <button
-              key={c.label}
-              type="button"
-              onClick={() => {
-                setSignInEmail(c.email);
-                setSignInPassword(c.password);
-                toast.info(`Filled with ${c.label} credentials`);
-              }}
-              className="w-full py-2.5 px-3 rounded-xl border border-red-500/30 bg-card/80 hover:bg-red-500/15 hover:border-red-500/60 text-white/90 hover:text-white text-xs font-semibold tracking-wide text-center transition-all duration-200 shadow-xs hover:shadow-[0_0_15px_rgba(239,68,68,0.22)] active:scale-[0.98] cursor-pointer"
-            >
-              {c.label}
-            </button>
-          ))}
+        {DEMO_BUTTONS.map((c) => (
+          <button
+            key={c.label}
+            type="button"
+            onClick={() => {
+              setSignInEmail(c.email);
+              setSignInPassword(c.password);
+              toast.info(`Filled with ${c.label} credentials`);
+            }}
+            className="w-full py-2 px-3 rounded-xl border border-border/40 bg-secondary/50 hover:bg-secondary hover:text-white text-white/90 text-xs font-semibold tracking-wide text-center transition-all duration-200 active:scale-[0.98] cursor-pointer"
+          >
+            {c.label}
+          </button>
+        ))}
 
-          <div className="border-t border-border/30 my-0.5" />
+        <div className="border-t border-border/30 my-0.5" />
 
+        <div className="pt-0.5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted-foreground/80 px-0.5 mb-1.5">
+            Demo Portal
+          </p>
           <a
-            href="/complaint-portal.html"
+            href="http://localhost:8080/complaint-portal.html"
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full py-2.5 px-3 rounded-xl border border-red-500/30 bg-card/80 hover:bg-red-500/15 hover:border-red-500/60 text-white/90 hover:text-white text-xs font-semibold tracking-wide text-center transition-all duration-200 shadow-xs hover:shadow-[0_0_15px_rgba(239,68,68,0.22)] active:scale-[0.98] cursor-pointer block"
+            className="w-full py-2 px-3 rounded-xl border border-border/40 bg-secondary/50 hover:bg-secondary hover:text-white text-white/90 text-xs font-semibold tracking-wide text-center transition-all duration-200 active:scale-[0.98] cursor-pointer block"
           >
             Complaint Portal
           </a>
         </div>
-      )}
+      </div>
 
       {/* ── Centered card wrapper ── */}
       <div className={cn(
@@ -172,31 +210,6 @@ function LoginPage() {
           {/* ── SIGN IN FORM ── */}
           {mode === "signin" ? (
             <form onSubmit={handleSignIn} className="space-y-4">
-              {/* Mobile Demo Buttons */}
-              <div className="flex lg:hidden flex-wrap items-center justify-center gap-1.5 pb-2">
-                {DEMO_BUTTONS.map((c) => (
-                  <button
-                    key={c.label}
-                    type="button"
-                    onClick={() => {
-                      setSignInEmail(c.email);
-                      setSignInPassword(c.password);
-                      toast.info(`Filled with ${c.label} credentials`);
-                    }}
-                    className="py-1.5 px-2.5 rounded-lg border border-red-500/30 bg-card/80 hover:bg-red-500/15 text-white/90 text-[11px] font-semibold transition-all shadow-xs cursor-pointer"
-                  >
-                    {c.label}
-                  </button>
-                ))}
-                <a
-                  href="/complaint-portal.html"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="py-1.5 px-2.5 rounded-lg border border-red-500/30 bg-card/80 hover:bg-red-500/15 text-white/90 text-[11px] font-semibold transition-all shadow-xs"
-                >
-                  Complaint Portal
-                </a>
-              </div>
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1.5">Official Email or Username</label>
                 <div className="relative">
@@ -284,11 +297,11 @@ function LoginPage() {
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground"><Building2 className="w-4 h-4" /></div>
                     <select value={signUpRole} onChange={(e) => setSignUpRole(e.target.value as Role)} className="w-full pl-10 pr-4 py-2 bg-secondary/30 hover:bg-secondary/40 focus:bg-background border border-border/70 focus:border-red-500/60 rounded-xl text-sm text-foreground outline-none transition-all focus:ring-2 focus:ring-red-500/20 appearance-none cursor-pointer">
-                      <option value="faculty" className="bg-card text-foreground">📋 Approval Officer (Case Handler)</option>
-                      <option value="hod" className="bg-card text-foreground">🏛️ Bureau Head (RB / PGRC / RO)</option>
-                      <option value="admin" className="bg-card text-foreground">🔑 Super Admin (Central Vigilance)</option>
-                      <option value="ambassador" className="bg-card text-foreground">🌐 State / Regional Nodal Officer</option>
-                      <option value="student" className="bg-card text-foreground">👤 Citizen / Complainant</option>
+                      <option value="approval_officer" className="bg-card text-foreground">📋 Approval Officer (Case Handler)</option>
+                      <option value="bureau_head" className="bg-card text-foreground">🏛️ Bureau Head (RB / PGRC / RO)</option>
+                      <option value="super_admin" className="bg-card text-foreground">🔑 Super Admin (Central Vigilance)</option>
+                      <option value="nodal_officer" className="bg-card text-foreground">🌐 State / Regional Nodal Officer</option>
+                      <option value="citizen" className="bg-card text-foreground">👤 Citizen / Complainant</option>
                     </select>
                   </div>
                 </div>

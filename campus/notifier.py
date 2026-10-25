@@ -14,27 +14,27 @@ except ImportError:
 FORMSPREE_URL_ADMIN = "https://formspree.io/f/mdapedkq"
 FORMSPREE_URL_STUDENT = "https://formspree.io/f/mqegqzdw"
 
-def _build_body(workflow_type: str, schema: dict, policy: dict, role: str, target: str = "admin") -> dict:
+def _build_body(workflow_type: str, schema: dict, policy: dict, role: str, target: str = "super_admin") -> dict:
     """Build the Formspree POST payload."""
     result = policy.get("result", "UNKNOWN")
     reason = policy.get("reason", "")
     alts   = policy.get("alternatives", [])
 
     subject_map = {
-        "lab_booking":   "CampusFlow: Lab Booking Request",
-        "leave_request": "CampusFlow: Leave Request",
-        "room_booking":  "CampusFlow: Room Booking Request",
-        "complaint":     "CampusFlow: Complaint Filed",
+        "lab_booking":   "VigilOS: Lab Booking Request",
+        "leave_request": "VigilOS: Leave Request",
+        "room_booking":  "VigilOS: Room Booking Request",
+        "complaint":     "VigilOS: Grievance Case Filed",
     }
-    base_subject = subject_map.get(workflow_type, "CampusFlow: Campus Request")
+    base_subject = subject_map.get(workflow_type, "VigilOS: AICTE Case Notice")
     workflow_title = workflow_type.replace('_', ' ').title()
 
-    if target == "admin":
+    if target == "super_admin":
         subject = f"[Action Needed] {base_subject}" if result == "ESCALATED" else f"[Notice] {base_subject}"
         body_lines = [
-            f"Dear Head of Department / Admin,",
+            f"Dear Central Vigilance Authority / Bureau Head,",
             "",
-            f"A new {workflow_title} has been processed by the CampusFlow autonomous agent.",
+            f"A new {workflow_title} has been processed by the VigilOS autonomous system.",
             "",
             f"System Decision: {result}",
             f"Reasoning: {reason}",
@@ -45,7 +45,7 @@ def _build_body(workflow_type: str, schema: dict, policy: dict, role: str, targe
             "-----------------------"
         ]
         if result == "ESCALATED":
-            body_lines.append("\nThis request has been ESCALATED and requires your manual review and approval.")
+            body_lines.append("\nThis case has been ESCALATED and requires official review and approval.")
     else:
         subject = f"Update on your {base_subject}"
         body_lines = [
@@ -64,7 +64,7 @@ def _build_body(workflow_type: str, schema: dict, policy: dict, role: str, targe
             if alts:
                 body_lines += ["", "You might want to consider the following alternatives:", *[f"  - {a}" for a in alts]]
         elif result == "ESCALATED":
-            body_lines.append("Your request necessitates further review and has been routed to the respective department head. We will notify you once a final decision is made.")
+            body_lines.append("Your case necessitates further review and has been routed to the respective bureau head. We will notify you once a final decision is made.")
 
         body_lines.extend([
             "",
@@ -72,7 +72,7 @@ def _build_body(workflow_type: str, schema: dict, policy: dict, role: str, targe
             json.dumps(schema, indent=2),
             "",
             "Best Regards,",
-            "CampusFlow Automated System"
+            "VigilOS Central Intelligence System"
         ])
 
     return {
@@ -85,9 +85,9 @@ def _build_body(workflow_type: str, schema: dict, policy: dict, role: str, targe
 
 
 def notify(workflow_type: str, schema: dict, policy: dict,
-           role: str = "student") -> dict:
+           role: str = "citizen") -> dict:
     """
-    Send a notification via Formspree to both Admin and Student.
+    Send a notification via Formspree to both Super Admin and Citizen.
     Returns {"status": "sent"|"simulated"|"error", ...}
     """
     if not REQUESTS_AVAILABLE:
@@ -96,7 +96,7 @@ def notify(workflow_type: str, schema: dict, policy: dict,
     responses = {}
     errors = []
     
-    for target, url in [("admin", FORMSPREE_URL_ADMIN), ("student", FORMSPREE_URL_STUDENT)]:
+    for target, url in [("super_admin", FORMSPREE_URL_ADMIN), ("citizen", FORMSPREE_URL_STUDENT)]:
         payload = _build_body(workflow_type, schema, policy, role, target=target)
         try:
             resp = _requests.post(
@@ -121,11 +121,11 @@ def notify(workflow_type: str, schema: dict, policy: dict,
     }
 
 def notify_simulated(workflow_type: str, schema: dict, policy: dict,
-                     role: str = "student") -> dict:
+                     role: str = "citizen") -> dict:
     """Return a simulated notification result without making an HTTP call."""
     return {
         "status": "simulated",
         "note": "Formspree call skipped in simulation mode",
-        "would_send_admin": _build_body(workflow_type, schema, policy, role, target="admin"),
-        "would_send_student": _build_body(workflow_type, schema, policy, role, target="student"),
+        "would_send_super_admin": _build_body(workflow_type, schema, policy, role, target="super_admin"),
+        "would_send_citizen": _build_body(workflow_type, schema, policy, role, target="citizen"),
     }

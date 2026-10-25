@@ -36,13 +36,13 @@ function resultBadge(result: string) {
 function seedFeed(): ActivityEvent[] {
   const t = Date.now();
   return [
-    { id: "1", session_id: "", actor_role: "student",   action: "leave_request submitted",       target: "REQ-1024", result: "APPROVED",  created_at: new Date(t - 1000 * 60 * 1).toISOString(), icon: "✅" },
-    { id: "2", session_id: "", actor_role: "SYSTEM",    action: "request.classified",             target: "REQ-1025", result: "",          created_at: new Date(t - 1000 * 60 * 3).toISOString(), icon: "⚡" },
-    { id: "3", session_id: "", actor_role: "student",   action: "lab_booking submitted",          target: "LAB204",   result: "REJECTED",  created_at: new Date(t - 1000 * 60 * 7).toISOString(), icon: "❌" },
-    { id: "4", session_id: "", actor_role: "hod",       action: "escalated_leave reviewed",       target: "REQ-1022", result: "APPROVED",  created_at: new Date(t - 1000 * 60 * 12).toISOString(),icon: "✅" },
-    { id: "5", session_id: "", actor_role: "student",   action: "user login",                     target: "stu_001",  result: "",          created_at: new Date(t - 1000 * 60 * 20).toISOString(), icon: "🔐" },
-    { id: "6", session_id: "", actor_role: "SYSTEM",    action: "request.completed",              target: "REQ-1019", result: "APPROVED",  created_at: new Date(t - 1000 * 60 * 35).toISOString(), icon: "✅" },
-    { id: "7", session_id: "", actor_role: "student",   action: "complaint submitted",             target: "COMP-12",  result: "ESCALATED", created_at: new Date(t - 1000 * 60 * 60).toISOString(), icon: "⚠️" },
+    { id: "1", session_id: "", actor_role: "citizen",           action: "leave_request submitted",       target: "REQ-1024", result: "APPROVED",  created_at: new Date(t - 1000 * 60 * 1).toISOString(), icon: "✅" },
+    { id: "2", session_id: "", actor_role: "SYSTEM",            action: "request.classified",             target: "REQ-1025", result: "",          created_at: new Date(t - 1000 * 60 * 3).toISOString(), icon: "⚡" },
+    { id: "3", session_id: "", actor_role: "citizen",           action: "lab_booking submitted",          target: "LAB204",   result: "REJECTED",  created_at: new Date(t - 1000 * 60 * 7).toISOString(), icon: "❌" },
+    { id: "4", session_id: "", actor_role: "bureau_head",       action: "escalated_leave reviewed",       target: "REQ-1022", result: "APPROVED",  created_at: new Date(t - 1000 * 60 * 12).toISOString(),icon: "✅" },
+    { id: "5", session_id: "", actor_role: "citizen",           action: "user login",                     target: "stu_001",  result: "",          created_at: new Date(t - 1000 * 60 * 20).toISOString(), icon: "🔐" },
+    { id: "6", session_id: "", actor_role: "SYSTEM",            action: "request.completed",              target: "REQ-1019", result: "APPROVED",  created_at: new Date(t - 1000 * 60 * 35).toISOString(), icon: "✅" },
+    { id: "7", session_id: "", actor_role: "citizen",           action: "complaint submitted",             target: "COMP-12",  result: "ESCALATED", created_at: new Date(t - 1000 * 60 * 60).toISOString(), icon: "⚠️" },
   ];
 }
 

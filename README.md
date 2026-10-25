@@ -1,254 +1,190 @@
 # 🎓 VigilOS — AICTE Complaint & Cross-Bureau Intelligence Platform
 
-> AICTE-aligned platform for institutional complaint monitoring, cross-bureau overlap detection, and campus automation — powered by an autonomous agent loop.
+> AICTE-aligned platform for institutional complaint monitoring, cross-bureau overlap detection, decentralized regional governance, and database-driven RBAC — powered by SQLite and an autonomous agent loop.
 
 ---
 
-## 🧠 What Is This?
+## 🏛️ Database-Driven Role Management & SQLite RBAC Architecture
 
-**VigilOS** is an integrated institutional monitoring and workflow platform with an autonomous AI backend. It is **not a chatbot** — it uses a self-correcting **THINK → PLAN → EXECUTE → REVIEW → UPDATE** loop to eliminate silos between the Regulation Bureau (RB) and Public Grievance Redressal Cell (PGRC), detect duplicate/overlapping actions, and manage campus requests.
+VigilOS enforces enterprise-grade, authoritative **Role-Based Access Control (RBAC)** completely driven by **SQLite** (`campusflow.db`) with `PRAGMA foreign_keys = ON` enforced on every database connection. Hardcoded user arrays and mock role mappings have been completely replaced with a normalized, transactional schema and centralized backend authorization.
+
+### Database Schema (Version: `20261025_02_rbac_schema`)
+
+The database architecture is implemented via transactional migrations in [`campus/rbac_migration.py`](campus/rbac_migration.py):
+
+| Entity | Schema Fields | Constraints & Relationships |
+|--------|---------------|-----------------------------|
+| **`users`** | `id`, `name`, `normalized_email`, `password_hash`, `status`, `created_at`, `updated_at` | Unique on `normalized_email`. Stores canonical user identities and PBKDF2-SHA256 password hashes. |
+| **`auth_accounts`** | `id`, `user_id`, `provider`, `provider_subject`, `created_at` | Unique composite `(provider, provider_subject)`. Foreign key to `users(id)` `ON DELETE CASCADE`. Supports linking multiple authentication providers (e.g. Google OAuth, email/password, NIC SSO) to one canonical user. |
+| **`roles`** | `id`, `key`, `display_name`, `description` | Unique on `key`. Canonical roles: `super_admin`, `bureau_head`, `approval_officer`, `nodal_officer`, `citizen`. |
+| **`permissions`** | `id`, `key`, `description` | Unique on `key`. Granular workflow privileges: `users:manage`, `cases:view`, `cases:assign`, `cases:process`, `cases:approve`, `reports:view`, `org:manage`, `audit:view`, `chat:use`. |
+| **`role_permissions`** | `role_id`, `permission_id` | Composite primary key `(role_id, permission_id)`. Foreign keys to `roles(id)` and `permissions(id)` `ON DELETE CASCADE`. |
+| **`bureaus`** | `id`, `code`, `name`, `description`, `created_at` | Unique on `code`. Canonical units: `HQ`, `RB` (Regulation Bureau), `PGRC` (Public Grievance Redressal Cell), `RO` (Regional Office Cell), `LIAISON` (State Liaison). |
+| **`regions`** | `id`, `code`, `name`, `created_at` | Unique on `code`. Canonical jurisdictions: `HQ`, `NORTHERN`, `SOUTHERN`, `WESTERN`, `EASTERN`, `CENTRAL`. |
+| **`user_assignments`** | `id`, `user_id`, `role_id`, `bureau_id`, `region_id`, `status`, `created_at`, `updated_at` | Foreign keys to `users`, `roles`, `bureaus`, `regions`. Exactly one active role assignment per user enforced by transactional constraints. |
+| **`assignment_audit`** | `id`, `user_id`, `changed_by`, `new_role_key`, `new_bureau_code`, `new_region_code`, `action`, `created_at` | Immutable log of all administrative actions, role reassignments, account creations, and status toggles. |
+
+---
+
+## 🔐 Canonical Roles & Permission Matrix
+
+Backend authorization is authoritative and centralized in [`campus/role_service.py`](campus/role_service.py). Frontend conditions serve strictly for UI usability; backend access paths enforce privileges and bureau/region scopes.
+
+| Canonical Role | Display Label | Assigned Permissions | Jurisdiction Scope |
+|----------------|---------------|----------------------|--------------------|
+| **`super_admin`** | Super Admin | `users:manage`, `cases:view`, `cases:assign`, `cases:process`, `cases:approve`, `reports:view`, `org:manage`, `audit:view`, `chat:use` | **Unrestricted National Scope** (all bureaus and regions) |
+| **`bureau_head`** | Bureau Head | `cases:view`, `cases:assign`, `cases:process`, `cases:approve`, `reports:view`, `audit:view`, `chat:use` | **Bureau-Scoped** (restricted to assigned bureau: `RB`, `PGRC`, or `RO`) |
+| **`approval_officer`**| Approval Officer | `cases:view`, `cases:process`, `reports:view`, `chat:use` | **Bureau-Scoped** (processes complaints within assigned department) |
+| **`nodal_officer`** | Regional Nodal Officer | `cases:view`, `cases:process`, `reports:view`, `chat:use` | **Region-Scoped** (restricted to assigned region: Southern, Northern, etc.) |
+| **`citizen`** | Citizen / Complainant | `cases:view` (own grievances only), `chat:use` | **Complainant-Scoped** (self-service public grievances) |
+
+---
+
+## 👥 Canonical Personnel Seeded in SQLite
+
+All canonical accounts have been migrated to normalized SQLite records:
+
+1. **Caleb** (`2204caleb2007@gmail.com`) — Master Super Admin (Central Vigilance & Platform Authority, HQ)
+2. **System Administrator** (`admin@aicte-india.org`) — Super Admin (Vigilance Operations, HQ)
+3. **Bureau Head (Demo)** (`admin@aicte.gov.in`) — Bureau Head (Regulation Bureau, RB)
+4. **Approval Officer (Demo)** (`officer@aicte.gov.in`) — Approval Officer (Public Grievance Redressal Cell, PGRC)
+5. **Hariprasath** (`hariprasath134208@gmail.com`) — Approval Officer (Regulation Bureau, Southern)
+6. **Monisha Yathavan** (`monishayathavan@gmail.com`) — Approval Officer (PGRC, Southern)
+7. **Swetha NC** (`swethanc21@gmail.com`) — Approval Officer (Regulation Bureau, Southern)
+8. **Deepan Thangavel** (`deepanthangavel0611@gmail.com`) — Regional Nodal Officer (State Liaison, Southern)
+9. **Surya Prakash D** (`suryaprakashd22007@gmail.com`) — Approval Officer (PGRC, Southern)
+
+---
+
+## 🔄 Unified Authentication & Identity Resolution
+
+Both **Google OAuth** and **Email/Password** authentication resolve to single canonical SQLite user records:
 
 ```
-User Query
-    │
-    ▼
- THINK  ──── Parse goal + incorporate previous feedback
-    │
- PLAN   ──── LLM creates a JSON action plan
-    │
- EXECUTE──── Run tools in sequence (classify → policy → notify)
-    │
- REVIEW ──── Score output quality (1–10)
-    │
- UPDATE ──── If score < 7: inject feedback and retry
-    │         If score ≥ 7: deliver result
-    ▼
-  Reply
+[Google OAuth ID Token] ──► Backend Verification ──┐
+                                                    ├──► auth_accounts ──► users ──► user_assignments ──► Session JWT
+[Email & Password]       ──► PBKDF2 Verification ──┘
 ```
 
-**The loop never changes. The tools do.**
+1. **Google Identity Tokens**: Verified on the backend against Google OAuth endpoints. The token subject (`sub`) is matched in `auth_accounts`. If not yet linked, identity matches the verified normalized email and registers the subject in `auth_accounts`.
+2. **Password Verification**: Secure PBKDF2-SHA256 password hashing. Passwords are never stored in plaintext.
+3. **Multi-Account Linking**: A user can link multiple login mechanisms (`credentials`, `google`, `nic_sso`) to their single canonical `user_id`.
+4. **Session Hydration**: On every API request, `_get_current_user` in [`api_server.py`](api_server.py) verifies the JWT and loads fresh active assignment and permission data directly from SQLite. Deactivated accounts immediately receive a `403 Forbidden`.
 
 ---
 
-## 🏗️ Tech Stack
+## 🛡️ Administrative Governance UI (`/admin`)
 
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | React 19, TanStack Router, TanStack Query, Tailwind CSS v4, shadcn/ui |
-| **Backend** | FastAPI, Python 3.11+, SQLite (WAL mode) |
-| **AI / LLM** | Groq (llama-3.3-70b-versatile) |
-| **Agent Loop** | Custom THINK→PLAN→EXECUTE→REVIEW→UPDATE (campus/executor.py) |
-| **Scheduler** | APScheduler (background jobs) |
-| **Web Search** | Tavily API |
-| **PDF Export** | ReportLab |
-| **Build Tool** | Vite 7 |
+Authorized Super Administrators have direct administrative controls over the SQLite RBAC system:
+- **Personnel Directory**: Live table showing Officer Name, Official Email, Assigned Role, Bureau, Region, and Status.
+- **Dynamic Role Reassignment**: Clickable role selector executing `PATCH /api/admin/users/{user_id}/assignment`.
+- **Bureau & Region Reassignment**: Interactive select menus tied to SQLite `bureaus` and `regions` tables.
+- **Status Toggle**: One-click Active/Inactive account toggle with instant database update.
+- **Personnel Account Creation**: Modal for registering new officers directly into SQLite with designated bureau and region.
+- **Safe Account Deletion**: Modal with confirmation protecting active session accounts and the master super admin.
 
 ---
 
-## 📁 Project Structure
+## 💾 Database Migration & Backup Instructions
 
-```
-AICTEProFlow-main/
-│
-├── src/                        # React frontend
-│   ├── routes/                 # TanStack Router pages
-│   │   ├── index.tsx           # Dashboard (home)
-│   │   ├── chat.tsx            # AI Chat (autonomous loop)
-│   │   ├── requests.new.tsx    # New OD request form
-│   │   ├── requests.index.tsx  # My requests list
-│   │   ├── requests.$id.tsx    # Request detail
-│   │   ├── admin.tsx           # Admin panel
-│   │   └── ...                 # Other pages
-│   ├── components/
-│   │   ├── layout/
-│   │   │   ├── AppLayout.tsx   # Main shell
-│   │   │   ├── AppSidebar.tsx  # Navigation sidebar
-│   │   │   └── TopNavbar.tsx   # Top header bar
-│   │   └── ui/                 # shadcn/ui components
-│   └── lib/
-│       ├── api.ts              # Backend API client
-│       ├── auth.tsx            # Auth context
-│       └── ...                 # Stores, utilities
-│
-├── campus/                     # Core autonomous backend
-│   ├── executor.py             # ⭐ Main autonomous loop entry point
-│   ├── db.py                   # SQLite persistence layer
-│   ├── classifier.py           # Intent classifier (LLM)
-│   ├── policy_engine.py        # Rules engine (approve/reject/escalate)
-│   ├── notifier.py             # Notification router
-│   ├── web_researcher.py       # Tavily web search tool
-│   ├── role_system.py          # Role-based access control
-│   ├── auth.py                 # User authentication (SQLite)
-│   ├── pdf_exporter.py         # Chat PDF export
-│   └── ...
-│
-├── agent/                      # General-purpose agent loop
-│   ├── loop.py                 # ⭐ THE CORE: 5-step loop (NEVER change this)
-│   ├── planner.py              # LLM → JSON plan
-│   ├── executor.py             # Plan → tool execution
-│   ├── reviewer.py             # Quality scorer
-│   └── tools/                  # Domain-specific tools
-│
-├── mcp_server/                 # MCP (Model Context Protocol) server
-│   └── server.py               # Tool routing via MCP
-│
-├── scheduler/                  # Background job scheduler
-│   └── jobs.py                 # APScheduler cron jobs
-│
-├── api_server.py               # ⭐ FastAPI bridge (run this!)
-├── requirements.txt            # Python dependencies
-├── .env.example                # Environment variables template
-├── package.json                # Node.js dependencies
-└── vite.config.ts              # Vite build config
-```
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-- **Python 3.11+**
-- **Node.js 18+** (or Bun)
-- A **Groq API key** (free at [console.groq.com](https://console.groq.com))
-
----
-
-### 1. Clone & Set Up Environment
+### Automated Migration
+The migration runs automatically on application startup via `campus/db.py` `init_db()`. To run the migration standalone:
 
 ```bash
-# Copy the env template
-cp .env.example .env
-
-# Edit .env and fill in your Groq API key:
-# GROQ_API_KEY=gsk_...
-# VITE_API_BASE_URL=http://localhost:8000
+python -m campus.rbac_migration
 ```
 
----
-
-### 2. Start the Python Backend
+### Database Backup
+Before executing schema changes or production upgrades, back up the SQLite database:
 
 ```bash
-# Install Python dependencies
-pip install -r requirements.txt
+# Windows PowerShell
+Copy-Item campusflow.db campusflow.db.bak
 
-# Start the FastAPI server
-uvicorn api_server:app --reload --port 8000
+# Linux / macOS
+cp campusflow.db campusflow.db.bak
 ```
 
-The backend will be running at **http://localhost:8000**
-
-API docs available at **http://localhost:8000/docs**
+### Idempotency
+`campus/rbac_migration.py` records migration versions in `schema_migrations`. Re-running the migration is completely safe and will not duplicate users or overwrite existing assignments.
 
 ---
 
-### 3. Start the React Frontend
+## 🧪 Automated RBAC Test Suite
+
+The test suite in [`test_rbac_governance.py`](test_rbac_governance.py) validates all 12 core security requirements:
 
 ```bash
-# Install Node dependencies
-npm install --legacy-peer-deps
-
-# Start Vite dev server
-npm run dev
+python test_rbac_governance.py
 ```
 
-The frontend will be running at **http://localhost:8080**
+| Test # | Requirement Verified | Status |
+|--------|----------------------|--------|
+| **Test 01** | Google login resolves to correct SQLite user | ✅ Passed |
+| **Test 02** | Email/password login resolves to correct SQLite user | ✅ Passed |
+| **Test 03** | Multiple linked login methods resolve to the same user | ✅ Passed |
+| **Test 04** | Invalid credentials & unauthorized citizen access rejected (401/403) | ✅ Passed |
+| **Test 05** | Self-demotion / deletion of own admin account prevented | ✅ Passed |
+| **Test 06** | Bureau heads cannot access unauthorized bureaus (RB vs PGRC) | ✅ Passed |
+| **Test 07** | Regional officers cannot access unauthorized regions (Southern scope) | ✅ Passed |
+| **Test 08** | Case assignment and approval permissions enforced by backend | ✅ Passed |
+| **Test 09** | Deactivated users immediately lose API and login access | ✅ Passed |
+| **Test 10** | Existing complaints (`aicte_cases`) and audit history remain intact | ✅ Passed |
+| **Test 11** | SQLite foreign keys (`PRAGMA foreign_keys = ON`) and unique constraints work | ✅ Passed |
+| **Test 12** | Production startup is idempotent (no duplicate accounts or reset roles) | ✅ Passed |
 
 ---
 
-## 🔑 Default Login
+## 📡 Backend API Endpoints
 
-| Username | Password | Role |
-|----------|----------|------|
-| `admin` | `12345678` | Admin |
-
-Register new users via the UI (student or teacher role).
-
----
-
-## 🌍 Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GROQ_API_KEY` | ✅ Yes | Groq LLM API key |
-| `GROQ_MODEL` | No | Model name (default: `llama-3.3-70b-versatile`) |
-| `TAVILY_API_KEY` | No | Web search API key |
-| `VITE_API_BASE_URL` | ✅ Yes | Backend URL for frontend (e.g. `http://localhost:8000`) |
-
----
-
-## 🤖 The Autonomous Agent Loop
-
-The heart of AICTEProFlow is `campus/executor.py`, which runs the full autonomous loop:
-
-| Step | What Happens |
-|------|-------------|
-| **THINK** | Classify the student's request (lab/leave/room/complaint/web) |
-| **PLAN** | Extract a structured schema (dates, resources, role) |
-| **EXECUTE** | Run the policy engine (APPROVED / REJECTED / ESCALATED) |
-| **REVIEW** | Score the quality of classification + policy on 6 metrics (1–10) |
-| **UPDATE** | If score < 7: inject feedback and retry (up to 3 attempts) |
-
-This is **different from a chatbot** — the agent self-evaluates and self-corrects without human input.
-
----
-
-## 📡 API Endpoints
-
+### Authentication & Self
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/health` | Health check |
-| `POST` | `/api/auth/login` | Login |
-| `POST` | `/api/auth/register` | Register |
-| `POST` | `/api/auth/logout` | Logout |
-| `GET` | `/api/sessions` | List chat sessions |
-| `POST` | `/api/sessions` | Create session |
-| `DELETE` | `/api/sessions/{id}` | Delete session |
-| `GET` | `/api/chat/messages/{id}` | Get messages |
-| `POST` | `/api/chat/query` | **Send query → runs autonomous loop** |
-| `GET` | `/api/workflow/{id}` | Get workflow data |
-| `GET` | `/api/workflow/logs/{id}` | Get execution logs |
-| `GET` | `/api/kpi/dashboard` | KPI summary |
-| `GET` | `/api/export/pdf/{id}` | Export chat as PDF |
+| `POST` | `/api/auth/login` | Email/password authentication |
+| `POST` | `/api/auth/google` | Google OAuth token verification |
+| `POST` | `/api/auth/register` | Public citizen registration |
+| `POST` | `/api/auth/logout` | Invalidate active session |
+| `GET` | `/api/auth/me` | Fetch authenticated profile with active permissions |
+
+### RBAC Governance (Super Admin)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/admin/metadata` | Reference list of all bureaus and regions |
+| `GET` | `/api/admin/users` | List all users and active organizational assignments |
+| `POST` | `/api/admin/users` | Create new personnel account with credentials and assignment |
+| `PATCH` | `/api/admin/users/{id}/assignment` | Update user role, bureau, and region assignment |
+| `PATCH` | `/api/admin/users/{id}/status` | Toggle account status (`active` / `inactive`) |
+| `DELETE` | `/api/admin/users/{id}` | Permanently delete account and cascade assignments |
+
+### Cases & Intelligence
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/aicte/cases` | Authoritative bureau & region scoped case list |
+| `GET` | `/api/aicte/cases/{id}` | Case detail with jurisdiction check |
+| `PATCH` | `/api/aicte/cases/{id}` | Update case status, assignment, and links |
+| `GET` | `/api/aicte/cases/overlaps` | Cross-bureau duplicate & overlap alerts |
+| `GET` | `/api/aicte/cases/sla-breached` | SLA escalation monitoring |
 
 ---
 
-## 🛠️ Supported Request Types
-
-| Type | Examples |
-|------|---------|
-| **OD / Hackathon** | "I need OD for Smart India Hackathon this weekend" |
-| **Lab Booking** | "Book Lab 204 on Friday 3-5 PM for my team" |
-| **Leave Request** | "Apply for 2-day medical leave from March 22-24" |
-| **Room Booking** | "Reserve Seminar Hall A on April 10 for 60 students" |
-| **Complaint** | "AC in Lab 204 is broken, needs urgent fix" |
-| **Web Research** | "What are the latest AI trends in autonomous agents?" |
-
----
-
-## 🏛️ Roles & Access
-
-| Role | Access |
-|------|--------|
-| **student** | Submit requests, view own history, AI chat |
-| **faculty** | Review student requests, class roster, tracking |
-| **hod** | All faculty access + reports + SLA dashboard |
-| **admin** | Full access: all requests, users, KPIs, AI command center |
-
----
-
-## 📦 Building for Production
+## 📦 Running Locally
 
 ```bash
-# Build frontend
+# 1. Install frontend dependencies
+npm install
+
+# 2. Build frontend production bundle
 npm run build
 
-# Run backend in production mode
-uvicorn api_server:app --host 0.0.0.0 --port 8000 --workers 4
+# 3. Run development server
+npm run dev
+
+# 4. Run FastAPI backend
+python api_server.py
 ```
 
 ---
 
 ## 📄 License
 
-MIT — Built for AICTE Smart India Hackathon 2025.
+MIT — AICTE VigilOS Complaint & Cross-Bureau Intelligence Platform.

@@ -9,12 +9,12 @@ const KEY = "aicte_dms_v2";
 const TYPING_KEY = "aicte_typing_v1";
 
 export const PEERS: Peer[] = [
-  { id: "u-rahul@x", name: "Rahul K.", role: "student", online: true },
-  { id: "u-priya@x", name: "Priya S.", role: "student", online: true },
-  { id: "u-arjun@x", name: "Arjun M.", role: "student", online: false },
-  { id: "u-sharma@x", name: "Dr. Sharma", role: "faculty", online: true },
-  { id: "u-hod@x", name: "HOD CSE", role: "hod", online: false },
-  { id: "u-admin@x", name: "Admin", role: "admin", online: true },
+  { id: "u-rahul@x", name: "Rahul K.", role: "citizen", online: true },
+  { id: "u-priya@x", name: "Priya S.", role: "citizen", online: true },
+  { id: "u-arjun@x", name: "Arjun M.", role: "citizen", online: false },
+  { id: "u-sharma@x", name: "Dr. Sharma", role: "approval_officer", online: true },
+  { id: "u-bureauhead@x", name: "Bureau Head (PGRC)", role: "bureau_head", online: false },
+  { id: "u-admin@x", name: "Super Admin", role: "super_admin", online: true },
   { id: "g-cse3a", name: "CSE-3A Project Group", role: "group", online: true, isGroup: true, members: ["u-rahul@x", "u-priya@x", "u-arjun@x"] },
   { id: "g-hackteam", name: "Hackathon Team", role: "group", online: true, isGroup: true, members: ["u-rahul@x", "u-priya@x"] },
 ];

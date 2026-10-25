@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { HAS_BACKEND, API_BASE_URL } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { getInstitutionByPid, getStoredInstitutions } from "@/lib/institutions";
 
 export const Route = createFileRoute("/cases")({ component: CasesDashboard });
 
@@ -75,7 +76,7 @@ function mockCases(): AICTECase[] {
   const now = new Date();
   const d = (days: number) => new Date(now.getTime() - days * 86400000).toISOString();
   const dl = (days: number) => new Date(now.getTime() + days * 86400000).toISOString();
-  return [
+  const rawList: AICTECase[] = [
     { case_id: "AICTE-2026-RB-0042", aicte_pid: "1-109723481", institution_name: "Shri Ram Institute of Technology", region: "Northern", bureau: "RB", complainant_type: "Stakeholder", category: "Faculty Deficiency", title: "Faculty cadre ratio non-compliance — insufficient PhD-qualified faculty", description: "Inspection reveals faculty cadre ratio below AICTE norms.", assigned_officer: "Dr. Ramesh Gupta (RB)", status: "under_process", sla_days: 45, sla_deadline: dl(33), created_at: d(12), ageing_days: 12, sla_breached: false },
     { case_id: "AICTE-2026-PGRC-0089", aicte_pid: "1-109723481", institution_name: "Shri Ram Institute of Technology", region: "Northern", bureau: "PGRC", complainant_type: "Faculty", category: "Non-payment of Salary", title: "Non-payment of faculty salary for 4 consecutive months", description: "Multiple faculty members filed grievances regarding non-payment.", assigned_officer: "Ms. Priya Verma (PGRC)", status: "escalated", sla_days: 30, sla_deadline: dl(22), created_at: d(8), ageing_days: 8, sla_breached: false },
     { case_id: "AICTE-2026-RB-0055", aicte_pid: "1-376234110", institution_name: "Thakur College of Engineering", region: "Western", bureau: "RB", complainant_type: "Stakeholder", category: "Fee Regulation Violation", title: "Excess fee collection beyond AICTE approved fee structure", description: "Fees collected beyond the AICTE approved structure for 2026-27.", assigned_officer: "Mr. Suresh Iyer (RB)", status: "under_process", sla_days: 30, sla_deadline: dl(25), created_at: d(5), ageing_days: 5, sla_breached: false },
@@ -87,6 +88,14 @@ function mockCases(): AICTECase[] {
     { case_id: "AICTE-2026-PGRC-0145", aicte_pid: "1-788234501", institution_name: "Amity University Rajasthan", region: "Northern", bureau: "PGRC", complainant_type: "Student", category: "Academic Issues", title: "Examinations conducted without prescribed syllabus coverage", description: "End-semester exams conducted with questions outside AICTE model curriculum.", assigned_officer: "Ms. Shweta Patel (PGRC)", status: "received", sla_days: 30, sla_deadline: dl(27), created_at: d(3), ageing_days: 3, sla_breached: false },
     { case_id: "AICTE-2026-RB-0071", aicte_pid: "1-923456789", institution_name: "Chandigarh University", region: "Northern", bureau: "RB", complainant_type: "Stakeholder", category: "Faculty Deficiency", title: "Insufficient visiting faculty against permanent positions", description: "60% teaching load handled by visiting faculty.", assigned_officer: "Mr. Arvind Mehta (RB)", status: "under_process", sla_days: 45, sla_deadline: dl(31), created_at: d(14), ageing_days: 14, sla_breached: false },
   ];
+  return rawList.map(c => {
+    const inst = getInstitutionByPid(c.aicte_pid);
+    return {
+      ...c,
+      institution_name: inst.institution_name,
+      region: inst.region,
+    };
+  });
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -218,8 +227,16 @@ function OverlapAlertCard({
   );
 }
 
-// ── Case Table Row ────────────────────────────────────────────────
-function CaseRow({ c, onView }: { c: AICTECase; onView: (c: AICTECase) => void }) {
+// ── Case Table Row (Officer column removed, clickable institution profile) ──
+function CaseRow({ 
+  c, 
+  onView, 
+  onViewProfile 
+}: { 
+  c: AICTECase; 
+  onView: (c: AICTECase) => void;
+  onViewProfile: (pid: string) => void;
+}) {
   return (
     <tr
       className="border-b border-border/20 hover:bg-white/3 cursor-pointer transition-colors group"
@@ -229,7 +246,17 @@ function CaseRow({ c, onView }: { c: AICTECase; onView: (c: AICTECase) => void }
         <span className="text-[11px] font-mono text-primary/80">{c.case_id}</span>
       </td>
       <td className="px-3 py-3">
-        <div className="text-xs font-medium text-white/90 max-w-[200px] truncate">{c.institution_name}</div>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewProfile(c.aicte_pid);
+          }}
+          className="text-xs font-semibold text-white/90 max-w-[220px] truncate hover:text-primary transition-colors hover:underline text-left cursor-pointer block"
+          title="Click to view institution profile"
+        >
+          {c.institution_name}
+        </button>
         <div className="text-[10px] text-muted-foreground font-mono">{c.aicte_pid}</div>
       </td>
       <td className="px-3 py-3"><BureauBadge bureau={c.bureau} /></td>
@@ -246,9 +273,6 @@ function CaseRow({ c, onView }: { c: AICTECase; onView: (c: AICTECase) => void }
         </div>
       </td>
       <td className="px-3 py-3">
-        <span className="text-[10px] text-muted-foreground">{c.assigned_officer || "—"}</span>
-      </td>
-      <td className="px-3 py-3">
         <span className="text-[10px] text-muted-foreground">{c.region}</span>
       </td>
       <td className="px-3 py-3 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -258,38 +282,124 @@ function CaseRow({ c, onView }: { c: AICTECase; onView: (c: AICTECase) => void }
   );
 }
 
-// ── Institution Profile Drawer ────────────────────────────────────
+// ── Institution Profile Drawer (Sliding from Right with Campus Photos) ──
 function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void }) {
+  const profile = useMemo(() => getInstitutionByPid(pid), [pid]);
   const cases = useMemo(() => mockCases().filter(c => c.aicte_pid === pid), [pid]);
-  const inst = useMemo(() => ({
-    aicte_pid: pid,
-    institution_name: cases[0]?.institution_name ?? pid,
-    region: cases[0]?.region ?? "—",
-    state: cases[0]?.region ?? "—",
-  }), [pid, cases]);
+  const [activePhoto, setActivePhoto] = useState(0);
+
   const rbCases = cases.filter(c => c.bureau === "RB");
   const pgrcCases = cases.filter(c => c.bureau === "PGRC");
   const roCases = cases.filter(c => c.bureau === "RO");
 
   return (
-    <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="w-full max-w-2xl bg-card border-l border-border/40 h-full overflow-y-auto flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border/30 sticky top-0 bg-card z-10">
-          <div>
-            <h2 className="font-bold text-base">{inst.institution_name}</h2>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[11px] font-mono text-primary/80">{pid}</span>
-              <span className="text-white/20">·</span>
-              <span className="text-[11px] text-muted-foreground">{inst.region} Region</span>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary/60 text-muted-foreground">
+    <div className="fixed inset-0 z-50 flex justify-end">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={onClose} />
+      
+      {/* Sliding Drawer Container */}
+      <div className="relative w-full max-w-2xl bg-card border-l border-border/40 h-full overflow-y-auto flex flex-col shadow-2xl animate-in slide-in-from-right duration-300 ease-out z-10">
+        
+        {/* Banner with Campus Image */}
+        <div className="relative h-48 sm:h-56 w-full bg-secondary/80 overflow-hidden shrink-0">
+          <img
+            src={profile.images[activePhoto] || profile.images[0] || "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=1000&q=80"}
+            alt={profile.institution_name}
+            className="w-full h-full object-cover transition-all duration-300"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-card via-card/50 to-transparent" />
+
+          {/* Close button */}
+          <button 
+            onClick={onClose} 
+            className="absolute top-4 right-4 p-2 rounded-xl bg-black/60 hover:bg-black/85 border border-white/20 text-white transition-all cursor-pointer backdrop-blur-md shadow-md"
+            title="Close Drawer"
+          >
             <X className="w-4 h-4" />
           </button>
+
+          {/* Banner bottom info */}
+          <div className="absolute bottom-3 left-5 right-5 flex items-end justify-between gap-3">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-primary text-primary-foreground shadow-xs">
+                {profile.inst_type}
+              </span>
+              <h2 className="font-bold text-xl sm:text-2xl text-white mt-1 drop-shadow-md leading-tight">{profile.institution_name}</h2>
+              <div className="flex items-center gap-2 text-xs text-white/90 mt-0.5">
+                <span className="font-mono text-primary font-bold">{pid}</span>
+                <span>·</span>
+                <span>{profile.city}, {profile.state} ({profile.region} Region)</span>
+              </div>
+            </div>
+            <span className="text-[10px] font-semibold bg-black/60 backdrop-blur-md border border-white/25 text-white/95 px-2.5 py-1 rounded-lg shrink-0 shadow-xs">
+              {profile.approval_status}
+            </span>
+          </div>
         </div>
 
+        {/* Drawer Body Content */}
         <div className="p-5 space-y-5 flex-1">
+          {/* Photo Gallery Selector */}
+          {profile.images && profile.images.length > 1 && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-primary" /> Campus Infrastructure Gallery
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {profile.images.map((imgUrl, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setActivePhoto(i)}
+                    className={cn(
+                      "relative aspect-video rounded-xl overflow-hidden border transition-all cursor-pointer",
+                      activePhoto === i ? "border-primary ring-2 ring-primary/40" : "border-border/40 hover:border-white/40 opacity-75 hover:opacity-100"
+                    )}
+                  >
+                    <img src={imgUrl} alt={`Campus photo ${i + 1}`} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Institutional Metadata Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div className="glass-card p-3">
+              <span className="text-[10px] text-muted-foreground uppercase font-bold block">Principal / Head</span>
+              <span className="text-white font-medium mt-0.5 block truncate">{profile.principal_name}</span>
+            </div>
+            <div className="glass-card p-3">
+              <span className="text-[10px] text-muted-foreground uppercase font-bold block">Established</span>
+              <span className="text-white font-medium mt-0.5 block">{profile.established_year}</span>
+            </div>
+            <div className="glass-card p-3">
+              <span className="text-[10px] text-muted-foreground uppercase font-bold block">Faculty Members</span>
+              <span className="text-white font-medium mt-0.5 block tabular-nums">{profile.total_faculty}</span>
+            </div>
+            <div className="glass-card p-3">
+              <span className="text-[10px] text-muted-foreground uppercase font-bold block">Enrolled Students</span>
+              <span className="text-white font-medium mt-0.5 block tabular-nums">{profile.total_students}</span>
+            </div>
+          </div>
+
+          {/* Contact & Address Card */}
+          <div className="glass-card p-3.5 space-y-1.5 text-xs text-white/80">
+            <div className="flex items-start gap-2">
+              <MapPin className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+              <span>{profile.address}</span>
+            </div>
+            <div className="flex items-center gap-4 flex-wrap pt-1 text-muted-foreground">
+              <span>📧 {profile.contact_email}</span>
+              <span>📞 {profile.contact_phone}</span>
+              {profile.website && (
+                <a href={profile.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 font-medium">
+                  🌐 Visit Website
+                </a>
+              )}
+            </div>
+          </div>
+
           {/* Summary */}
           <div className="grid grid-cols-3 gap-2">
             {[
@@ -305,12 +415,12 @@ function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void 
           </div>
 
           {/* Split timeline */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* RB Cases */}
             <div>
               <div className="flex items-center gap-1.5 mb-2">
                 <BureauBadge bureau="RB" />
-                <span className="text-[11px] text-muted-foreground">Regulation Bureau</span>
+                <span className="text-[11px] text-muted-foreground font-semibold">Regulation Bureau</span>
               </div>
               <div className="space-y-2">
                 {rbCases.length === 0 && <div className="text-[11px] text-white/30 py-2">No active RB cases</div>}
@@ -330,7 +440,7 @@ function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void 
             <div>
               <div className="flex items-center gap-1.5 mb-2">
                 <BureauBadge bureau="PGRC" />
-                <span className="text-[11px] text-muted-foreground">Grievance Cell</span>
+                <span className="text-[11px] text-muted-foreground font-semibold">Grievance Cell</span>
               </div>
               <div className="space-y-2">
                 {pgrcCases.length === 0 && <div className="text-[11px] text-white/30 py-2">No active PGRC cases</div>}
@@ -353,7 +463,7 @@ function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void 
             <div>
               <div className="flex items-center gap-1.5 mb-2">
                 <BureauBadge bureau="RO" />
-                <span className="text-[11px] text-muted-foreground">Regional Office</span>
+                <span className="text-[11px] text-muted-foreground font-semibold">Regional Office</span>
               </div>
               <div className="space-y-2">
                 {roCases.map(c => (
@@ -371,10 +481,10 @@ function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void 
           <div className="border-t border-border/30 pt-4 space-y-2">
             <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-widest">Joint Actions</div>
             <div className="flex flex-wrap gap-2">
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/30 text-xs text-primary hover:bg-primary/25 transition-all">
+              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/30 text-xs text-primary hover:bg-primary/25 transition-all cursor-pointer">
                 <Link2 className="w-3.5 h-3.5" /> Link Cases
               </button>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/60 border border-border/40 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
+              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/60 border border-border/40 text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-all cursor-pointer">
                 <Shield className="w-3.5 h-3.5" /> Consolidate under RB
               </button>
             </div>
@@ -424,6 +534,19 @@ function CasesDashboard() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Re-sync cases when institution profiles are edited
+  useEffect(() => {
+    const handleUpdate = () => {
+      setCases(mockCases());
+    };
+    window.addEventListener("aicte_institution_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener("aicte_institution_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
 
   // Derived filtered cases
   const filteredCases = useMemo(() => {
@@ -654,17 +777,17 @@ function CasesDashboard() {
               <table className="w-full min-w-[800px]">
                 <thead>
                   <tr className="border-b border-border/20">
-                    {["Case ID", "Institution", "Bureau", "Category", "Status", "Ageing", "Officer", "Region", ""].map(h => (
+                    {["Case ID", "Institution", "Bureau", "Category", "Status", "Ageing", "Region", ""].map(h => (
                       <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredCases.length === 0 && (
-                    <tr><td colSpan={9} className="px-3 py-8 text-center text-xs text-muted-foreground">No cases match your filters.</td></tr>
+                    <tr><td colSpan={8} className="px-3 py-8 text-center text-xs text-muted-foreground">No cases match your filters.</td></tr>
                   )}
                   {filteredCases.map(c => (
-                    <CaseRow key={c.case_id} c={c} onView={setSelectedCase} />
+                    <CaseRow key={c.case_id} c={c} onView={setSelectedCase} onViewProfile={setSelectedProfile} />
                   ))}
                 </tbody>
               </table>

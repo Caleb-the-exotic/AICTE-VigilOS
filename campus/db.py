@@ -115,9 +115,10 @@ class DictRowWrapper:
 
 
 def get_conn():
-    """Return a thread-safe connection (PostgreSQL or SQLite fallback)."""
-    if HAS_PG:
-        pg_url = os.getenv("DATABASE_URL")
+    """Return a thread-safe connection (SQLite or PostgreSQL if configured)."""
+    use_pg = os.getenv("USE_POSTGRES", "false").lower() in ("true", "1", "yes")
+    pg_url = os.getenv("DATABASE_URL")
+    if HAS_PG and use_pg and pg_url and not pg_url.startswith("sqlite"):
         pg_host = os.getenv("POSTGRES_HOST")
         if pg_url or (pg_host and os.getenv("POSTGRES_DB")):
             try:
@@ -133,13 +134,13 @@ def get_conn():
                     )
                 return PGConnectionWrapper(conn)
             except Exception as e:
-                # If connection fails, log and fallback to SQLite
                 import sys
                 print(f"[Postgres Connection Error] {e}. Falling back to SQLite...", file=sys.stderr)
-                
+
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
@@ -186,7 +187,7 @@ def init_db():
             id          TEXT PRIMARY KEY,
             title       TEXT,
             created_at  TEXT,
-            role        TEXT DEFAULT 'student',
+            role        TEXT DEFAULT 'citizen',
             user_id     TEXT,
             workflow_type TEXT
         );
@@ -357,11 +358,21 @@ def init_db():
             
     conn.close()
     _seed_academic_calendar()
+    try:
+        from campus.migrate_roles import run_migration
+        run_migration()
+    except Exception as _mig_e:
+        print("[DB Init] Notice during role migration:", _mig_e)
+    try:
+        from campus.rbac_migration import run_migration as run_rbac_migration
+        run_rbac_migration()
+    except Exception as _mig_e2:
+        print("[DB Init] Notice during RBAC migration:", _mig_e2)
 
 
 # ── SESSION CRUD ─────────────────────────────────────────────────
 
-def create_session(session_id: str, title: str, role: str = "student",
+def create_session(session_id: str, title: str, role: str = "citizen",
                    workflow_type: str = "", user_id: str = "") -> None:
     now = datetime.datetime.now().isoformat()
     conn = get_conn()
@@ -377,8 +388,8 @@ def list_sessions(user_id: str = None, role: str = None) -> list[dict]:
     """Retrieve chat sessions via user access rules."""
     conn = get_conn()
     
-    if role == "admin":
-        # Admin sees everything
+    if role == "super_admin":
+        # Super Admin sees everything
         rows = conn.execute("SELECT * FROM sessions ORDER BY created_at DESC").fetchall()
     elif user_id:
         # Others see only their own sessions
@@ -827,8 +838,8 @@ def list_aicte_cases(bureau: str = None, status: str = None, aicte_pid: str = No
     conn = get_conn()
     clauses, params = [], []
     if bureau:
-        clauses.append("bureau=?")
-        params.append(bureau)
+        clauses.append("UPPER(bureau)=UPPER(?)")
+        params.append(bureau.strip())
     if status:
         clauses.append("status=?")
         params.append(status)
@@ -836,8 +847,9 @@ def list_aicte_cases(bureau: str = None, status: str = None, aicte_pid: str = No
         clauses.append("aicte_pid=?")
         params.append(aicte_pid)
     if region:
-        clauses.append("region=?")
-        params.append(region)
+        reg_clean = region.strip().upper().replace("_", "").replace("-", "").replace("REGION", "").strip()
+        clauses.append("UPPER(REPLACE(REPLACE(region, '-', ''), ' ', '')) LIKE ?")
+        params.append(f"%{reg_clean}%")
     if category:
         clauses.append("category=?")
         params.append(category)

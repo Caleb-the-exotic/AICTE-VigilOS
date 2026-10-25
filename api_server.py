@@ -32,7 +32,7 @@ load_dotenv()
 
 
 # ── Campus backend imports ───────────────────────────────────────
-from campus import db, auth, pdf_exporter
+from campus import db, auth, pdf_exporter, role_service
 from campus.executor import run as campus_run
 
 # ── Multi-Agent Kernel & Event Bus ──────────────────────────────
@@ -99,32 +99,59 @@ def _get_current_user(authorization: Optional[str] = Header(None)) -> dict:
         raise HTTPException(status_code=401, detail="Missing or invalid token")
     token = authorization.split(" ", 1)[1]
     
-    # Try decoding token as JWT first
+    user = None
+    # 1. Try decoding token as JWT
     try:
-        payload = jwt.decode(token, os.getenv("JWT_SECRET", "super_secret_key"), algorithms=["HS256"])
+        secret = os.getenv("JWT_SECRET") or "vigilos_rbac_sqlite_jwt_secret_token_key_2026_super_secure"
+        payload = jwt.decode(token, secret, algorithms=["HS256"])
         email = payload.get("email")
+        uid = payload.get("id")
         if email:
-            username = email.split("@")[0]
-            conn = auth.get_conn()
-            cursor = conn.cursor()
-            cursor.execute("SELECT role FROM users WHERE username = ?", (username,))
-            row = cursor.fetchone()
-            conn.close()
-            role = row[0] if row else "student"
-            return {
-                "id": username,
-                "username": username,
-                "name": username.title(),
-                "email": email,
-                "role": _map_role(role),
-            }
+            user = role_service.get_user_by_email(email)
+        elif uid:
+            user = role_service.get_user_by_id(uid)
+    except HTTPException:
+        raise
     except Exception:
         pass
 
-    user = _token_store.get(token)
+    # 2. Try in-memory token store, refreshing from SQLite
+    if not user:
+        stored = _token_store.get(token)
+        if stored:
+            s_email = stored.get("normalized_email") or stored.get("email")
+            s_id = stored.get("id")
+            if s_email:
+                user = role_service.get_user_by_email(s_email)
+            elif s_id:
+                user = role_service.get_user_by_id(s_id)
+            if not user:
+                user = stored
+
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return user
+
+    status = user.get("status", "active")
+    if status != "active":
+        raise HTTPException(status_code=403, detail=f"Account is {status}. Access restricted.")
+
+    role = user.get("role_key") or user.get("role") or "citizen"
+    return {
+        "id": user["id"],
+        "username": user.get("normalized_email", user.get("email", "")).split("@")[0],
+        "name": user["name"],
+        "email": user.get("normalized_email", user.get("email", "")),
+        "role": role,
+        "role_key": role,
+        "role_label": user.get("role_name", user.get("role_label", role)),
+        "bureau_code": user.get("bureau_code") or "HQ",
+        "bureau": user.get("bureau_name") or user.get("bureau", "National Portal"),
+        "region_code": user.get("region_code") or "HQ",
+        "region": user.get("region_name") or user.get("region", "HQ (New Delhi)"),
+        "status": status,
+        "permissions": user.get("permissions", []),
+    }
+
 
 # ═══════════════════════════════════════════════════════════════
 # HEALTH
@@ -137,59 +164,56 @@ def health():
 # AUTH ENDPOINTS
 # ═══════════════════════════════════════════════════════════════
 class LoginBody(BaseModel):
-    email: str       # We treat email as username for CampusFlow auth
+    email: str
     password: str
 
 class RegisterBody(BaseModel):
     name: str
     email: str
     password: str
-    role: Optional[str] = "student"
+    role: Optional[str] = "citizen"
+
+@app.get("/api/auth/me")
+def get_me(user: dict = Depends(_get_current_user)):
+    """Return authenticated user profile with active role and permissions."""
+    return user
 
 @app.post("/api/auth/login")
 def login(body: LoginBody):
     identifier = body.email.strip()
-    ok, user_data = auth.verify_login(identifier, body.password)
+    ok, result = auth.verify_login(identifier, body.password)
     if not ok:
-        raise HTTPException(status_code=401, detail="Invalid email/username or password")
+        raise HTTPException(status_code=401, detail=result or "Invalid email/username or password")
     
-    token = auth.create_jwt(user_data["email"])
+    token = auth.create_jwt(result)
+    _token_store[token] = result
     
     return {
         "token": token,
-        "user": {
-            "id": user_data["username"],
-            "email": user_data["email"],
-            "name": user_data["name"],
-            "role": _map_role(user_data["role"]),
-        },
+        "user": result,
     }
 
 @app.post("/api/auth/register")
 def register(body: RegisterBody):
     email = body.email.strip()
     username = email.split("@")[0] if "@" in email else body.name.lower().replace(" ", "_")
-    campus_role = _reverse_map_role(body.role or "student")
+    role = body.role or "citizen"
     ok, result = auth.register_user(
         username=username,
         password=body.password,
-        role=campus_role,
+        role=role,
         name=body.name.strip(),
         email=email
     )
     if not ok:
         raise HTTPException(status_code=400, detail=result)
     
-    token = auth.create_jwt(email)
+    token = auth.create_jwt(result)
+    _token_store[token] = result
     
     return {
         "token": token,
-        "user": {
-            "id": username,
-            "email": email,
-            "name": body.name.strip(),
-            "role": body.role or "student",
-        },
+        "user": result,
     }
 
 class GoogleLoginBody(BaseModel):
@@ -208,24 +232,19 @@ def google_login(body: GoogleLoginBody):
         
     email = user_info["email"]
     name = user_info.get("name", email)
+    sub = user_info.get("sub")
     
-    ok, role = auth.verify_google_login(email, name)
+    ok, result = auth.verify_google_login(email, name, sub)
     if not ok:
-        raise HTTPException(status_code=401, detail="Google login failed in DB")
+        raise HTTPException(status_code=403, detail=result or "Google login unauthorized")
         
-    username = email.split("@")[0]
-    jwt_token = auth.create_jwt(email)
+    jwt_token = auth.create_jwt(result)
+    _token_store[jwt_token] = result
     
     return {
         "token": jwt_token,
-        "user": {
-            "id": username,
-            "email": email,
-            "name": name,
-            "role": _map_role(role),
-        },
+        "user": result,
     }
-
 
 @app.post("/api/auth/logout")
 def logout(authorization: Optional[str] = Header(None)):
@@ -234,42 +253,107 @@ def logout(authorization: Optional[str] = Header(None)):
         _token_store.pop(token, None)
     return {"ok": True}
 
-class UpdateRoleBody(BaseModel):
-    role: str
-
-@app.post("/api/auth/role")
-def update_user_role_endpoint(body: UpdateRoleBody, user: dict = Depends(_get_current_user)):
-    target_id = user.get("email") or user.get("username") or user.get("id")
-    campus_role = _reverse_map_role(body.role)
-    auth.update_user_role(target_id, campus_role)
-    return {"status": "ok", "role": body.role}
-
-class AdminUpdateUserRoleBody(BaseModel):
+# ═══════════════════════════════════════════════════════════════
+# RBAC & USER GOVERNANCE ENDPOINTS
+# ═══════════════════════════════════════════════════════════════
+class AdminCreateUserBody(BaseModel):
+    name: str
     email: str
     role: str
+    bureau: Optional[str] = "HQ"
+    region: Optional[str] = "HQ"
+    password: Optional[str] = "password@123"
+
+class AdminUpdateAssignmentBody(BaseModel):
+    role: str
+    bureau: Optional[str] = None
+    region: Optional[str] = None
+    email: Optional[str] = None
+
+class AdminToggleStatusBody(BaseModel):
+    status: str
+
+@app.get("/api/admin/metadata")
+def admin_get_metadata(user: dict = Depends(_get_current_user)):
+    """Return bureaus and regions reference tables."""
+    return {
+        "bureaus": role_service.list_bureaus(),
+        "regions": role_service.list_regions(),
+    }
 
 @app.get("/api/admin/users")
 def admin_get_all_users(user: dict = Depends(_get_current_user)):
-    if user.get("role") != "admin":
+    if not role_service.has_permission(user, "users:manage"):
         raise HTTPException(status_code=403, detail="Super Admin privileges required")
-    users = auth.list_all_users()
-    return [
-        {
-            "username": u["username"],
-            "name": u.get("name") or u["username"],
-            "email": u.get("email") or f"{u['username']}@aicte-india.org",
-            "role": _map_role(u["role"]),
-        }
-        for u in users
-    ]
+    return role_service.list_all_users()
+
+@app.post("/api/admin/users")
+def admin_create_user_endpoint(body: AdminCreateUserBody, user: dict = Depends(_get_current_user)):
+    if not role_service.has_permission(user, "users:manage"):
+        raise HTTPException(status_code=403, detail="Super Admin privileges required")
+    try:
+        new_user = role_service.admin_create_user(
+            name=body.name,
+            email=body.email,
+            role_key=body.role,
+            bureau_code=body.bureau,
+            region_code=body.region,
+            password=body.password or "password@123",
+            actor_id=user["id"]
+        )
+        return {"status": "ok", "user": new_user}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.patch("/api/admin/users/{user_id}/assignment")
+def admin_update_assignment_endpoint(user_id: str, body: AdminUpdateAssignmentBody, user: dict = Depends(_get_current_user)):
+    if not role_service.has_permission(user, "users:manage"):
+        raise HTTPException(status_code=403, detail="Super Admin privileges required")
+    try:
+        updated = role_service.admin_update_assignment(
+            target_user_id=user_id,
+            role_key=body.role,
+            bureau_code=body.bureau,
+            region_code=body.region,
+            actor_id=user["id"]
+        )
+        return {"status": "ok", "user": updated}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.patch("/api/admin/users/{user_id}/status")
+def admin_toggle_status_endpoint(user_id: str, body: AdminToggleStatusBody, user: dict = Depends(_get_current_user)):
+    if not role_service.has_permission(user, "users:manage"):
+        raise HTTPException(status_code=403, detail="Super Admin privileges required")
+    try:
+        updated = role_service.admin_toggle_user_status(
+            target_user_id=user_id,
+            new_status=body.status,
+            actor_id=user["id"]
+        )
+        return {"status": "ok", "user": updated}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/api/admin/users/{user_id}")
+def admin_delete_user_endpoint(user_id: str, user: dict = Depends(_get_current_user)):
+    if not role_service.has_permission(user, "users:manage"):
+        raise HTTPException(status_code=403, detail="Super Admin privileges required")
+    try:
+        role_service.admin_delete_user(user_id, user["id"])
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/admin/users/role")
-def admin_update_user_role(body: AdminUpdateUserRoleBody, user: dict = Depends(_get_current_user)):
-    if user.get("role") != "admin":
+def legacy_admin_update_role_endpoint(body: AdminUpdateAssignmentBody, user: dict = Depends(_get_current_user)):
+    if not role_service.has_permission(user, "users:manage"):
         raise HTTPException(status_code=403, detail="Super Admin privileges required")
-    campus_role = _reverse_map_role(body.role)
-    auth.update_user_role(body.email, campus_role)
-    return {"status": "ok", "email": body.email, "role": body.role}
+    if body.email:
+        target_user = role_service.get_user_by_email(body.email)
+        if target_user:
+            role_service.admin_update_assignment(target_user["id"], body.role, None, None, user["id"])
+    return {"status": "ok"}
 
 # ═══════════════════════════════════════════════════════════════
 # CHAT SESSIONS
@@ -281,7 +365,7 @@ class CreateSessionBody(BaseModel):
 def list_sessions(user: dict = Depends(_get_current_user)):
     sessions = db.list_sessions(
         user_id=user["username"],
-        role=_reverse_map_role(user["role"]),
+        role=user["role"],
     )
     return [
         {
@@ -298,7 +382,7 @@ def create_session(body: CreateSessionBody, user: dict = Depends(_get_current_us
     db.create_session(
         session_id=sid,
         title=body.title[:80],
-        role=_reverse_map_role(user["role"]),
+        role=user["role"],
         user_id=user["username"],
     )
     return {"id": sid, "title": body.title, "created_at": datetime.datetime.now().isoformat()}
@@ -401,7 +485,7 @@ def chat_query(
     if not query_text:
         raise HTTPException(status_code=400, detail="Query cannot be empty")
 
-    role = _reverse_map_role(user["role"])
+    role = user["role"]
 
     # Persist user message
     db.add_message(session_id, "user", query_text)
@@ -661,8 +745,8 @@ def get_student_profile(student_id: str, user: dict = Depends(_get_current_user)
 @app.get("/api/admin/event-bus")
 def get_event_bus_stats(user: dict = Depends(_get_current_user)):
     """Return event bus health statistics (admin only)."""
-    if user.get("role") not in ("admin",):
-        raise HTTPException(status_code=403, detail="Admin only")
+    if user.get("role") not in ("super_admin",):
+        raise HTTPException(status_code=403, detail="Super Admin privileges required")
     if not _EVENT_BUS_AVAILABLE:
         return {"available": False}
     return {"available": True, **bus.get_stats()}
@@ -727,7 +811,7 @@ def export_pdf(session_id: str, user: dict = Depends(_get_current_user)):
         pdf_bytes = pdf_exporter.generate_chat_pdf(
             session_id,
             user.get("name", user.get("username", "User")),
-            _reverse_map_role(user["role"]),
+            user["role"],
         )
         if not pdf_bytes:
             raise HTTPException(status_code=404, detail="No messages to export")
@@ -740,37 +824,6 @@ def export_pdf(session_id: str, user: dict = Depends(_get_current_user)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-# ═══════════════════════════════════════════════════════════════
-# ROLE MAPPING HELPERS
-# ═══════════════════════════════════════════════════════════════
-# Frontend uses: student | faculty | hod | admin
-# CampusFlow uses: student | teacher | admin
-
-def _map_role(campus_role: str) -> str:
-    """Convert CampusFlow role → frontend role."""
-    return {
-        "student": "student",
-        "teacher": "faculty",
-        "faculty": "faculty",
-        "officer": "faculty",
-        "hod": "hod",
-        "bureau_head": "hod",
-        "admin": "admin",
-        "ambassador": "ambassador",
-    }.get(campus_role, campus_role if campus_role else "faculty")
-
-def _reverse_map_role(frontend_role: str) -> str:
-    """Convert frontend role → CampusFlow role."""
-    return {
-        "student": "student",
-        "faculty": "teacher",
-        "officer": "teacher",
-        "hod": "teacher",
-        "bureau_head": "teacher",
-        "admin": "admin",
-        "ambassador": "student",
-    }.get(frontend_role, frontend_role if frontend_role else "teacher")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -798,11 +851,31 @@ def list_cases(
     limit: int = 200,
     user: dict = Depends(_get_current_user),
 ):
-    """List AICTE complaint cases with optional filters."""
+    """List AICTE complaint cases with authoritative bureau/regional RBAC scope filtering."""
     try:
+        # ── Authoritative RBAC Scope Enforcement ──
+        user_role = user.get("role")
+        user_bureau = (user.get("bureau_code") or "").upper()
+        user_region = (user.get("region_code") or "").upper()
+
+        effective_bureau = bureau
+        effective_region = region
+
+        if user_role == "super_admin":
+            # Super Admin has unrestricted national scope
+            pass
+        elif user_role in ("bureau_head", "approval_officer"):
+            # Officers and Bureau Heads are scoped strictly to their assigned bureau
+            if user_bureau and user_bureau != "HQ":
+                effective_bureau = user_bureau
+        elif user_role == "nodal_officer":
+            # Nodal officers are scoped strictly to their assigned geographic region
+            if user_region and user_region != "HQ":
+                effective_region = user_region
+
         cases = db.list_aicte_cases(
-            bureau=bureau, status=status, aicte_pid=aicte_pid,
-            region=region, category=category, limit=limit,
+            bureau=effective_bureau, status=status, aicte_pid=aicte_pid,
+            region=effective_region, category=category, limit=limit,
         )
         # Annotate ageing_days
         now = datetime.datetime.now()
@@ -830,10 +903,15 @@ def list_cases(
 # ── Single Case Detail ────────────────────────────────────────────
 @app.get("/api/aicte/cases/{case_id}")
 def get_case(case_id: str, user: dict = Depends(_get_current_user)):
-    """Get full details of an AICTE case including audit trail."""
+    """Get full details of an AICTE case with authoritative scope checks."""
     case = db.get_aicte_case(case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
+
+    # Authoritative bureau / regional jurisdiction check
+    if not role_service.has_permission(user, "cases:view", bureau=case.get("bureau"), region=case.get("region")):
+        raise HTTPException(status_code=403, detail="Access denied: Case is outside your assigned bureau or regional jurisdiction")
+
     # Enrich linked cases
     try:
         import json as _json
@@ -883,7 +961,7 @@ def create_case(body: CreateCaseBody, user: dict = Depends(_get_current_user)):
         # Log in audit
         db.add_audit(
             session_id="system",
-            actor_role=user.get("role", "admin"),
+            actor_role=user.get("role", "super_admin"),
             action="CASE_FILED",
             target=case_id,
             result=f"New {body.bureau} case filed for {body.institution_name}",
@@ -902,6 +980,14 @@ class UpdateCaseBody(BaseModel):
 @app.patch("/api/aicte/cases/{case_id}")
 def update_case(case_id: str, body: UpdateCaseBody, user: dict = Depends(_get_current_user)):
     """Update status of an AICTE case (for transfer/escalation/disposal)."""
+    case = db.get_aicte_case(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    # Authoritative permission and jurisdiction check
+    if not role_service.has_permission(user, "cases:process", bureau=case.get("bureau"), region=case.get("region")):
+        raise HTTPException(status_code=403, detail="Access denied: Cannot modify cases outside your authorized bureau or region")
+
     try:
         db.update_aicte_case_status(
             case_id=case_id,
@@ -911,7 +997,7 @@ def update_case(case_id: str, body: UpdateCaseBody, user: dict = Depends(_get_cu
         )
         db.add_audit(
             session_id="system",
-            actor_role=user.get("role", "admin"),
+            actor_role=user.get("role", "super_admin"),
             action="CASE_STATUS_UPDATE",
             target=case_id,
             result=f"Status changed to {body.status}",

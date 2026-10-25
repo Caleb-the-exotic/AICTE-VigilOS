@@ -88,7 +88,7 @@ function CommsHubPage() {
       id: tempId,
       sender_id: user?.id || user?.email || "me",
       sender_name: user?.name || "Officer",
-      sender_role: user?.role || "officer",
+      sender_role: user?.role || "approval_officer",
       text,
       created_at: new Date().toISOString(),
     };

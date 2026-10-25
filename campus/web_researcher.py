@@ -85,7 +85,7 @@ def search(query: str, tavily_api_key: str, max_results: int = 5) -> dict:
 
 
 def synthesize_answer(query: str, search_data: dict,
-                       client, model: str, role: str = "student") -> str:
+                       client, model: str, role: str = "citizen") -> str:
     """
     Use the LLM to synthesize a clean answer from Tavily results.
     Returns a role-aware, well-structured response.
@@ -127,31 +127,31 @@ def synthesize_answer(query: str, search_data: dict,
     role_prompt = role_system.get_role_system_prompt(role, {"workflow_type": "web_search"})
     
     # Add role-specific instructions for web search responses
-    if role == "student":
+    if role == "citizen":
         response_guidance = (
-            "Give a clear, accurate, and student-friendly answer. "
+            "Give a clear, accurate, and citizen-friendly answer. "
             "Structure the answer with headings or bullet points where helpful. "
-            "Explain any technical terms used. "
+            "Explain any technical or regulatory terms used. "
             "Cite sources briefly at the end (title + URL). "
             "Keep the answer focused and under 400 words."
         )
-    elif role == "teacher":
+    elif role in ("approval_officer", "bureau_head", "nodal_officer"):
         response_guidance = (
-            "Give a clear, accurate, and professional answer suitable for instructional use. "
+            "Give a clear, accurate, and professional answer suitable for regulatory analysis. "
             "Structure the answer with clear sections. "
-            "Include relevant technical details. "
+            "Include relevant compliance and regulatory details. "
             "Cite sources (title + URL). "
             "Keep the answer focused and under 500 words. "
             "Note any important caveats or limitations in the research."
         )
-    else:  # admin
+    else:  # super_admin
         response_guidance = (
-            "Give a concise, authoritative answer with focus on actionable insights. "
+            "Give a concise, authoritative answer with focus on actionable operational insights. "
             "Structure the answer for quick comprehension. "
             "Include relevant metrics or data points from sources. "
             "Cite sources (title + URL). "
             "Keep the answer focused and under 400 words. "
-            "Highlight any potential operational implications."
+            "Highlight any potential systemic or operational implications."
         )
     
     system_prompt = f"""{role_prompt}

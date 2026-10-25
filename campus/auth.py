@@ -1,13 +1,27 @@
-from campus.db import get_conn
-import hashlib
+# ============================================================
+# campus/auth.py — Authentication & Identity Bridge
+# ============================================================
+# Integrates Google OAuth identity tokens and Email/Password
+# authentication with the normalized SQLite RBAC database.
+# ============================================================
+
 import os
 import datetime
 import jwt
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
+from campus import role_service
+from campus.rbac_migration import run_migration
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-JWT_SECRET = os.getenv("JWT_SECRET", "super_secret_key")
+JWT_SECRET = os.getenv("JWT_SECRET") or "vigilos_rbac_sqlite_jwt_secret_token_key_2026_super_secure"
+
+def init_auth_db():
+    """Ensure the versioned RBAC database schema and seeds are initialized."""
+    try:
+        run_migration()
+    except Exception as e:
+        print("[Auth Init Warning] RBAC migration notice:", e)
 
 def verify_google_token(token: str):
     """
@@ -29,26 +43,27 @@ def verify_google_token(token: str):
                 google_requests.Request(),
                 client_id
             )
-        except Exception as e1:
+        except Exception:
             # Attempt 2: Verify without audience constraint
             try:
                 info = id_token.verify_oauth2_token(
                     token,
                     google_requests.Request()
                 )
-            except Exception as e2:
-                # Attempt 3: Direct JWT decode (Google GSI has already authenticated the user client-side)
+            except Exception:
+                # Attempt 3: Direct JWT decode
                 info = jwt.decode(token, options={"verify_signature": False})
 
         if not info or not info.get("email"):
             return None
 
-        email = info["email"]
-        name = info.get("name") or email.split("@")[0]
+        email = info["email"].strip().lower()
+        name = info.get("name") or email.split("@")[0].title()
 
         return {
             "email": email,
             "name": name,
+            "sub": info.get("sub", ""),
             "picture": info.get("picture", "")
         }
 
@@ -56,160 +71,130 @@ def verify_google_token(token: str):
         print("[Google Auth] Error decoding token:", e)
         return None
 
-def create_jwt(email: str):
+def create_jwt(user_data_or_email):
+    """Generate JWT containing canonical user identity claims."""
+    if isinstance(user_data_or_email, dict):
+        email = user_data_or_email.get("email") or user_data_or_email.get("normalized_email")
+        uid = user_data_or_email.get("id")
+        role = user_data_or_email.get("role_key") or user_data_or_email.get("role")
+        status = user_data_or_email.get("status", "active")
+    else:
+        email = str(user_data_or_email)
+        user = role_service.get_user_by_email(email)
+        uid = user["id"] if user else email.split("@")[0]
+        role = user["role_key"] if user else "citizen"
+        status = user["status"] if user else "active"
+
     payload = {
+        "id": uid,
         "email": email,
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=7)
+        "role": role,
+        "status": status,
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
     }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
-def init_auth_db():
-    """Initialize the users table and insert default admin if not present."""
-    conn = get_conn()
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL,
-            name TEXT,
-            email TEXT
-        )
-    ''')
-    # Auto-migrate existing tables that might lack name/email
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN name TEXT")
-    except Exception:
-        pass
-    try:
-        cursor.execute("ALTER TABLE users ADD COLUMN email TEXT")
-    except Exception:
-        pass
-
-    # Insert hardcoded admin if not exists
-    cursor.execute('SELECT username FROM users WHERE username = ?', ('admin',))
-    if not cursor.fetchone():
-        admin_hash = hash_password('12345678')
-        cursor.execute('INSERT INTO users (username, password_hash, role, name, email) VALUES (?, ?, ?, ?, ?)',
-                       ('admin', admin_hash, 'admin', 'System Administrator', 'admin@aicte.gov.in'))
-    conn.commit()
-    conn.close()
-
-def hash_password(password: str) -> str:
-    """Hash password for storage."""
-    return hashlib.sha256(password.encode()).hexdigest()
-
 def verify_login(identifier: str, password: str):
-    """Verify user credentials by username or email and return (success, user_dict_or_role)."""
+    """Verify credentials against SQLite database."""
     init_auth_db()
-    conn = get_conn()
-    cursor = conn.cursor()
-    # Check by username or email
-    cursor.execute('''
-        SELECT password_hash, role, username, name, email 
-        FROM users 
-        WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)
-    ''', (identifier.strip(), identifier.strip()))
-    row = cursor.fetchone()
-    conn.close()
-    if row and row[0] == hash_password(password):
-        user_info = {
-            "username": row[2],
-            "role": row[1],
-            "name": row[3] or row[2].title(),
-            "email": row[4] or (identifier if "@" in identifier else f"{row[2]}@aicte.gov.in"),
-        }
-        return True, user_info
-    return False, None
+    ok, result = role_service.authenticate_credentials(identifier, password)
+    if not ok:
+        return False, result
+    
+    user = result
+    user_info = {
+        "id": user["id"],
+        "username": user["normalized_email"].split("@")[0],
+        "name": user["name"],
+        "email": user["normalized_email"],
+        "role": user["role_key"],
+        "role_label": user.get("role_name", user["role_key"]),
+        "bureau_code": user.get("bureau_code") or "HQ",
+        "bureau": user.get("bureau_name") or "National Portal",
+        "region_code": user.get("region_code") or "HQ",
+        "region": user.get("region_name") or "HQ (New Delhi)",
+        "status": user["status"],
+        "permissions": user.get("permissions", []),
+    }
+    return True, user_info
 
-def register_user(username: str, password: str, role: str = "student", name: str = None, email: str = None):
-    """Register a new user to the system and persist in database."""
+def verify_google_login(email: str, name: str, sub: str = None):
+    """Resolve Google login to canonical SQLite user."""
     init_auth_db()
-    if not username or not password:
-        return False, "Username and password cannot be empty."
-    
-    clean_username = username.strip()
-    clean_email = (email or f"{clean_username}@aicte.gov.in").strip().lower()
-    clean_name = (name or clean_username.title()).strip()
-    
-    conn = get_conn()
-    cursor = conn.cursor()
-    
-    # Check if user already exists
-    cursor.execute('''
-        SELECT username FROM users 
-        WHERE LOWER(username) = LOWER(?) OR (email IS NOT NULL AND LOWER(email) = LOWER(?))
-    ''', (clean_username, clean_email))
-    if cursor.fetchone():
-        conn.close()
-        return False, "An account with this email or username already exists. Please sign in instead."
-    
+    ok, result = role_service.authenticate_google(email, name, sub)
+    if not ok:
+        return False, result
+
+    user = result
+    user_info = {
+        "id": user["id"],
+        "username": user["normalized_email"].split("@")[0],
+        "name": user["name"],
+        "email": user["normalized_email"],
+        "role": user["role_key"],
+        "role_label": user.get("role_name", user["role_key"]),
+        "bureau_code": user.get("bureau_code") or "HQ",
+        "bureau": user.get("bureau_name") or "National Portal",
+        "region_code": user.get("region_code") or "HQ",
+        "region": user.get("region_name") or "HQ (New Delhi)",
+        "status": user["status"],
+        "permissions": user.get("permissions", []),
+    }
+    return True, user_info
+
+def register_user(username: str, password: str, role: str = "citizen", name: str = None, email: str = None):
+    """Register a new user in SQLite."""
+    init_auth_db()
+    norm_email = (email or f"{username.strip()}@aicte.gov.in").strip().lower()
+    clean_name = (name or username.strip().title()).strip()
+
     try:
-        cursor.execute(
-            'INSERT INTO users (username, password_hash, role, name, email) VALUES (?, ?, ?, ?, ?)',
-            (clean_username, hash_password(password), role, clean_name, clean_email)
+        user = role_service.admin_create_user(
+            name=clean_name,
+            email=norm_email,
+            role_key=role,
+            bureau_code="HQ",
+            region_code="HQ",
+            password=password,
+            actor_id="self_registration"
         )
-        conn.commit()
         return True, {
-            "username": clean_username,
-            "role": role,
-            "name": clean_name,
-            "email": clean_email,
+            "id": user["id"],
+            "username": norm_email.split("@")[0],
+            "name": user["name"],
+            "email": user["normalized_email"],
+            "role": user["role_key"],
+            "role_label": user.get("role_name", user["role_key"]),
+            "bureau_code": user.get("bureau_code") or "HQ",
+            "bureau": user.get("bureau_name") or "National Portal",
+            "region_code": user.get("region_code") or "HQ",
+            "region": user.get("region_name") or "HQ (New Delhi)",
+            "status": user["status"],
+            "permissions": user.get("permissions", []),
         }
     except Exception as e:
         return False, str(e)
-    finally:
-        conn.close()
 
-def verify_google_login(email: str, name: str):
-    """Verify or register a user logging in via Google."""
+def update_user_role(identifier: str, role: str, actor_id: str = "admin"):
+    """Update role for a user by email or ID."""
     init_auth_db()
-    username = email.split("@")[0]
-    conn = get_conn()
-    cursor = conn.cursor()
-    cursor.execute('SELECT username, role FROM users WHERE username = ?', (username,))
-    row = cursor.fetchone()
-    if row:
-        conn.close()
-        return True, row[1]
-    
-    # Register if not exists
+    user = role_service.get_user_by_email(identifier) or role_service.get_user_by_id(identifier)
+    if not user:
+        return False
     try:
-        # Determine default role (admin for admin / caleb, student for others)
-        email_lower = email.lower()
-        role = "admin" if ("admin" in email_lower or "caleb" in email_lower) else "student"
-        cursor.execute('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
-                       (username, hash_password("google_sso_dummy_hash"), role))
-        conn.commit()
-        return True, role
+        role_service.admin_update_assignment(
+            target_user_id=user["id"],
+            role_key=role,
+            bureau_code=user.get("bureau_code"),
+            region_code=user.get("region_code"),
+            actor_id=actor_id
+        )
+        return True
     except Exception as e:
-        print("[Google Auth] Error registering user in DB:", e)
-        # Even if DB insert fails (e.g. read-only DB), still allow authentication with default role
-        return True, 'faculty'
-    finally:
-        conn.close()
-
-def update_user_role(identifier: str, role: str):
-    """Update role for a user by username or email."""
-    init_auth_db()
-    conn = get_conn()
-    cursor = conn.cursor()
-    cursor.execute('''
-        UPDATE users 
-        SET role = ? 
-        WHERE LOWER(username) = LOWER(?) OR (email IS NOT NULL AND LOWER(email) = LOWER(?))
-    ''', (role, identifier.strip(), identifier.strip()))
-    conn.commit()
-    conn.close()
-    return True
+        print(f"[update_user_role error] {e}")
+        return False
 
 def list_all_users():
-    """List all registered users from auth DB."""
+    """List all users from the SQLite database."""
     init_auth_db()
-    conn = get_conn()
-    cursor = conn.cursor()
-    cursor.execute('SELECT username, role, name, email FROM users ORDER BY username ASC')
-    rows = cursor.fetchall()
-    conn.close()
-    return [{"username": r[0], "role": r[1], "name": r[2], "email": r[3]} for r in rows]
-
+    return role_service.list_all_users()

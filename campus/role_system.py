@@ -1,8 +1,8 @@
 # ============================================================
-# campus/role_system.py — Role-Aware Response System
+# campus/role_system.py — Native Role System
 # ============================================================
-# Defines role-specific behaviors, tones, and access controls
-# for the CampusFlow autonomous agent.
+# Defines native role behaviors, tones, and access controls
+# for the VigilOS platform.
 # ============================================================
 
 from typing import Optional
@@ -10,36 +10,54 @@ from typing import Optional
 # ── ROLE DEFINITIONS ────────────────────────────────────────────────
 
 ROLES = {
-    "student": {
-        "name": "Student",
-        "display_name": "Student",
-        "description": "A student requesting lab bookings, leave, room bookings, or reporting complaints.",
+    "citizen": {
+        "name": "Citizen",
+        "display_name": "Citizen / Complainant",
+        "description": "Public complainant filing grievances and tracking complaint progress.",
         "tone": "friendly, supportive, simple",
         "language_level": "non-technical",
-        "behavior": "Guide, suggest, explain clearly with step-by-step help",
-        "icon": "🎓",
+        "behavior": "Guide, explain clearly with step-by-step help, confirm grievance details",
+        "icon": "👤",
     },
-    "teacher": {
-        "name": "Teacher",
-        "display_name": "Teacher",
-        "description": "A teacher who reviews requests, monitors students, and enforces policies.",
-        "tone": "professional, instructional",
+    "nodal_officer": {
+        "name": "Nodal Officer",
+        "display_name": "Regional Nodal Officer",
+        "description": "State and regional institutional liaison officer handling field investigations and regional liaison.",
+        "tone": "professional, investigative, collaborative",
         "language_level": "moderately technical",
-        "behavior": "Provide actionable insights, enforce academic policies, assist in decision-making",
-        "icon": "👨‍🏫",
+        "behavior": "Provide institutional liaison updates, coordinate state/regional actions",
+        "icon": "🌐",
     },
-    "admin": {
-        "name": "Admin",
-        "display_name": "Administrator",
-        "description": "An administrator who needs system-level insights and operational control.",
+    "approval_officer": {
+        "name": "Approval Officer",
+        "display_name": "Approval Officer",
+        "description": "Grievance case handler and investigator handling complaints, inspections, and evidence review.",
+        "tone": "thorough, analytical, administrative",
+        "language_level": "professional and compliance-oriented",
+        "behavior": "Review grievances, verify evidence, issue orders, manage hearings and compliance",
+        "icon": "📋",
+    },
+    "bureau_head": {
+        "name": "Bureau Head",
+        "display_name": "Bureau Head",
+        "description": "Bureau chief (RB / PGRC / Regional Offices) supervising case resolution and escalation decisions.",
+        "tone": "authoritative, strategic, regulatory",
+        "language_level": "executive and regulatory",
+        "behavior": "Oversee bureau caseload, resolve cross-bureau conflicts, approve escalated actions",
+        "icon": "🏛️",
+    },
+    "super_admin": {
+        "name": "Super Admin",
+        "display_name": "Super Admin",
+        "description": "Central Vigilance and Platform Administrator with full operational governance across all bureaus.",
         "tone": "concise, authoritative, operational",
         "language_level": "technical and system-oriented",
-        "behavior": "Focus on control, overrides, summaries, KPIs, and system-level insights",
-        "icon": "⚙️",
+        "behavior": "System-wide oversight, cross-bureau arbitration, role management, audit logging",
+        "icon": "🔑",
     },
 }
 
-DEFAULT_ROLE = "student"
+DEFAULT_ROLE = "citizen"
 
 
 # ── ROLE-BASED SYSTEM PROMPTS ────────────────────────────────────────
@@ -49,7 +67,7 @@ def get_role_system_prompt(role: str, context: Optional[dict] = None) -> str:
     Generate a role-specific system prompt that gets injected into every LLM call.
     
     Args:
-        role: The current user role (student, teaching_assistant, admin)
+        role: The current user role (citizen, nodal_officer, approval_officer, bureau_head, super_admin)
         context: Optional context about the current workflow (workflow_type, etc.)
     
     Returns:
@@ -57,7 +75,7 @@ def get_role_system_prompt(role: str, context: Optional[dict] = None) -> str:
     """
     role_info = ROLES.get(role, ROLES[DEFAULT_ROLE])
     
-    base_prompt = f"""You are CampusFlow's autonomous campus assistant."""
+    base_prompt = f"""You are VigilOS's autonomous complaint intelligence and cross-bureau assistant."""
     
     role_instruction = f"""
 ## ROLE CONTEXT
@@ -70,52 +88,58 @@ You are responding as: **{role_info['display_name']}**
 
 """
     
-    # Role-specific instructions
-    if role == "student":
+    if role == "citizen":
         role_instruction += """\
-**For STUDENTS:**
+**For CITIZENS / COMPLAINANTS:**
 - Use friendly, conversational language that is easy to understand
-- Explain technical terms when you use them
-- Provide step-by-step guidance for any process
+- Explain technical and regulatory terms when you use them
+- Provide step-by-step guidance for filing or checking grievances
 - Be encouraging and supportive
 - Always explain the "why" behind decisions
-- When approving/rejecting requests, clearly state what happens next
-- Suggest alternatives if the first option isn't available
-- Use emojis appropriately to keep the tone light and approachable
+- When complaints are received, clearly state the next procedural step
+- Suggest alternatives or support channels if a request cannot be processed
 """
-    elif role == "teacher":
+    elif role == "nodal_officer":
         role_instruction += """\
-**For TEACHERS:**
-- Maintain a professional, instructional tone
-- Be concise but thorough — Teachers appreciate efficiency
-- Reference academic policies and rules when relevant
-- Provide actionable next steps
-- When escalate is needed, clearly explain the escalation path
-- Offer insights that help with course management
-- Include relevant policy details in your responses
-- Be direct
+**For REGIONAL NODAL OFFICERS:**
+- Focus on regional liaison, institution coordination, and state-level compliance
+- Include institutional identifiers (AICTE PID, region, state) in responses
+- Highlight geographic overlap patterns and regional inspection status
+- Coordinate communication between institutions and AICTE headquarters
 """
-    elif role == "admin":
+    elif role == "approval_officer":
         role_instruction += """\
-**For ADMINISTRATORS:**
+**For APPROVAL OFFICERS:**
+- Maintain an investigative, compliance-oriented, and thorough tone
+- Be concise but rigorous — officers need actionable evidence and facts
+- Reference AICTE Approval Process Handbook (APH) regulations and grievance norms
+- Provide clear findings, violation citations, and recommended actions
+- Highlight case overlap and duplicate inspection risks
+"""
+    elif role == "bureau_head":
+        role_instruction += """\
+**For BUREAU HEADS (RB / PGRC / Regional Offices):**
+- Be authoritative, strategic, and governance-focused
+- Focus on cross-bureau coordination, SLA deadlines, and escalated decisions
+- Provide summary assessments across multiple related complaints
+- Highlight jurisdictional overlap and recommend arbitration paths
+"""
+    elif role == "super_admin":
+        role_instruction += """\
+**For SUPER ADMINISTRATORS:**
 - Be concise, authoritative, and operational
-- Focus on system-level insights, KPIs, and operational data
-- Use technical terminology freely
-- Include relevant system IDs, timestamps, and metrics
-- When showing data, present it in a structured, summary format
-- Highlight any policy violations or anomalies
-- Provide override capabilities when relevant
-- Include audit-relevant information (who, what, when)
-- Focus on efficiency and actionable outcomes
+- Focus on platform-wide insights, cross-bureau KPIs, and security/audit trails
+- Include system IDs, timestamps, and confidence scores
+- Highlight anomalies, policy violations, and unacknowledged overlaps
+- Provide override capabilities and audit context
 """
 
-    # Add workflow context if provided
     if context:
         workflow = context.get("workflow_type", "")
         if workflow:
             role_instruction += f"""
 ### Current Workflow Context
-You are currently handling a **{workflow.replace('_', ' ').title()}** request.
+You are currently handling a **{workflow.replace('_', ' ').title()}** workflow.
 """
 
     return base_prompt + role_instruction
@@ -126,7 +150,6 @@ You are currently handling a **{workflow.replace('_', ' ').title()}** request.
 def modulate_response(base_response: str, role: str, workflow_type: str = "") -> str:
     """
     Modulate a response based on the current role.
-    This function can adjust the tone and content of pre-generated responses.
     
     Args:
         base_response: The original response content
@@ -138,25 +161,23 @@ def modulate_response(base_response: str, role: str, workflow_type: str = "") ->
     """
     role_info = ROLES.get(role, ROLES[DEFAULT_ROLE])
     
-    # For admin, we can add system-level metadata
-    if role == "admin" and workflow_type:
+    if role == "super_admin" and workflow_type:
         admin_footer = f"""
 ---
-*[{role_info['icon']} View in Automation tab for detailed logs, audit trail, and KPIs.]*"""
+*[{role_info['icon']} View in Admin Portal for audit trail, cross-bureau graph, and KPIs.]*"""
         return base_response + admin_footer
     
-    # For students, add friendly footer
-    elif role == "student":
-        student_footer = f"""
+    elif role == "citizen":
+        citizen_footer = f"""
 ---
-{role_info['icon']} Need help with anything else? Feel free to ask!"""
-        return base_response + student_footer
+{role_info['icon']} Need help with another grievance or inquiry? Feel free to ask!"""
+        return base_response + citizen_footer
     
-    elif role == "teacher":
-        ta_footer = f"""
+    elif role in ("approval_officer", "bureau_head", "nodal_officer"):
+        officer_footer = f"""
 ---
-{role_info['icon']} View full details in the Automation tab."""
-        return base_response + ta_footer
+{role_info['icon']} View full case details and evidence in the Cases tab."""
+        return base_response + officer_footer
     
     return base_response
 
@@ -174,48 +195,41 @@ def get_visible_fields(role: str, data_type: str) -> list[str]:
     Returns:
         List of field names that are visible to this role
     """
-    # All roles can see basic fields
     basic_fields = ["id", "type", "status", "created_at"]
     
     if data_type == "request":
-        if role == "student":
-            # Students see limited info about their own requests
+        if role == "citizen":
             return basic_fields + ["workflow_type", "policy_result", "policy_reason"]
-        elif role == "teacher":
-            # Teachers see more detail but not system internals
+        elif role in ("nodal_officer", "approval_officer"):
             return basic_fields + ["workflow_type", "policy_result", "policy_reason", 
-                                   "schema_json", "alternatives"]
-        else:  # admin
-            # Admins see everything
+                                   "schema_json", "alternatives", "actor_role"]
+        else:  # bureau_head, super_admin
             return basic_fields + ["workflow_type", "policy_result", "policy_reason", 
                                    "schema_json", "alternatives", "actor_role", "audit_trail"]
     
     elif data_type == "session":
-        if role == "student":
+        if role == "citizen":
             return basic_fields + ["title", "workflow_type"]
-        elif role == "teacher":
+        elif role in ("nodal_officer", "approval_officer"):
             return basic_fields + ["title", "workflow_type", "role"]
-        else:  # admin
+        else:  # bureau_head, super_admin
             return basic_fields + ["title", "workflow_type", "role", "all_metadata"]
     
     elif data_type == "kpi":
-        if role == "student":
-            # Students don't see KPIs
+        if role == "citizen":
             return []
-        elif role == "teacher":
-            # Teachers see basic KPIs
+        elif role in ("nodal_officer", "approval_officer"):
             return ["total_requests", "resolution_rate_pct"]
-        else:  # admin
-            # Admins see all KPIs
+        else:  # bureau_head, super_admin
             return ["total_requests", "resolution_rate_pct", "avg_resolution_mins",
                     "resolved", "by_workflow", "escalation_rate", "rejection_rate"]
     
     elif data_type == "logs":
-        if role == "student":
-            return ["timestamp", "message"]  # Only basic log info
-        elif role == "teacher":
+        if role == "citizen":
+            return ["timestamp", "message"]
+        elif role in ("nodal_officer", "approval_officer", "bureau_head"):
             return ["timestamp", "message", "level"]
-        else:  # admin
+        else:  # super_admin
             return ["timestamp", "message", "level", "stack_trace", "metadata"]
     
     return basic_fields
@@ -233,23 +247,36 @@ def can_access(role: str, resource: str, action: str = "read") -> bool:
     Returns:
         True if access is allowed, False otherwise
     """
-    # Define role permissions
     permissions = {
-        "student": {
+        "citizen": {
             "request": ["read", "write"],
             "session": ["read", "write"],
             "logs": ["read"],
-            "kpi": [],  # No KPI access
+            "kpi": [],
             "admin": [],
         },
-        "teacher": {
+        "nodal_officer": {
+            "request": ["read", "write"],
+            "session": ["read", "write"],
+            "logs": ["read", "write"],
+            "kpi": ["read"],
+            "admin": [],
+        },
+        "approval_officer": {
             "request": ["read", "write", "admin"],
             "session": ["read", "write"],
             "logs": ["read", "write"],
             "kpi": ["read"],
             "admin": [],
         },
-        "admin": {
+        "bureau_head": {
+            "request": ["read", "write", "delete", "admin"],
+            "session": ["read", "write", "delete"],
+            "logs": ["read", "write"],
+            "kpi": ["read", "admin"],
+            "admin": [],
+        },
+        "super_admin": {
             "request": ["read", "write", "delete", "admin"],
             "session": ["read", "write", "delete"],
             "logs": ["read", "write", "delete"],
@@ -267,24 +294,30 @@ def can_access(role: str, resource: str, action: str = "read") -> bool:
 def get_access_denied_message(role: str, resource: str, action: str) -> str:
     """Return a role-appropriate message when access is denied."""
     messages = {
-        "student": {
-            "kpi": "KPI data is only available to staff and administrators.",
-            "admin": "You don't have permission to access administrative functions.",
+        "citizen": {
+            "kpi": "Analytics and KPI data are only available to authorized AICTE officials.",
+            "admin": "Super Admin privileges are required to access administrative functions.",
         },
-        "teacher": {
-            "admin": "You don't have permission to access administrative functions.",
+        "nodal_officer": {
+            "admin": "Super Admin privileges are required to access administrative functions.",
         },
-        "admin": {},
+        "approval_officer": {
+            "admin": "Super Admin privileges are required to access administrative functions.",
+        },
+        "bureau_head": {
+            "admin": "Super Admin privileges are required to access administrative functions.",
+        },
+        "super_admin": {},
     }
     
     return messages.get(role, {}).get(resource, 
         f"Access denied: You don't have permission to {action} {resource}.")
 
 
-# ── ROLE SWITCHING ────────────────────────────────────────────────────
+# ── ROLE SWITCHING & HELPERS ──────────────────────────────────────────
 
 def validate_role(role: str) -> bool:
-    """Check if a role is valid."""
+    """Check if a role is valid in the native role system."""
     return role in ROLES
 
 

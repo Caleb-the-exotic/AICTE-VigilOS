@@ -123,17 +123,17 @@ function Profile() {
               <Shield className="w-3.5 h-3.5 text-primary" /> Official Role Designation
             </span>
             <div className="h-10 px-4 rounded-xl bg-secondary/60 border border-border/50 text-xs font-semibold text-foreground flex items-center gap-2.5 min-w-[240px] w-full sm:w-auto shadow-sm select-none">
-              {user.role === "admin" && <span>🔑</span>}
-              {user.role === "hod" && <span>🏛️</span>}
-              {user.role === "faculty" && <span>📋</span>}
-              {user.role === "ambassador" && <span>🌐</span>}
-              {user.role === "student" && <span>👤</span>}
+              {user.role === "super_admin" && <span>🔑</span>}
+              {user.role === "bureau_head" && <span>🏛️</span>}
+              {user.role === "approval_officer" && <span>📋</span>}
+              {user.role === "nodal_officer" && <span>🌐</span>}
+              {user.role === "citizen" && <span>👤</span>}
               <span className="truncate">
-                {user.role === "faculty" && "Approval Officer (Case Handler)"}
-                {user.role === "hod" && "Bureau Head (RB / PGRC / RO)"}
-                {user.role === "admin" && "Super Admin (Central Vigilance)"}
-                {user.role === "ambassador" && "State / Regional Nodal Officer"}
-                {user.role === "student" && "Citizen / Complainant"}
+                {user.role === "approval_officer" && "Approval Officer (Case Handler)"}
+                {user.role === "bureau_head" && "Bureau Head (RB / PGRC / RO)"}
+                {user.role === "super_admin" && "Super Admin (Central Vigilance)"}
+                {user.role === "nodal_officer" && "State / Regional Nodal Officer"}
+                {user.role === "citizen" && "Citizen / Complainant"}
               </span>
             </div>
           </div>
@@ -156,7 +156,7 @@ function Profile() {
             </span>
           </button>
 
-          {user.role === "admin" ? (
+          {user.role === "super_admin" ? (
             <button
               type="button"
               onClick={() => navigate({ to: "/admin" })}

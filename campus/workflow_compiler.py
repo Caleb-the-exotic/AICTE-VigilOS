@@ -58,7 +58,7 @@ class WorkflowCompiler:
         self.client = client
         self.model = model
 
-    def compile(self, query_text: str, role: str = "student", username: str = "STU001") -> WorkflowPlan:
+    def compile(self, query_text: str, role: str = "citizen", username: str = "STU001") -> WorkflowPlan:
         """
         Compile a query into a DAG WorkflowPlan.
         First, determines the intent type. Then builds the corresponding graph structure.

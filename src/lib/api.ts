@@ -119,10 +119,51 @@ export const api = {
       "/api/admin/event-bus"
     ),
 
+  getMe: () => request<ApiUser>("/api/auth/me"),
+
+  adminGetMetadata: () =>
+    request<{
+      bureaus: Array<{ id: string; code: string; name: string; description: string }>;
+      regions: Array<{ id: string; code: string; name: string }>;
+    }>("/api/admin/metadata"),
+
   adminGetUsers: () =>
-    request<Array<{ username: string; name: string; email: string; role: ApiUser["role"] }>>(
+    request<Array<ApiUser & { created_at?: string; updated_at?: string }>>(
       "/api/admin/users"
     ),
+
+  adminCreateUser: (data: {
+    name: string;
+    email: string;
+    role: string;
+    bureau?: string;
+    region?: string;
+    password?: string;
+  }) =>
+    request<{ status: string; user: ApiUser }>("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  adminUpdateAssignment: (
+    userId: string,
+    data: { role: string; bureau?: string; region?: string }
+  ) =>
+    request<{ status: string; user: ApiUser }>(`/api/admin/users/${userId}/assignment`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  adminToggleStatus: (userId: string, status: string) =>
+    request<{ status: string; user: ApiUser }>(`/api/admin/users/${userId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+
+  adminDeleteUser: (userId: string) =>
+    request<{ ok: true }>(`/api/admin/users/${userId}`, {
+      method: "DELETE",
+    }),
 
   adminUpdateUserRole: (email: string, role: string) =>
     request<{ status: string; email: string; role: string }>("/api/admin/users/role", {
@@ -136,7 +177,14 @@ export interface ApiUser {
   id: string;
   email: string;
   name: string;
-  role: "student" | "ambassador" | "faculty" | "hod" | "admin";
+  role: "citizen" | "nodal_officer" | "approval_officer" | "bureau_head" | "super_admin";
+  role_label?: string;
+  bureau_code?: string;
+  bureau?: string;
+  region_code?: string;
+  region?: string;
+  status?: string;
+  permissions?: string[];
 }
 export interface ChatSession {
   id: string;

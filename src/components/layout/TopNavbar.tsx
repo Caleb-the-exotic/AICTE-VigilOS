@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { LogOut, Sun, Moon, Menu, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/lib/auth";
+import { useAuth, formatRole } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
 
 export default function TopNavbar({ sidebarCollapsed, onMenuClick }: { sidebarCollapsed: boolean; onMenuClick?: () => void }) {
@@ -40,7 +40,7 @@ export default function TopNavbar({ sidebarCollapsed, onMenuClick }: { sidebarCo
           </div>
           <div className="text-left hidden md:block">
             <div className="text-xs font-medium leading-tight">{user?.name || "Guest"}</div>
-            <div className="text-[10px] text-muted-foreground capitalize leading-tight">{user?.role || "—"}</div>
+            <div className="text-[10px] text-muted-foreground leading-tight">{formatRole(user?.role)}</div>
           </div>
         </Link>
 

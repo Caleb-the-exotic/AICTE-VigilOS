@@ -44,7 +44,7 @@ function Dashboard() {
               <h1 className="text-6xl md:text-8xl font-extrabold tracking-tight font-display text-white leading-none">
                 Vigil<span className="text-gradient-red">OS</span>
               </h1>
-              <p className="text-base md:text-xl text-muted-foreground mt-3 font-medium tracking-wide">
+              <p className="text-base md:text-xl text-white dark:text-muted-foreground mt-3 font-medium tracking-wide">
                 AICTE Complaint & Cross-Bureau Intelligence Platform
               </p>
               <button

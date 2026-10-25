@@ -50,8 +50,8 @@ def _is_attendance_query(text: str, role: str = "") -> bool:
         return False
         
     has_id = bool(_ATTENDANCE_RE.search(text))
-    # If a student uses personal pronouns + attendance keyword, assume it's their own
-    is_personal_query = role == "student" and any(w in lower for w in ["my", "mine", "i "])
+    # If a citizen uses personal pronouns + attendance keyword, assume it's their own
+    is_personal_query = role == "citizen" and any(w in lower for w in ["my", "mine", "i "])
     return has_id or is_personal_query
 
 

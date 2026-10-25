@@ -46,7 +46,7 @@ function RequestDetail() {
   }
 
   const isOwner = user?.id === r.studentId || user?.name === r.studentName;
-  const canReview = user && (user.role === "faculty" || user.role === "hod" || user.role === "admin");
+  const canReview = user && (user.role === "approval_officer" || user.role === "bureau_head" || user.role === "super_admin");
   const policy = r.policy ?? generatePolicy();
 
   const decide = (status: "approved" | "rejected") => {
@@ -62,7 +62,7 @@ function RequestDetail() {
   };
 
   const withdraw = () => {
-    requestsStore.withdraw(r.id, user?.name || "Student");
+    requestsStore.withdraw(r.id, user?.name || "Citizen");
     toast.success("Request withdrawn");
     force((x) => x + 1);
   };

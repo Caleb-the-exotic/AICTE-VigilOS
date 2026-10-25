@@ -119,7 +119,7 @@ def _direct_fallback(tool_name: str, args: Dict[str, Any],
             if client:
                 return classifier.classify(args["query_text"], client,
                                            args.get("model", "llama-3.3-70b-versatile"),
-                                           args.get("role", "student"))
+                                           args.get("role", "citizen"))
             return classifier._keyword_fallback(args["query_text"])
 
         elif tool_name == "check_availability":
@@ -154,7 +154,7 @@ def _direct_fallback(tool_name: str, args: Dict[str, Any],
                 answer = web_researcher.synthesize_answer(
                     args["query"], search_data, client,
                     args.get("model", "llama-3.3-70b-versatile"),
-                    args.get("role", "student"),
+                    args.get("role", "citizen"),
                 )
             else:
                 answer = search_data.get("answer", "No answer.")
@@ -170,7 +170,7 @@ def _direct_fallback(tool_name: str, args: Dict[str, Any],
                 "alternatives": args.get("alternatives", []),
             }
             return notifier.notify(args.get("workflow_type", ""), args.get("schema", {}),
-                                   policy, args.get("role", "student"))
+                                   policy, args.get("role", "citizen"))
 
         else:
             return {"error": f"Unknown tool: {tool_name}"}
@@ -217,7 +217,7 @@ def mcp_web_search(query: str, tavily_api_key: str, groq_api_key: str,
 
 def mcp_send_notification(workflow_type: str, schema: dict,
                            policy_result: str, policy_reason: str,
-                           alternatives: list = None, role: str = "student",
+                           alternatives: list = None, role: str = "citizen",
                            on_log=None) -> dict:
     return call_tool("send_notification", {
         "workflow_type": workflow_type, "schema": schema,

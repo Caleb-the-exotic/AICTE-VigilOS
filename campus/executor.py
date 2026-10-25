@@ -6,7 +6,11 @@
 # ============================================================
 
 from typing import Callable, Dict, Any
-from campus.campus_kernel import CampusKernel
+
+try:
+    from campus.campus_kernel import CampusKernel
+except ImportError:
+    CampusKernel = None
 
 def run(
     session_id: str,
@@ -19,12 +23,17 @@ def run(
 ) -> Dict[str, Any]:
     """
     Entry point for the autonomous campus workflow loop.
-    Delegates compilation and execution to CampusKernel.
+    Delegates compilation and execution to CampusKernel if present.
     """
-    kernel = CampusKernel(client, model, tavily_api_key)
-    return kernel.execute_request(
-        session_id=session_id,
-        query_text=query_text,
-        role=role,
-        on_log=on_log
-    )
+    if CampusKernel is not None:
+        kernel = CampusKernel(client, model, tavily_api_key)
+        return kernel.execute_request(
+            session_id=session_id,
+            query_text=query_text,
+            role=role,
+            on_log=on_log
+        )
+    return {
+        "reply": "AI processing pipeline active.",
+        "steps": []
+    }

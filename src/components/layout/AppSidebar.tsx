@@ -43,8 +43,8 @@ export default function AppSidebar({ collapsed, onToggle }: Props) {
     return () => { window.removeEventListener("mail-updated", f); window.removeEventListener("dm-updated", f); };
   }, []);
 
-  const role = user?.role ?? "officer";
-  const items = user?.role === "admin" ? [...coreNavItems, adminNavItem] : coreNavItems;
+  const role = user?.role ?? "approval_officer";
+  const items = user?.role === "super_admin" ? [...coreNavItems, adminNavItem] : coreNavItems;
 
   return (
     <aside className={cn("fixed left-0 top-0 h-full z-40 border-r border-border/30 transition-all duration-300 flex flex-col bg-gradient-to-b from-sidebar to-background/95 scrollbar-thin", collapsed ? "w-16" : "w-64")}>

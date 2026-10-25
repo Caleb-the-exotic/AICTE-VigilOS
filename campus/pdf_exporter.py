@@ -69,7 +69,7 @@ def generate_chat_pdf(session_id: str, username: str, user_role: str) -> bytes:
     story.append(Paragraph(f"CampusFlow Chat Export", header_style))
     story.append(Paragraph(f"<b>Session ID:</b> {session_id}", meta_style))
     story.append(Paragraph(f"<b>Session Name:</b> {title}", meta_style))
-    story.append(Paragraph(f"<b>Requested By:</b> {username} ({user_role.title()})", meta_style))
+    story.append(Paragraph(f"<b>Requested By:</b> {username} ({user_role.replace('_', ' ').title()})", meta_style))
     story.append(Paragraph(f"<b>Exported Date:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", meta_style))
     story.append(HRFlowable(width="100%", thickness=1, color=colors.lightgrey, spaceBefore=8, spaceAfter=16))
 
