@@ -50,10 +50,29 @@ try:
 except ImportError:
     _OVERLAP_AGENT_AVAILABLE = False
 
-# ── Init DB on startup ───────────────────────────────────────────
+# ── Init DB & Auto-Seed on startup ───────────────────────────────
 try:
+    db.init_db()
     auth.init_auth_db()
     comms_migration.run_comms_migration()
+
+    # Automatically seed fresh PostgreSQL database on first deployment
+    try:
+        conn = db.get_conn()
+        cur = conn.cursor()
+        cur.execute("SELECT count(*) as cnt FROM aicte_institutions")
+        row = cur.fetchone()
+        inst_cnt = row["cnt"] if row else 0
+        conn.close()
+
+        if inst_cnt == 0:
+            print("[Auto-Seeder] PostgreSQL has 0 institutions. Running initial migration from campusflow.db...")
+            from campus.migrate_sqlite_to_pg import run_data_migration
+            db_url = os.getenv("DATABASE_URL") or "postgresql://postgres@localhost:5433/campusflow"
+            run_data_migration(db_url)
+            print("[Auto-Seeder] Initial database seeding completed successfully!")
+    except Exception as seed_err:
+        print("[Auto-Seeder Notice]", seed_err)
 except Exception as e:
     print("[DB Init Notice]", e)
 
@@ -2328,4 +2347,5 @@ def analyze_overlap_pair(body: AnalyzePairBody, user: dict = Depends(_get_curren
 # ═══════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("api_server:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("api_server:app", host="0.0.0.0", port=port)
