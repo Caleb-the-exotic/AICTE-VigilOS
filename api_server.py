@@ -33,7 +33,7 @@ load_dotenv()
 
 
 # ── Campus backend imports ───────────────────────────────────────
-from campus import db, auth, pdf_exporter, role_service, gmail_mailer
+from campus import db, auth, pdf_exporter, role_service, gmail_mailer, comms_service, comms_migration
 from campus.executor import run as campus_run
 
 # ── Multi-Agent Kernel & Event Bus ──────────────────────────────
@@ -53,8 +53,9 @@ except ImportError:
 # ── Init DB on startup ───────────────────────────────────────────
 try:
     auth.init_auth_db()
-except Exception:
-    pass
+    comms_migration.run_comms_migration()
+except Exception as e:
+    print("[DB Init Notice]", e)
 
 # ── Start Event Bus worker thread ────────────────────────────────
 if _EVENT_BUS_AVAILABLE:
@@ -144,7 +145,10 @@ def _get_current_user(
 
     status = user.get("status", "active")
     if status != "active":
-        raise HTTPException(status_code=403, detail=f"Account is {status}. Access restricted.")
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been deactivated. Please contact your administrator for assistance."
+        )
 
     role = user.get("role_key") or user.get("role") or "citizen"
     return {
@@ -159,6 +163,8 @@ def _get_current_user(
         "bureau": user.get("bureau_name") or user.get("bureau", "National Portal"),
         "region_code": user.get("region_code") or "HQ",
         "region": user.get("region_name") or user.get("region", "HQ (New Delhi)"),
+        "institution": user.get("institution") or (f"AICTE {user.get('bureau_name', 'Headquarters')}" if role != "citizen" else "Independent Citizen"),
+        "department": user.get("department") or user.get("bureau_name") or "General",
         "status": status,
         "two_factor_enabled": bool(user.get("two_factor_enabled", False)),
         "permissions": user.get("permissions", []),
@@ -195,7 +201,8 @@ def login(body: LoginBody):
     identifier = body.email.strip()
     ok, result = auth.verify_login(identifier, body.password)
     if not ok:
-        raise HTTPException(status_code=401, detail=result or "Invalid email/username or password")
+        status_code = 403 if "deactivated" in str(result).lower() else 401
+        raise HTTPException(status_code=status_code, detail=result or "Invalid email/username or password")
     
     # Check if Two-Factor Authentication (2FA) is enabled for this account
     user_id = result["id"]
@@ -285,7 +292,8 @@ def google_login(body: GoogleLoginBody):
     
     ok, result = auth.verify_google_login(email, name, sub)
     if not ok:
-        raise HTTPException(status_code=403, detail=result or "Google login unauthorized")
+        status_code = 403 if "deactivated" in str(result).lower() else 401
+        raise HTTPException(status_code=status_code, detail=result or "Google login unauthorized")
         
     jwt_token = auth.create_jwt(result)
     _token_store[jwt_token] = result
@@ -691,6 +699,11 @@ class AdminUpdateAssignmentBody(BaseModel):
 class AdminToggleStatusBody(BaseModel):
     status: str
 
+class AdminUpdateUserProfileBody(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
+
 @app.get("/api/admin/metadata")
 def admin_get_metadata(user: dict = Depends(_get_current_user)):
     """Return bureaus and regions reference tables."""
@@ -739,6 +752,23 @@ def admin_update_assignment_endpoint(user_id: str, body: AdminUpdateAssignmentBo
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.patch("/api/admin/users/{user_id}/profile")
+def admin_update_user_profile_endpoint(user_id: str, body: AdminUpdateUserProfileBody, user: dict = Depends(_get_current_user)):
+    """Update personnel official name, email, and/or password."""
+    if not role_service.has_permission(user, "users:manage"):
+        raise HTTPException(status_code=403, detail="Super Admin privileges required")
+    try:
+        updated = role_service.admin_update_user_profile(
+            target_user_id=user_id,
+            name=body.name,
+            email=body.email,
+            password=body.password,
+            actor_id=user["id"]
+        )
+        return {"status": "ok", "user": updated}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.patch("/api/admin/users/{user_id}/status")
 def admin_toggle_status_endpoint(user_id: str, body: AdminToggleStatusBody, user: dict = Depends(_get_current_user)):
     if not role_service.has_permission(user, "users:manage"):
@@ -749,7 +779,16 @@ def admin_toggle_status_endpoint(user_id: str, body: AdminToggleStatusBody, user
             new_status=body.status,
             actor_id=user["id"]
         )
+        if body.status != "active":
+            # Evict all active in-memory tokens for the deactivated user
+            target_email = (updated.get("email") or "").lower()
+            for token_key in list(_token_store.keys()):
+                entry = _token_store.get(token_key, {})
+                entry_email = (entry.get("email") or entry.get("normalized_email") or "").lower()
+                if entry.get("id") == user_id or (target_email and entry_email == target_email):
+                    _token_store.pop(token_key, None)
         return {"status": "ok", "user": updated}
+
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -758,8 +797,19 @@ def admin_delete_user_endpoint(user_id: str, user: dict = Depends(_get_current_u
     if not role_service.has_permission(user, "users:manage"):
         raise HTTPException(status_code=403, detail="Super Admin privileges required")
     try:
+        target = role_service.get_user_by_id(user_id)
+        target_email = (target.get("normalized_email") or target.get("email") or "").lower() if target else ""
+
         role_service.admin_delete_user(user_id, user["id"])
-        return {"ok": True}
+
+        # Evict all active in-memory tokens for the deleted user
+        for token_key in list(_token_store.keys()):
+            entry = _token_store.get(token_key, {})
+            entry_email = (entry.get("email") or entry.get("normalized_email") or "").lower()
+            if entry.get("id") == user_id or (target_email and entry_email == target_email):
+                _token_store.pop(token_key, None)
+
+        return {"ok": True, "message": "User permanently deleted."}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -882,9 +932,10 @@ def _run_query_job(job_id: str, session_id: str, query_text: str, role: str) -> 
             "logs": logs[-20:],
         }
     except Exception as e:
-        error_msg = f"⚠️ Backend error: {str(e)}"
+        error_msg = f"[ERROR] Backend error: {str(e)}"
         db.add_message(session_id, "assistant", error_msg)
         _bg_jobs[job_id] = {"status": "error", "result": None, "error": error_msg, "logs": logs[-20:]}
+
 
 
 @app.post("/api/chat/query")
@@ -968,9 +1019,10 @@ def chat_query(
     except HTTPException:
         raise
     except Exception as e:
-        error_msg = f"⚠️ Backend error: {str(e)}"
+        error_msg = f"[ERROR] Backend error: {str(e)}"
         db.add_message(session_id, "assistant", error_msg)
         return {"reply": error_msg, "workflow": None}
+
 
 
 @app.get("/api/chat/job/{job_id}")
@@ -1019,6 +1071,339 @@ def send_live_chat_endpoint(body: LiveChatMessageIn, authorization: Optional[str
         text=body.text.strip(),
     )
     return msg
+
+@app.delete("/api/live-chat/messages/{message_id}")
+def delete_live_chat_endpoint(message_id: str, user: dict = Depends(_get_current_user)):
+    """Delete a live chat message. Restricted to administrators (super_admin or users:manage permission)."""
+    is_admin = (
+        user.get("role_key") in ("super_admin", "admin") or
+        user.get("role") in ("super_admin", "admin") or
+        role_service.has_permission(user, "users:manage")
+    )
+    if not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Administrative privileges required to delete live chat messages."
+        )
+
+    ok = db.delete_live_chat_message(message_id, actor_id=user["id"])
+    if not ok:
+        raise HTTPException(status_code=404, detail="Message not found or already deleted.")
+    return {"ok": True, "id": message_id}
+
+
+# ═══════════════════════════════════════════════════════════════
+# INTERNAL COMMUNICATIONS & MESSAGES APP APIS
+# ═══════════════════════════════════════════════════════════════
+class SendInternalMessageBody(BaseModel):
+    to: List[str]
+    subject: str
+    body: str
+    in_reply_to: Optional[str] = None
+    thread_id: Optional[str] = None
+    send_external_email: Optional[bool] = True
+    attachments: Optional[List[dict]] = None
+    idempotency_key: Optional[str] = None
+    draft_id: Optional[str] = None
+
+class UpdateMessageStateBody(BaseModel):
+    read: Optional[bool] = None
+    starred: Optional[bool] = None
+    folder: Optional[str] = None
+    labels: Optional[List[str]] = None
+
+class BulkMessageActionBody(BaseModel):
+    message_ids: List[str]
+    action: str  # trash, restore, delete_permanently, read, unread, star, unstar, add_label, remove_label
+    label_name: Optional[str] = None
+
+class SaveDraftBody(BaseModel):
+    draft_id: Optional[str] = None
+    to: Optional[List[str]] = None
+    subject: Optional[str] = ""
+    body: Optional[str] = ""
+    attachments: Optional[List[dict]] = None
+
+class CreateLabelBody(BaseModel):
+    name: str
+    color: Optional[str] = "#f97316"
+
+class UpdateMessageLabelsBody(BaseModel):
+    labels: List[str]
+
+@app.get("/api/comms/directory")
+def get_comms_directory(
+    q: Optional[str] = None,
+    category: Optional[str] = None,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Search and retrieve integrated directory of registered users and institutional contacts.
+    """
+    try:
+        return comms_service.get_recipient_directory(current_user=user, query=q, category=category)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/comms/messages")
+def get_comms_messages(
+    folder: str = "inbox",
+    q: Optional[str] = None,
+    label: Optional[str] = None,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Fetch persistent internal messages for the authenticated user by folder (inbox, sent, starred, trash)
+    or custom user label.
+    """
+    try:
+        return comms_service.list_user_messages(user=user, folder=folder, query=q, label=label)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/comms/messages/{message_id}")
+def get_comms_message_detail(
+    message_id: str,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Get full message details with verified VigilOS sender identity card.
+    Enforces message-level authorization: caller must be sender or recipient.
+    """
+    try:
+        return comms_service.get_message_detail(message_id=message_id, current_user=user)
+    except PermissionError as pe:
+        raise HTTPException(status_code=403, detail=str(pe))
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/comms/messages/send")
+def send_comms_message(
+    body: SendInternalMessageBody,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Send an internal VigilOS message to registered colleagues or institutional contacts.
+    Supports idempotency key to prevent accidental duplicate transmissions.
+    """
+    if not body.to:
+        raise HTTPException(status_code=400, detail="At least one recipient is required.")
+    if not body.body.strip():
+        raise HTTPException(status_code=400, detail="Message body cannot be empty.")
+
+    try:
+        res = comms_service.send_internal_message(
+            sender_user=user,
+            to_recipients=body.to,
+            subject=body.subject,
+            body=body.body,
+            in_reply_to=body.in_reply_to,
+            thread_id=body.thread_id,
+            send_external_email=True if body.send_external_email is None else bool(body.send_external_email),
+            attachments=body.attachments,
+            idempotency_key=body.idempotency_key,
+            draft_id=body.draft_id,
+        )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/api/comms/messages/{message_id}/status")
+def update_comms_message_status(
+    message_id: str,
+    body: UpdateMessageStateBody,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Update recipient read state, starred status, folder, or user labels isolated to caller.
+    """
+    try:
+        ok = comms_service.set_message_user_state(
+            message_id=message_id,
+            user_id=user["id"],
+            read=body.read,
+            starred=body.starred,
+            folder=body.folder,
+            labels=body.labels,
+        )
+        return {"ok": ok}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/comms/messages/{message_id}")
+def delete_comms_message(
+    message_id: str,
+    permanent: Optional[bool] = False,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Move message to trash or permanently remove from the database for the authenticated user.
+    When permanently deleted by all parties, cleans up underlying records safely.
+    """
+    try:
+        ok = comms_service.set_message_user_state(
+            message_id=message_id,
+            user_id=user["id"],
+            folder="trash",
+            is_permanent_delete=bool(permanent),
+        )
+        return {"ok": ok}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/comms/messages/{message_id}/restore")
+def restore_comms_message(
+    message_id: str,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Restore a trashed message back to the user's Inbox (if recipient) or Sent (if sender).
+    """
+    try:
+        ok = comms_service.set_message_user_state(
+            message_id=message_id,
+            user_id=user["id"],
+            folder="restore",
+        )
+        return {"ok": ok}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/comms/messages/bulk-action")
+def bulk_comms_message_action(
+    body: BulkMessageActionBody,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Apply bulk operations (trash, restore, delete_permanently, read, unread, star, unstar, add_label, remove_label)
+    strictly to the authenticated user's mailbox entries.
+    """
+    try:
+        res = comms_service.bulk_message_action(
+            user_id=user["id"],
+            message_ids=body.message_ids,
+            action=body.action,
+            label_name=body.label_name,
+        )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ── Drafts API ──
+
+@app.get("/api/comms/drafts")
+def get_comms_drafts(
+    user: dict = Depends(_get_current_user),
+):
+    """Fetch persistent drafts created by the authenticated user."""
+    try:
+        return comms_service.get_user_drafts(user_id=user["id"])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/comms/drafts")
+def save_comms_draft(
+    body: SaveDraftBody,
+    user: dict = Depends(_get_current_user),
+):
+    """Save or update an autosaved draft."""
+    try:
+        return comms_service.save_draft(
+            user=user,
+            draft_id=body.draft_id,
+            to_recipients=body.to,
+            subject=body.subject or "",
+            body=body.body or "",
+            attachments=body.attachments,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/comms/drafts/{draft_id}")
+def delete_comms_draft(
+    draft_id: str,
+    user: dict = Depends(_get_current_user),
+):
+    """Discard a draft."""
+    try:
+        ok = comms_service.delete_draft(draft_id=draft_id, user_id=user["id"])
+        return {"ok": ok}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ── Labels API ──
+
+@app.get("/api/comms/labels")
+def get_comms_labels(
+    user: dict = Depends(_get_current_user),
+):
+    """Fetch labels for the authenticated user."""
+    try:
+        return comms_service.get_user_labels(user_id=user["id"])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/comms/labels")
+def create_comms_label(
+    body: CreateLabelBody,
+    user: dict = Depends(_get_current_user),
+):
+    """Create a new custom label for the authenticated user."""
+    try:
+        return comms_service.create_user_label(
+            user_id=user["id"],
+            name=body.name,
+            color=body.color or "#f97316",
+        )
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/comms/labels/{label_name}")
+def delete_comms_label(
+    label_name: str,
+    user: dict = Depends(_get_current_user),
+):
+    """Delete a user label."""
+    try:
+        ok = comms_service.delete_user_label(user_id=user["id"], label_name=label_name)
+        return {"ok": ok}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.patch("/api/comms/messages/{message_id}/labels")
+def update_comms_message_labels(
+    message_id: str,
+    body: UpdateMessageLabelsBody,
+    user: dict = Depends(_get_current_user),
+):
+    """Update assigned labels on a message for the authenticated user."""
+    try:
+        ok = comms_service.set_message_user_state(
+            message_id=message_id,
+            user_id=user["id"],
+            labels=body.labels,
+        )
+        return {"ok": ok}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/comms/unread-count")
+def get_comms_unread_count(
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Get unread message count in inbox.
+    """
+    try:
+        cnt = comms_service.get_unread_count(user["id"])
+        return {"unread": cnt, "unread_count": cnt}
+    except Exception as e:
+        return {"unread": 0, "unread_count": 0}
+
 
 # ═══════════════════════════════════════════════════════════════
 # WORKFLOW / LOGS
@@ -1102,11 +1487,11 @@ def get_activity_feed(
         action = row["action"] if hasattr(row, '__getitem__') else str(row)
         result = row["result"] if hasattr(row, '__getitem__') else ""
         icon = (
-            "✅" if "approved" in str(result).lower() else
-            "❌" if "rejected" in str(result).lower() else
-            "⚠️" if "escalated" in str(result).lower() else
-            "🤖" if "submit" in str(action).lower() else
-            "🔐" if "login" in str(action).lower() else "📋"
+            "check" if "approved" in str(result).lower() else
+            "x" if "rejected" in str(result).lower() else
+            "alert" if "escalated" in str(result).lower() else
+            "bot" if "submit" in str(action).lower() else
+            "lock" if "login" in str(action).lower() else "clipboard"
         )
         feed.append({
             "id": str(row["id"]) if hasattr(row, '__getitem__') else "",
@@ -1131,7 +1516,7 @@ def get_activity_feed(
                 "target": ev.get("request_id", ""),
                 "result": str(ev.get("payload", {}).get("result", "")),
                 "created_at": ev.get("timestamp", ""),
-                "icon": "⚡",
+                "icon": "zap",
                 "source": "event_bus",
             })
 
@@ -1441,89 +1826,238 @@ def get_case(case_id: str, user: dict = Depends(_get_current_user)):
     return case
 
 
-# ── Create New Case ──────────────────────────────────────────────
+# ── Create New Case / File Complaint ──────────────────────────
 class CreateCaseBody(BaseModel):
     aicte_pid: str
-    institution_name: str
-    region: str
-    bureau: str
-    complainant_type: str = "Public"
+    institution_name: Optional[str] = None
+    institution_code: Optional[str] = None
+    region: Optional[str] = None
+    bureau: str = "PGRC"
+    complainant_type: Optional[str] = "Public"
     category: str
     title: str
-    description: str = ""
-    assigned_officer: str = ""
+    description: Optional[str] = ""
+    assigned_officer: Optional[str] = ""
     sla_days: int = 30
 
 @app.post("/api/aicte/cases")
 def create_case(body: CreateCaseBody, user: dict = Depends(_get_current_user)):
-    """File a new AICTE complaint case."""
-    import uuid as _uuid
-    # Generate structured case ID
-    bureau_abbr = body.bureau.upper()
-    year = datetime.datetime.now().year
-    rand = str(_uuid.uuid4())[:4].upper()
-    case_id = f"AICTE-{year}-{bureau_abbr}-{rand}"
+    """File a new AICTE complaint case with authoritative persistence and real complainant attribution."""
     try:
+        # 1. Authoritative lookup of registered institution
+        inst = db.get_institution(body.aicte_pid)
+        inst_name = inst.get("institution_name") if inst else (body.institution_name or body.aicte_pid)
+        region = inst.get("region") if inst else (body.region or "Central")
+        inst_code = body.aicte_pid
+
+        # 2. Derive complainant identity authoritatively from authenticated session
+        comp_user_id = user.get("id") or user.get("email") or "usr_complainant"
+        comp_name = user.get("name") or user.get("username") or user.get("email") or "Public Complainant"
+        comp_email = user.get("email") or ""
+        comp_type = body.complainant_type or ("Student" if user.get("role") == "citizen" else "Institutional User")
+
+        # 3. Concurrency-safe atomic server-side Case ID generation
+        bureau_abbr = (body.bureau or "PGRC").strip().upper()
+        case_id = db.get_next_case_id(bureau=bureau_abbr)
+        now = datetime.datetime.now().isoformat()
+
         db.create_aicte_case(
             case_id=case_id,
             aicte_pid=body.aicte_pid,
-            institution_name=body.institution_name,
-            region=body.region,
-            bureau=body.bureau,
-            complainant_type=body.complainant_type,
+            institution_code=inst_code,
+            institution_name=inst_name,
+            region=region,
+            bureau=bureau_abbr,
+            complainant_user_id=comp_user_id,
+            complainant_name=comp_name,
+            complainant_email=comp_email,
+            complainant_type=comp_type,
             category=body.category,
             title=body.title,
-            description=body.description,
-            assigned_officer=body.assigned_officer,
+            description=body.description or "",
+            assigned_officer=body.assigned_officer or "",
             sla_days=body.sla_days,
+            received_at=now,
         )
+
         # Log in audit
         db.add_audit(
             session_id="system",
             actor_role=user.get("role", "super_admin"),
             action="CASE_FILED",
             target=case_id,
-            result=f"New {body.bureau} case filed for {body.institution_name}",
+            result=f"New {bureau_abbr} case filed for {inst_name} by {comp_name}",
         )
-        return {"ok": True, "case_id": case_id}
+
+        created_case = db.get_aicte_case(case_id)
+        return {"ok": True, "case_id": case_id, "case": created_case}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ── Update Case Status ────────────────────────────────────────────
+# ── Institution-Facing Complaint Submission (For Upcoming HTML Page) ──────
+class InstitutionComplaintSubmission(BaseModel):
+    aicte_pid: str
+    category: str
+    title: str
+    description: str
+    bureau: Optional[str] = "PGRC"
+    complainant_name: Optional[str] = None
+    complainant_email: Optional[str] = None
+    complainant_type: Optional[str] = "Institutional User"
+
+@app.post("/api/aicte/cases/submit")
+def submit_institution_complaint(
+    body: InstitutionComplaintSubmission,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Dedicated endpoint for the upcoming institution-facing HTML submission page.
+    Authenticates institution user, validates against authoritative institution portfolio,
+    generates structured case reference, and saves to database.
+    """
+    # Verify institution existence
+    inst = db.get_institution(body.aicte_pid)
+    if not inst:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Institution with AICTE Permanent ID '{body.aicte_pid}' not found in registry."
+        )
+
+    # Resolve user if token present, or use provided complainant info
+    user_info = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+        try:
+            user_info = auth.verify_token(token)
+        except Exception:
+            pass
+
+    comp_name = body.complainant_name or (user_info.get("name") if user_info else None) or inst.get("principal_name") or "Institutional Complainant"
+    comp_email = body.complainant_email or (user_info.get("email") if user_info else None) or inst.get("contact_email") or ""
+    comp_user_id = (user_info.get("id") if user_info else None) or body.aicte_pid
+
+    bureau_abbr = (body.bureau or "PGRC").strip().upper()
+    case_id = db.get_next_case_id(bureau=bureau_abbr)
+    now = datetime.datetime.now().isoformat()
+
+    try:
+        db.create_aicte_case(
+            case_id=case_id,
+            aicte_pid=body.aicte_pid,
+            institution_code=body.aicte_pid,
+            institution_name=inst["institution_name"],
+            region=inst["region"],
+            bureau=bureau_abbr,
+            complainant_user_id=comp_user_id,
+            complainant_name=comp_name,
+            complainant_email=comp_email,
+            complainant_type=body.complainant_type or "Institutional User",
+            category=body.category,
+            title=body.title,
+            description=body.description,
+            assigned_officer="",
+            sla_days=30,
+            status="received",
+            received_at=now,
+        )
+
+        db.add_audit(
+            session_id="system",
+            actor_role="institution_portal",
+            action="INSTITUTION_COMPLAINT_SUBMITTED",
+            target=case_id,
+            result=f"Institution {inst['institution_name']} ({body.aicte_pid}) filed complaint {case_id}",
+        )
+
+        return {
+            "ok": True,
+            "case_id": case_id,
+            "institution_name": inst["institution_name"],
+            "institution_code": body.aicte_pid,
+            "bureau": bureau_abbr,
+            "status": "received",
+            "received_at": now,
+            "complainant_name": comp_name,
+            "message": "Complaint successfully registered in AICTE VigilOS backend."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Update Case Status / Details ────────────────────────────────────────────
 class UpdateCaseBody(BaseModel):
-    status: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    bureau: Optional[str] = None
+    status: Optional[str] = None
     assigned_officer: Optional[str] = None
+    sla_days: Optional[int] = None
+    region: Optional[str] = None
     linked_case_ids: Optional[list] = None
 
 @app.patch("/api/aicte/cases/{case_id}")
 def update_case(case_id: str, body: UpdateCaseBody, user: dict = Depends(_get_current_user)):
-    """Update status of an AICTE case (for transfer/escalation/disposal)."""
+    """Update details or status of an AICTE case."""
+    user_role = user.get("role", "")
+    if user_role not in ("super_admin", "bureau_head", "approval_officer"):
+        raise HTTPException(status_code=403, detail="Access denied: Case editing is restricted to roles above Nodal Officer")
+
     case = db.get_aicte_case(case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    # Authoritative permission and jurisdiction check
-    if not role_service.has_permission(user, "cases:process", bureau=case.get("bureau"), region=case.get("region")):
-        raise HTTPException(status_code=403, detail="Access denied: Cannot modify cases outside your authorized bureau or region")
-
     try:
-        db.update_aicte_case_status(
-            case_id=case_id,
-            status=body.status,
-            assigned_officer=body.assigned_officer,
-            linked_case_ids=body.linked_case_ids,
-        )
+        data = body.dict(exclude_unset=True)
+        linked = data.pop("linked_case_ids", None)
+
+        if data:
+            db.update_aicte_case_details(case_id, data)
+
+        if linked is not None:
+            db.update_aicte_case_status(
+                case_id=case_id,
+                status=data.get("status") or case.get("status") or "under_process",
+                assigned_officer=data.get("assigned_officer") or case.get("assigned_officer"),
+                linked_case_ids=linked
+            )
+
         db.add_audit(
             session_id="system",
-            actor_role=user.get("role", "super_admin"),
-            action="CASE_STATUS_UPDATE",
+            actor_role=user_role,
+            action="CASE_UPDATE",
             target=case_id,
-            result=f"Status changed to {body.status}",
+            result=f"Case {case_id} updated by {user.get('name', 'Admin')}",
         )
-        return {"ok": True}
+        return {"ok": True, "case": db.get_aicte_case(case_id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/aicte/cases/{case_id}")
+def delete_case_endpoint(case_id: str, user: dict = Depends(_get_current_user)):
+    """Delete an AICTE case. Restricted to roles above Nodal Officer (Super Admin, Bureau Head, Approval Officer)."""
+    user_role = user.get("role", "")
+    if user_role not in ("super_admin", "bureau_head", "approval_officer"):
+        raise HTTPException(status_code=403, detail="Access denied: Case deletion is restricted to roles above Nodal Officer")
+
+    case = db.get_aicte_case(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    try:
+        db.delete_aicte_case(case_id)
+        db.add_audit(
+            session_id="system",
+            actor_role=user_role,
+            action="CASE_DELETE",
+            target=case_id,
+            result=f"Case {case_id} permanently deleted by {user.get('name', 'Admin')}",
+        )
+        return {"ok": True, "message": f"Case {case_id} permanently removed from database."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 # ── Cross-Bureau Overlap Detection ────────────────────────────────
@@ -1656,6 +2190,103 @@ def get_institution_profile(aicte_pid: str, user: dict = Depends(_get_current_us
     }
 
 
+class InstitutionProfileBody(BaseModel):
+    aicte_pid: str
+    institution_name: str
+    region: str
+    state: str
+    city: Optional[str] = ""
+    district: Optional[str] = ""
+    address: Optional[str] = ""
+    inst_type: Optional[str] = "Private / Self-Financed"
+    approval_status: Optional[str] = "AICTE Approved (EOA 2026-27)"
+    principal_name: Optional[str] = ""
+    contact_email: Optional[str] = ""
+    contact_phone: Optional[str] = ""
+    website: Optional[str] = ""
+    established_year: Optional[int] = 2000
+    total_faculty: Optional[int] = 50
+    total_students: Optional[int] = 1000
+    images: Optional[List[str]] = []
+
+
+@app.put("/api/aicte/institutions/{aicte_pid}")
+def update_institution_portfolio(
+    aicte_pid: str,
+    body: InstitutionProfileBody,
+    user: dict = Depends(_get_current_user)
+):
+    """Update institutional portfolio in persistent database with role-based authority validation."""
+    user_role = user.get("role")
+    user_inst = user.get("institution")
+    if user_role not in ("super_admin", "bureau_head", "approval_officer", "nodal_officer"):
+        if user_inst != aicte_pid and user_role != "super_admin":
+            raise HTTPException(status_code=403, detail="Unauthorized to modify this institution's portfolio")
+
+    existing = db.get_institution(aicte_pid)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Institution not found")
+
+    payload = body.dict()
+    payload["aicte_pid"] = aicte_pid
+    try:
+        updated = db.save_institution(payload)
+        db.add_audit(
+            session_id="system",
+            actor_role=user_role,
+            action="INSTITUTION_PORTFOLIO_UPDATE",
+            target=aicte_pid,
+            result=f"Updated portfolio for {body.institution_name} ({aicte_pid})"
+        )
+        return {"ok": True, "institution": updated}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/aicte/institutions")
+def create_institution_portfolio(
+    body: InstitutionProfileBody,
+    user: dict = Depends(_get_current_user)
+):
+    """Register a new institution portfolio into persistent database."""
+    user_role = user.get("role")
+    if user_role not in ("super_admin", "bureau_head", "nodal_officer"):
+        raise HTTPException(status_code=403, detail="Super Admin or Bureau Authority required to register institutions")
+
+    payload = body.dict()
+    try:
+        saved = db.save_institution(payload)
+        db.add_audit(
+            session_id="system",
+            actor_role=user_role,
+            action="INSTITUTION_REGISTERED",
+            target=body.aicte_pid,
+            result=f"Registered institution {body.institution_name} ({body.aicte_pid})"
+        )
+        return {"ok": True, "institution": saved}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/aicte/institutions/{aicte_pid}")
+def delete_institution_portfolio(
+    aicte_pid: str,
+    user: dict = Depends(_get_current_user)
+):
+    """Delete an institution portfolio (Super Admin only)."""
+    if user.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Super Admin privileges required to delete institutions")
+    db.delete_institution(aicte_pid)
+    db.add_audit(
+        session_id="system",
+        actor_role="super_admin",
+        action="INSTITUTION_DELETED",
+        target=aicte_pid,
+        result=f"Deleted institution profile {aicte_pid}"
+    )
+    return {"ok": True}
+
+
 # ── AI Overlap Analysis for Two Specific Cases ───────────────────
 class AnalyzePairBody(BaseModel):
     case_id_a: str
@@ -1690,6 +2321,7 @@ def analyze_overlap_pair(body: AnalyzePairBody, user: dict = Depends(_get_curren
         return analysis
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # ═══════════════════════════════════════════════════════════════
 # ENTRY POINT

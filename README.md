@@ -1,10 +1,10 @@
-# 🎓 VigilOS — AICTE Complaint & Cross-Bureau Intelligence Platform
+# VigilOS — AICTE Complaint & Cross-Bureau Intelligence Platform
 
 > AICTE-aligned platform for institutional complaint monitoring, cross-bureau overlap detection, decentralized regional governance, and database-driven RBAC — powered by SQLite and an autonomous agent loop.
 
 ---
 
-## 🏛️ Database-Driven Role Management & SQLite RBAC Architecture
+## Database-Driven Role Management & SQLite RBAC Architecture
 
 VigilOS enforces enterprise-grade, authoritative **Role-Based Access Control (RBAC)** completely driven by **SQLite** (`campusflow.db`) with `PRAGMA foreign_keys = ON` enforced on every database connection. Hardcoded user arrays and mock role mappings have been completely replaced with a normalized, transactional schema and centralized backend authorization.
 
@@ -26,7 +26,7 @@ The database architecture is implemented via transactional migrations in [`campu
 
 ---
 
-## 🔐 Canonical Roles & Permission Matrix
+## Canonical Roles & Permission Matrix
 
 Backend authorization is authoritative and centralized in [`campus/role_service.py`](campus/role_service.py). Frontend conditions serve strictly for UI usability; backend access paths enforce privileges and bureau/region scopes.
 
@@ -40,7 +40,7 @@ Backend authorization is authoritative and centralized in [`campus/role_service.
 
 ---
 
-## 👥 Canonical Personnel Seeded in SQLite
+## Canonical Personnel Seeded in SQLite
 
 All canonical accounts are in normalized SQLite records:
 
@@ -49,7 +49,7 @@ All canonical accounts are in normalized SQLite records:
 3. **Approval Officer (Demo)** (`officer@aicte.gov.in`) — Approval Officer (Public Grievance Redressal Cell, PGRC)
 
 
-## 🔄 Unified Authentication & Identity Resolution
+## Unified Authentication & Identity Resolution
 
 Both **Google OAuth** and **Email/Password** authentication resolve to single canonical SQLite user records:
 
@@ -66,7 +66,7 @@ Both **Google OAuth** and **Email/Password** authentication resolve to single ca
 
 ---
 
-## 🛡️ Administrative Governance UI (`/admin`)
+## Administrative Governance UI (`/admin`)
 
 Authorized Super Administrators have direct administrative controls over the SQLite RBAC system:
 - **Personnel Directory**: Live table showing Officer Name, Official Email, Assigned Role, Bureau, Region, and Status.
@@ -78,7 +78,7 @@ Authorized Super Administrators have direct administrative controls over the SQL
 
 ---
 
-## 💾 Database Migration & Backup Instructions
+## Database Migration & Backup Instructions
 
 ### Automated Migration
 The migration runs automatically on application startup via `campus/db.py` `init_db()`. To run the migration standalone:
@@ -103,7 +103,7 @@ cp campusflow.db campusflow.db.bak
 
 ---
 
-## 🧪 Automated RBAC Test Suite
+## Automated RBAC Test Suite
 
 The test suite in [`test_rbac_governance.py`](test_rbac_governance.py) validates all 12 core security requirements:
 
@@ -113,22 +113,22 @@ python test_rbac_governance.py
 
 | Test # | Requirement Verified | Status |
 |--------|----------------------|--------|
-| **Test 01** | Google login resolves to correct SQLite user | ✅ Passed |
-| **Test 02** | Email/password login resolves to correct SQLite user | ✅ Passed |
-| **Test 03** | Multiple linked login methods resolve to the same user | ✅ Passed |
-| **Test 04** | Invalid credentials & unauthorized citizen access rejected (401/403) | ✅ Passed |
-| **Test 05** | Self-demotion / deletion of own admin account prevented | ✅ Passed |
-| **Test 06** | Bureau heads cannot access unauthorized bureaus (RB vs PGRC) | ✅ Passed |
-| **Test 07** | Regional officers cannot access unauthorized regions (Southern scope) | ✅ Passed |
-| **Test 08** | Case assignment and approval permissions enforced by backend | ✅ Passed |
-| **Test 09** | Deactivated users immediately lose API and login access | ✅ Passed |
-| **Test 10** | Existing complaints (`aicte_cases`) and audit history remain intact | ✅ Passed |
-| **Test 11** | SQLite foreign keys (`PRAGMA foreign_keys = ON`) and unique constraints work | ✅ Passed |
-| **Test 12** | Production startup is idempotent (no duplicate accounts or reset roles) | ✅ Passed |
+| **Test 01** | Google login resolves to correct SQLite user | [PASS] Passed |
+| **Test 02** | Email/password login resolves to correct SQLite user | [PASS] Passed |
+| **Test 03** | Multiple linked login methods resolve to the same user | [PASS] Passed |
+| **Test 04** | Invalid credentials & unauthorized citizen access rejected (401/403) | [PASS] Passed |
+| **Test 05** | Self-demotion / deletion of own admin account prevented | [PASS] Passed |
+| **Test 06** | Bureau heads cannot access unauthorized bureaus (RB vs PGRC) | [PASS] Passed |
+| **Test 07** | Regional officers cannot access unauthorized regions (Southern scope) | [PASS] Passed |
+| **Test 08** | Case assignment and approval permissions enforced by backend | [PASS] Passed |
+| **Test 09** | Deactivated users immediately lose API and login access | [PASS] Passed |
+| **Test 10** | Existing complaints (`aicte_cases`) and audit history remain intact | [PASS] Passed |
+| **Test 11** | SQLite foreign keys (`PRAGMA foreign_keys = ON`) and unique constraints work | [PASS] Passed |
+| **Test 12** | Production startup is idempotent (no duplicate accounts or reset roles) | [PASS] Passed |
 
 ---
 
-## 📡 Backend API Endpoints
+## Backend API Endpoints
 
 ### Authentication & Self
 | Method | Endpoint | Description |
@@ -152,15 +152,65 @@ python test_rbac_governance.py
 ### Cases & Intelligence
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/aicte/cases` | Authoritative bureau & region scoped case list |
-| `GET` | `/api/aicte/cases/{id}` | Case detail with jurisdiction check |
+| `GET` | `/api/aicte/cases` | Authoritative bureau & region scoped case list with calculated ageing and complainant identity |
+| `POST` | `/api/aicte/cases` | Create new authenticated complaint with atomic case ID generation (`AICTE-YYYY-BUREAU-XXXX`) |
+| `POST` | `/api/aicte/cases/submit` | Institution-facing portal submission endpoint with backend validation |
+| `GET` | `/api/aicte/cases/{id}` | Case detail with jurisdiction check and institution metadata |
 | `PATCH` | `/api/aicte/cases/{id}` | Update case status, assignment, and links |
 | `GET` | `/api/aicte/cases/overlaps` | Cross-bureau duplicate & overlap alerts |
 | `GET` | `/api/aicte/cases/sla-breached` | SLA escalation monitoring |
 
+### Institutional Portfolios
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/aicte/institutions` | List all registered institutions from authoritative database |
+| `GET` | `/api/aicte/institutions/{pid}` | Get detailed portfolio for an institution |
+| `POST` | `/api/aicte/institutions` | Register new institutional portfolio (Super Admin) |
+| `PUT` | `/api/aicte/institutions/{pid}` | Update institutional portfolio with authoritative cross-account persistence |
+| `DELETE` | `/api/aicte/institutions/{pid}` | Delete institutional record (Super Admin) |
+
 ---
 
-## 📦 Running Locally
+## Institutional Portfolio & Complaint Persistence Architecture
+
+### Schema Migration (`campus/portfolio_and_cases_migration.py`)
+Version: `20261026_02_portfolio_and_cases`
+- **`aicte_institutions`**: Persistent storage for all 15 canonical AICTE institutions including approval status (`AICTE Approved (EOA 2026-27)`, `Not Approved`, or custom statement), principal name, contact email, contact phone, website, faculty and student counts, and campus images.
+- **`aicte_cases`**: Persistent storage for complaints with full relational links:
+  - `institution_code` (foreign link to AICTE PID e.g. `1-376234110`)
+  - Authoritative Complainant Attribution: `complainant_user_id`, `complainant_name`, `complainant_email`
+  - Lifecycle Timestamps: `received_at`, `resolved_at`, and dynamic server-calculated `ageing_days`
+- **`aicte_case_sequences`**: Atomic, concurrency-safe sequential case counter table for transaction-safe unique ID generation (`AICTE-YYYY-BUREAU-XXXX`).
+
+### Required 9-Column Complaint Dashboard Order
+The VigilOS complaints view displays all cases in the strict required 9-column order:
+`Case ID | Institution | Institution Code | Bureau | Category | Status | Ageing | Region | Submitted By`
+*(e.g., `AICTE-2026-PGRC-0112 | Thakur College of Engineering & Technology | 1-376234110 | PGRC | Capitation Fee | Received | 8d | Western | Amit Deshmukh`)*
+
+### Institution-Facing HTML Submission Portal
+The standalone portal at [`public/institution-complaint-submission.html`](public/institution-complaint-submission.html) allows colleges and institutions to submit grievances directly to the authoritative VigilOS backend via `POST /api/aicte/cases/submit`.
+
+---
+
+## Production Deployment & Vercel Persistence
+
+### The Ephemeral Filesystem Problem
+Vercel and AWS Lambda serverless execution environments run on an **ephemeral filesystem**. Any changes written to local SQLite files (`campusflow.db`) inside a serverless container are lost when the container is recycled or redeployed.
+
+### The Production Solution
+For persistent, durable production deployments:
+1. Provision a managed PostgreSQL instance (e.g. [Neon Serverless Postgres](https://neon.tech), [Supabase](https://supabase.com), or [Render PostgreSQL](https://render.com)).
+2. Set environment variables in your Vercel / production settings:
+   ```env
+   USE_POSTGRES=true
+   DATABASE_URL=postgresql://user:password@ep-host.neon.tech/dbname?sslmode=require
+   ```
+3. `campus/db.py` automatically detects `USE_POSTGRES` or `DATABASE_URL` and routes all transactions through PostgreSQL connection wrappers with transparent schema creation, atomic migrations, and WAL durability.
+4. For local development, leaving `DATABASE_URL` empty automatically defaults to the durable local SQLite database (`campusflow.db`).
+
+---
+
+## Running Locally
 
 ```bash
 # 1. Install frontend dependencies
@@ -178,6 +228,6 @@ python api_server.py
 
 ---
 
-## 📄 License
+## License
 
 MIT — AICTE VigilOS Complaint & Cross-Bureau Intelligence Platform.

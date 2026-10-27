@@ -5,7 +5,6 @@
 # permissions, and authentication resolution against SQLite.
 # ============================================================
 
-import sqlite3
 import hashlib
 import uuid
 import datetime
@@ -42,6 +41,8 @@ def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
         SELECT 
             u.id, u.name, u.normalized_email, u.status, u.created_at, u.updated_at,
             u.two_factor_enabled,
+            COALESCE(u.institution, '') as institution,
+            COALESCE(u.department, '') as department,
             r.key as role_key, r.display_name as role_name,
             b.code as bureau_code, b.name as bureau_name,
             reg.code as region_code, reg.name as region_name,
@@ -133,6 +134,12 @@ def authenticate_credentials(identifier: str, password: str) -> Tuple[bool, Any]
     conn = get_conn()
     cur = conn.cursor()
 
+    # Reject permanently deleted accounts
+    cur.execute("SELECT email, deleted_at FROM deleted_accounts WHERE LOWER(email) = ?", (clean_id,))
+    if cur.fetchone():
+        conn.close()
+        return False, "This account has been deleted by an administrator and cannot be accessed."
+
     # Search in auth_accounts or users
     cur.execute('''
         SELECT u.id, u.password_hash, u.status
@@ -152,7 +159,7 @@ def authenticate_credentials(identifier: str, password: str) -> Tuple[bool, Any]
     status = row["status"]
 
     if status != "active":
-        return False, f"Account is {status}. Please contact an administrator."
+        return False, "Your account has been deactivated. Please contact your administrator for assistance."
 
     if not verify_password(stored_hash, password):
         return False, "Invalid email/username or password"
@@ -167,10 +174,19 @@ def authenticate_credentials(identifier: str, password: str) -> Tuple[bool, Any]
 
 def authenticate_google(email: str, name: str, google_sub: Optional[str] = None) -> Tuple[bool, Any]:
     """
-    Resolve Google authenticated user into a canonical SQLite user record.
+    Resolve Google authenticated user into a canonical PostgreSQL user record.
     Returns (True, user_dict) or (False, error_message).
     """
     norm_email = email.strip().lower()
+
+    # Reject permanently deleted accounts from recreating or logging in
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT email, deleted_at FROM deleted_accounts WHERE LOWER(email) = ?", (norm_email,))
+    if cur.fetchone():
+        conn.close()
+        return False, "This account has been deleted by an administrator and cannot be accessed."
+    conn.close()
 
     # 1. Look up by auth_accounts
     user = get_user_by_auth_account("google", norm_email)
@@ -233,7 +249,7 @@ def authenticate_google(email: str, name: str, google_sub: Optional[str] = None)
         return False, "Failed to resolve authenticated user profile."
 
     if user.get("status") != "active":
-        return False, f"Account is {user.get('status')}. Access restricted."
+        return False, "Your account has been deactivated. Please contact your administrator for assistance."
 
     return True, user
 
@@ -379,6 +395,8 @@ def admin_create_user(name: str, email: str, role_key: str,
             VALUES (?, ?, ?, ?, ?, 'CREATE_USER', ?)
         ''', (user_id, actor_id, role_key, bureau_code, region_code, now))
 
+        cur.execute("DELETE FROM deleted_accounts WHERE LOWER(email) = ?", (norm_email,))
+
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -517,28 +535,163 @@ def admin_toggle_user_status(target_user_id: str, new_status: str, actor_id: str
 
     return get_user_by_id(target_user_id)
 
-def admin_delete_user(target_user_id: str, actor_id: str) -> bool:
-    """Delete a user account and cascade delete assignments & auth methods."""
+def admin_update_user_profile(target_user_id: str, name: Optional[str] = None,
+                              email: Optional[str] = None, password: Optional[str] = None,
+                              actor_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Update a personnel record's official full name, official email address,
+    and/or current password credentials.
+    """
     conn = get_conn()
     cur = conn.cursor()
     now = datetime.datetime.now().isoformat()
 
-    cur.execute("SELECT id, normalized_email FROM users WHERE id = ?", (target_user_id,))
+    cur.execute("SELECT id, name, normalized_email FROM users WHERE id = ?", (target_user_id,))
     target = cur.fetchone()
     if not target:
         conn.close()
         raise ValueError("Target user not found.")
 
-    if target_user_id == actor_id:
+    updates = []
+    params = []
+
+    if name is not None and name.strip():
+        updates.append("name = ?")
+        params.append(name.strip())
+
+    if email is not None and email.strip():
+        norm_email = email.strip().lower()
+        if norm_email != target["normalized_email"]:
+            cur.execute("SELECT id FROM users WHERE normalized_email = ? AND id != ?", (norm_email, target_user_id))
+            if cur.fetchone():
+                conn.close()
+                raise ValueError(f"An account with email {norm_email} already exists.")
+            updates.append("normalized_email = ?")
+            params.append(norm_email)
+            # Update credentials provider identity
+            cur.execute("UPDATE auth_accounts SET provider_subject = ? WHERE user_id = ? AND provider = 'credentials'", (norm_email, target_user_id))
+
+    if password is not None and password.strip():
+        pwd_hash = hash_password(password.strip())
+        updates.append("password_hash = ?")
+        params.append(pwd_hash)
+
+    if not updates:
+        conn.close()
+        return get_user_by_id(target_user_id)
+
+    updates.append("updated_at = ?")
+    params.append(now)
+    params.append(target_user_id)
+
+    try:
+        cur.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", tuple(params))
+        cur.execute('''
+            INSERT INTO assignment_audit (user_id, changed_by, action, created_at)
+            VALUES (?, ?, 'UPDATE_PROFILE', ?)
+        ''', (target_user_id, actor_id or "system", now))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+    return get_user_by_id(target_user_id)
+
+def admin_delete_user(target_user_id: str, actor_id: str) -> bool:
+    """
+    Centralized account-deletion service implementing the 3-category policy:
+    Category A (remove): disposable personal state, tokens, auth methods, draft communications, labels, idempotency keys, and active role assignments.
+    Category B (preserve): institutional complaints, compliance records, historical sent/received communications (via NULL foreign keys), and permanent audit trail.
+    Category C (reassign/protect): prevents deletion of protected accounts, self-deletion, or deletion of the last remaining super administrator.
+    """
+    conn = get_conn()
+    cur = conn.cursor()
+    now = datetime.datetime.now().isoformat()
+
+    # 1. Verify existence of target account
+    cur.execute("SELECT id, name, normalized_email FROM users WHERE id = ?", (target_user_id,))
+    target = cur.fetchone()
+    if not target:
+        conn.close()
+        raise ValueError("Target user not found.")
+
+    target_id = target["id"]
+    target_name = target["name"] or "User"
+    target_email = target["normalized_email"].strip().lower()
+
+    # 2. Category C: Safeguards
+    # 2a. Self-deletion safeguard
+    if target_id == actor_id:
         conn.close()
         raise ValueError("You cannot delete your own administrative account.")
 
+    # 2b. Master/protected system accounts safeguard
+    protected_emails = {"2204caleb2007@gmail.com", "admin@aicte-india.org"}
+    if target_email in protected_emails:
+        conn.close()
+        raise ValueError(f"Cannot delete protected master Super Administrator account ({target_email}).")
+
+    # 2c. Last remaining active Super Administrator safeguard
+    cur.execute("""
+        SELECT r.key AS role_key FROM user_assignments ua
+        JOIN roles r ON ua.role_id = r.id
+        WHERE ua.user_id = ?
+    """, (target_id,))
+    role_rows = cur.fetchall()
+    target_is_super_admin = any((r["role_key"] or "").lower() == "super_admin" for r in role_rows)
+
+    if target_is_super_admin:
+        cur.execute("""
+            SELECT COUNT(DISTINCT ua.user_id) AS cnt
+            FROM user_assignments ua
+            JOIN roles r ON ua.role_id = r.id
+            JOIN users u ON ua.user_id = u.id
+            WHERE LOWER(r.key) = 'super_admin' AND LOWER(u.status) = 'active'
+        """)
+        count_row = cur.fetchone()
+        active_super_admins = count_row["cnt"] if count_row else 1
+        if active_super_admins <= 1:
+            conn.close()
+            raise ValueError("Operation prohibited: Cannot delete the last remaining active Super Administrator.")
+
     try:
-        cur.execute("DELETE FROM users WHERE id = ?", (target_user_id,))
+        # 3. Category B: Explicit preservation of institutional audit & communication history
+        # 3a. Disconnect internal sent messages without erasing communication history
+        cur.execute("UPDATE internal_messages SET sender_user_id = NULL WHERE sender_user_id = ?", (target_id,))
+        
+        # 3b. Disconnect internal received messages without erasing delivery audit records
+        cur.execute("UPDATE internal_message_recipients SET recipient_user_id = NULL WHERE recipient_user_id = ?", (target_id,))
+
+        # 3c. Register deleted account in authoritative registry to permanently block re-login & re-creation
+        cur.execute("""
+            INSERT INTO deleted_accounts (id, user_id, email, name, deleted_at, deleted_by, reason)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (email) DO UPDATE 
+            SET deleted_at = EXCLUDED.deleted_at, 
+                deleted_by = EXCLUDED.deleted_by,
+                reason = EXCLUDED.reason
+        """, (str(uuid.uuid4()), target_id, target_email, target_name, now, actor_id, "Permanently deleted by administrator"))
+
+        # 3d. Record audit log entry in assignment_audit
         cur.execute('''
             INSERT INTO assignment_audit (user_id, changed_by, action, created_at)
-            VALUES (?, ?, 'DELETE_USER', ?)
-        ''', (target_user_id, actor_id, now))
+            VALUES (?, ?, 'USER_PERMANENTLY_DELETED', ?)
+        ''', (target_id, actor_id, now))
+
+        # 4. Category A: Remove disposable personal state
+        cur.execute("DELETE FROM auth_accounts WHERE user_id = ?", (target_id,))
+        cur.execute("DELETE FROM user_assignments WHERE user_id = ?", (target_id,))
+        cur.execute("DELETE FROM internal_drafts WHERE user_id = ?", (target_id,))
+        cur.execute("DELETE FROM internal_user_labels WHERE user_id = ?", (target_id,))
+        cur.execute("DELETE FROM internal_idempotency_keys WHERE user_id = ?", (target_id,))
+        cur.execute("DELETE FROM sessions WHERE user_id = ?", (target_id,))
+
+        # 5. Atomically delete target user record from authoritative users table
+        cur.execute("DELETE FROM users WHERE id = ?", (target_id,))
+
+        # 6. Commit transaction atomically
         conn.commit()
         return True
     except Exception as e:
@@ -549,6 +702,15 @@ def admin_delete_user(target_user_id: str, actor_id: str) -> bool:
 
 def register_user(name: str, email: str, password: str, role_key: str = "citizen") -> Dict[str, Any]:
     """Register a new user account with default non-privileged role (citizen)."""
+    norm_email = email.strip().lower()
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT email FROM deleted_accounts WHERE LOWER(email) = ?", (norm_email,))
+    if cur.fetchone():
+        conn.close()
+        raise ValueError("This email address was previously deleted and cannot be self-registered. Please contact an administrator.")
+    conn.close()
+
     # Enforce safe non-privileged role for self-registration
     safe_role = "citizen"
     return admin_create_user(

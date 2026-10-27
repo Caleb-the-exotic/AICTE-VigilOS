@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AICTE VigilOS — Institutional Complaint Submission Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --card: #111827;
+      --card-border: #1f293d;
+      --primary: #ef4444;
+      --primary-hover: #dc2626;
+      --accent: #f43f5e;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --input-bg: #1e293b;
+      --border: #334155;
+      --success: #10b981;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: 'Outfit', -apple-system, sans-serif;
+      background: radial-gradient(circle at top right, #1e1b4b 0%, var(--bg) 60%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+    .container {
+      width: 100%;
+      max-width: 760px;
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 2.5rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.5rem;
+    }
+    .logo-badge {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, #ef4444, #991b1b);
+      display: grid;
+      place-items: center;
+      font-size: 1.5rem;
+      box-shadow: 0 10px 20px -5px rgba(239, 68, 68, 0.4);
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+    label {
+      display: block;
+      font-size: 0.825rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    input, select, textarea {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    .inst-card {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
+    .inst-card.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+    .inst-header {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #fff;
+    }
+    .inst-meta {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .submit-btn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      color: white;
+      font-weight: 600;
+      font-size: 1rem;
+      padding: 0.9rem;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 10px 20px -5px rgba(239, 68, 68, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .submit-btn:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+    .submit-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .alert {
+      padding: 1rem 1.25rem;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      margin-top: 1.5rem;
+      display: none;
+    }
+    .alert.success {
+      display: block;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #6ee7b7;
+    }
+    .alert.error {
+      display: block;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+    }
+    .case-ref {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #fff;
+      margin: 0.5rem 0;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo-badge">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
+      </div>
+      <div>
+        <h1>AICTE VigilOS — Institutional Redressal Portal</h1>
+        <div class="subtitle">Unified Institutional Complaint & Regulatory Filing Gateway</div>
+      </div>
+    </div>
+
+    <form id="complaintForm">
+      <!-- Step 1: Select Institution -->
+      <div class="form-group">
+        <label for="aicte_pid">Registered Institution (AICTE Permanent ID)</label>
+        <select id="aicte_pid" name="aicte_pid" required>
+          <option value="">-- Select Registered Institution --</option>
+          <option value="1-376234110">Thakur College of Engineering & Technology (1-376234110) — Western</option>
+          <option value="1-109723481">Shri Ram Institute of Technology (1-109723481) — Northern</option>
+          <option value="1-204561892">KL University (1-204561892) — Southern</option>
+          <option value="1-445871203">Kalinga Institute of Industrial Technology (1-445871203) — Eastern</option>
+          <option value="1-512398067">SRM Institute of Science and Technology (1-512398067) — Southern</option>
+          <option value="1-631047285">GLA University (1-631047285) — Northern</option>
+          <option value="1-788234501">Amity University Rajasthan (1-788234501) — Northern</option>
+          <option value="1-890123456">VIT Bhopal University (1-890123456) — Central</option>
+          <option value="1-923456789">Chandigarh University (1-923456789) — Northern</option>
+          <option value="1-101234567">Dr. A.P.J. Abdul Kalam Technical University (1-101234567) — Northern</option>
+        </select>
+      </div>
+
+      <!-- Live Portfolio Snapshot Card -->
+      <div id="instCard" class="inst-card">
+        <div id="instName" class="inst-header">Institution Name</div>
+        <div id="instMeta" class="inst-meta">AICTE PID: — · Status: —</div>
+      </div>
+
+      <!-- Complainant Identity -->
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="complainant_name">Submitting Officer / Complainant Name</label>
+          <input type="text" id="complainant_name" name="complainant_name" placeholder="Full name of submitting person" required>
+        </div>
+        <div class="form-group">
+          <label for="complainant_email">Official Contact Email</label>
+          <input type="email" id="complainant_email" name="complainant_email" placeholder="officer@institute.edu.in" required>
+        </div>
+      </div>
+
+      <!-- Bureau & Category -->
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="bureau">Bureau / Cell</label>
+          <select id="bureau" name="bureau" required>
+            <option value="PGRC">Public Grievance Redressal Cell (PGRC)</option>
+            <option value="RB">Regulation Bureau (RB)</option>
+            <option value="RO">Regional Directorate (RO)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="category">Grievance / Proceeding Category</label>
+          <select id="category" name="category" required>
+            <option value="Capitation Fee">Capitation Fee</option>
+            <option value="Faculty Deficiency">Faculty Cadre Ratio Deficiency</option>
+            <option value="Non-payment of Salary">Non-payment of Faculty Salary</option>
+            <option value="Ragging">Anti-Ragging Compliance</option>
+            <option value="Infrastructure Deficiency">Infrastructure / Lab Deficiency</option>
+            <option value="Admissions Irregularity">Admissions Beyond Sanctioned Intake</option>
+            <option value="Academic Issues">Academic Curriculum Non-Compliance</option>
+            <option value="Fee Regulation Violation">Fee Regulation Violation</option>
+            <option value="Service Matters">Service & Faculty Employment Dispute</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Title / Summary -->
+      <div class="form-group">
+        <label for="title">Subject / Title</label>
+        <input type="text" id="title" name="title" placeholder="Brief statement of the grievance or proceeding" required>
+      </div>
+
+      <!-- Detailed Description -->
+      <div class="form-group">
+        <label for="description">Detailed Grievance Description & Documentation</label>
+        <textarea id="description" name="description" rows="5" placeholder="Specify dates, affected academic branches, student/faculty details, and references..." required></textarea>
+      </div>
+
+      <!-- Submit Button -->
+      <button type="submit" id="submitBtn" class="submit-btn">
+        <span>Submit Complaint to AICTE VigilOS</span>
+      </button>
+    </form>
+
+    <!-- Response Alerts -->
+    <div id="responseAlert" class="alert"></div>
+  </div>
+
+  <script>
+    const API_BASE = window.location.origin;
+
+    const pidSelect = document.getElementById("aicte_pid");
+    const instCard = document.getElementById("instCard");
+    const instName = document.getElementById("instName");
+    const instMeta = document.getElementById("instMeta");
+    const form = document.getElementById("complaintForm");
+    const submitBtn = document.getElementById("submitBtn");
+    const alertBox = document.getElementById("responseAlert");
+
+    // Fetch authoritative portfolio when institution is selected
+    pidSelect.addEventListener("change", async (e) => {
+      const pid = e.target.value;
+      if (!pid) {
+        instCard.classList.remove("active");
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/aicte/institutions/${pid}`);
+        if (res.ok) {
+          const data = await res.json();
+          instName.textContent = data.institution_name;
+          instMeta.textContent = `PID: ${data.aicte_pid} · ${data.region} Region · Approval: ${data.approval_status || 'Active'}`;
+          instCard.classList.add("active");
+          if (!document.getElementById("complainant_email").value && data.contact_email) {
+            document.getElementById("complainant_email").value = data.contact_email;
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load institution details:", err);
+      }
+    });
+
+    // Handle submission
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      alertBox.className = "alert";
+      alertBox.style.display = "none";
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Submitting to Database...";
+
+      const payload = {
+        aicte_pid: document.getElementById("aicte_pid").value,
+        category: document.getElementById("category").value,
+        title: document.getElementById("title").value,
+        description: document.getElementById("description").value,
+        bureau: document.getElementById("bureau").value,
+        complainant_name: document.getElementById("complainant_name").value,
+        complainant_email: document.getElementById("complainant_email").value,
+        complainant_type: "Institutional User"
+      };
+
+      try {
+        const res = await fetch(`${API_BASE}/api/aicte/cases/submit`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.ok) {
+          alertBox.className = "alert success";
+          alertBox.innerHTML = `
+            <strong>Complaint Successfully Registered!</strong><br>
+            Official AICTE Reference Number:
+            <div class="case-ref">${data.case_id}</div>
+            Institution: <b>${data.institution_name}</b> (${data.institution_code})<br>
+            Bureau: <b>${data.bureau}</b> · Status: <b>${data.status}</b> · Submitted By: <b>${data.complainant_name}</b><br>
+            <p style="margin-top: 0.5rem; font-size: 0.8rem; color: #a7f3d0;">
+              This complaint is now permanently persisted in AICTE VigilOS and visible on the National Oversight Dashboard.
+            </p>
+          `;
+          alertBox.style.display = "block";
+          form.reset();
+          instCard.classList.remove("active");
+        } else {
+          throw new Error(data.detail || "Server rejected complaint registration.");
+        }
+      } catch (err) {
+        alertBox.className = "alert error";
+        alertBox.innerHTML = `<strong>Submission Failed:</strong> ${err.message}`;
+        alertBox.style.display = "block";
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit Complaint to AICTE VigilOS";
+      }
+    });
+  </script>
+</body>
+</html>

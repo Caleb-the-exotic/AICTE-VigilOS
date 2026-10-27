@@ -4,12 +4,13 @@ import {
   AlertTriangle, Building2, CheckCircle2, Clock, Download,
   FileText, Filter, Gavel, GitMerge, Globe, Layers,
   RefreshCw, Search, Shield, Siren, TrendingUp, Users,
-  X, ChevronRight, ArrowUpRight, Eye, AlertOctagon,
+  X, ChevronRight, ChevronLeft, ArrowUpRight, Eye, AlertOctagon,
   BarChart3, MapPin, Calendar, Link2, Zap, Info, Loader2,
+  Plus, Mail, Phone, Edit3, Trash2,
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
-import { HAS_BACKEND, API_BASE_URL } from "@/lib/api";
+import { HAS_BACKEND, API_BASE_URL, api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
@@ -25,9 +26,13 @@ type CaseStatus = "received" | "under_process" | "transferred" | "escalated" | "
 interface AICTECase {
   case_id: string;
   aicte_pid: string;
+  institution_code?: string;
   institution_name: string;
   region: string;
   bureau: string;
+  complainant_user_id?: string;
+  complainant_name?: string;
+  complainant_email?: string;
   complainant_type: string;
   category: string;
   title: string;
@@ -36,8 +41,11 @@ interface AICTECase {
   status: string;
   sla_days: number;
   sla_deadline: string;
+  received_at?: string;
+  resolved_at?: string;
   disposed_at?: string;
   created_at: string;
+  updated_at?: string;
   ageing_days?: number;
   sla_breached?: boolean;
 }
@@ -65,7 +73,7 @@ interface KPIs {
   by_bureau: { RB: number; PGRC: number; RO: number };
 }
 
-// ── Mock data for no-backend mode ──────────────────────────────
+// ── Mock data for fallback mode ──────────────────────────────
 function mockKpis(): KPIs {
   return {
     total: 10, received: 3, under_process: 4, transferred: 1,
@@ -79,22 +87,23 @@ function mockCases(): AICTECase[] {
   const d = (days: number) => new Date(now.getTime() - days * 86400000).toISOString();
   const dl = (days: number) => new Date(now.getTime() + days * 86400000).toISOString();
   const rawList: AICTECase[] = [
-    { case_id: "AICTE-2026-RB-0042", aicte_pid: "1-109723481", institution_name: "Shri Ram Institute of Technology", region: "Northern", bureau: "RB", complainant_type: "Stakeholder", category: "Faculty Deficiency", title: "Faculty cadre ratio non-compliance — insufficient PhD-qualified faculty", description: "Inspection reveals faculty cadre ratio below AICTE norms.", assigned_officer: "Dr. Ramesh Gupta (RB)", status: "under_process", sla_days: 45, sla_deadline: dl(33), created_at: d(12), ageing_days: 12, sla_breached: false },
-    { case_id: "AICTE-2026-PGRC-0089", aicte_pid: "1-109723481", institution_name: "Shri Ram Institute of Technology", region: "Northern", bureau: "PGRC", complainant_type: "Faculty", category: "Non-payment of Salary", title: "Non-payment of faculty salary for 4 consecutive months", description: "Multiple faculty members filed grievances regarding non-payment.", assigned_officer: "Ms. Priya Verma (PGRC)", status: "escalated", sla_days: 30, sla_deadline: dl(22), created_at: d(8), ageing_days: 8, sla_breached: false },
-    { case_id: "AICTE-2026-RB-0055", aicte_pid: "1-376234110", institution_name: "Thakur College of Engineering", region: "Western", bureau: "RB", complainant_type: "Stakeholder", category: "Fee Regulation Violation", title: "Excess fee collection beyond AICTE approved fee structure", description: "Fees collected beyond the AICTE approved structure for 2026-27.", assigned_officer: "Mr. Suresh Iyer (RB)", status: "under_process", sla_days: 30, sla_deadline: dl(25), created_at: d(5), ageing_days: 5, sla_breached: false },
-    { case_id: "AICTE-2026-PGRC-0112", aicte_pid: "1-376234110", institution_name: "Thakur College of Engineering", region: "Western", bureau: "PGRC", complainant_type: "Student", category: "Capitation Fee", title: "Capitation fee demand from admitted students", description: "Students asked to pay additional ₹50,000 as 'development fee'.", assigned_officer: "Dr. Anita Sharma (PGRC)", status: "received", sla_days: 30, sla_deadline: dl(28), created_at: d(2), ageing_days: 2, sla_breached: false },
-    { case_id: "AICTE-2026-PGRC-0034", aicte_pid: "1-204561892", institution_name: "KL University", region: "Southern", bureau: "PGRC", complainant_type: "Student", category: "Ragging", title: "Ragging complaint — senior students intimidating juniors in hostel", description: "Multiple juniors reported systematic ragging in hostel.", assigned_officer: "Ms. Kavita Singh (PGRC)", status: "escalated", sla_days: 30, sla_deadline: d(1), created_at: d(31), ageing_days: 31, sla_breached: true },
-    { case_id: "AICTE-2026-RB-0021", aicte_pid: "1-445871203", institution_name: "Kalinga Institute of Technology", region: "Eastern", bureau: "RB", complainant_type: "Public", category: "Infrastructure Deficiency", title: "Laboratory equipment deficiency — below AICTE norms", description: "EVC inspection revealed laboratories lacking minimum equipment.", assigned_officer: "Mr. Deepak Nair (RB)", status: "disposed", sla_days: 60, sla_deadline: d(15), created_at: d(75), ageing_days: 75, sla_breached: false },
-    { case_id: "AICTE-2026-PGRC-0078", aicte_pid: "1-512398067", institution_name: "SRM Institute of Science and Technology", region: "Southern", bureau: "PGRC", complainant_type: "Faculty", category: "Service Matters", title: "Wrongful termination of contractual faculty", description: "26 contractual faculty terminated without notice.", assigned_officer: "Dr. Ravi Kumar (PGRC)", status: "under_process", sla_days: 45, sla_deadline: dl(27), created_at: d(18), ageing_days: 18, sla_breached: false },
-    { case_id: "AICTE-2026-RO-0016", aicte_pid: "1-631047285", institution_name: "GLA University", region: "Northern", bureau: "RO", complainant_type: "Stakeholder", category: "Admissions Irregularity", title: "Over-admission beyond sanctioned intake in B.Tech CSE", description: "340 students admitted against sanctioned intake of 240.", assigned_officer: "RO Northern Cell", status: "transferred", sla_days: 30, sla_deadline: dl(8), created_at: d(22), ageing_days: 22, sla_breached: false },
-    { case_id: "AICTE-2026-PGRC-0145", aicte_pid: "1-788234501", institution_name: "Amity University Rajasthan", region: "Northern", bureau: "PGRC", complainant_type: "Student", category: "Academic Issues", title: "Examinations conducted without prescribed syllabus coverage", description: "End-semester exams conducted with questions outside AICTE model curriculum.", assigned_officer: "Ms. Shweta Patel (PGRC)", status: "received", sla_days: 30, sla_deadline: dl(27), created_at: d(3), ageing_days: 3, sla_breached: false },
-    { case_id: "AICTE-2026-RB-0071", aicte_pid: "1-923456789", institution_name: "Chandigarh University", region: "Northern", bureau: "RB", complainant_type: "Stakeholder", category: "Faculty Deficiency", title: "Insufficient visiting faculty against permanent positions", description: "60% teaching load handled by visiting faculty.", assigned_officer: "Mr. Arvind Mehta (RB)", status: "under_process", sla_days: 45, sla_deadline: dl(31), created_at: d(14), ageing_days: 14, sla_breached: false },
+    { case_id: "AICTE-2026-PGRC-0112", aicte_pid: "1-376234110", institution_code: "1-376234110", institution_name: "Thakur College of Engineering", region: "Western", bureau: "PGRC", complainant_name: "Amit Deshmukh", complainant_email: "amit.deshmukh24@gmail.com", complainant_type: "Student", category: "Capitation Fee", title: "Capitation fee demand from admitted students", description: "Students asked to pay additional ₹50,000 as 'development fee'.", assigned_officer: "Dr. Anita Sharma (PGRC)", status: "received", sla_days: 30, sla_deadline: dl(22), created_at: d(8), received_at: d(8), ageing_days: 8, sla_breached: false },
+    { case_id: "AICTE-2026-RB-0042", aicte_pid: "1-109723481", institution_code: "1-109723481", institution_name: "Shri Ram Institute of Technology", region: "Northern", bureau: "RB", complainant_name: "Dr. K.V. Ramanathan", complainant_email: "kv.ramanathan@academic-council.org", complainant_type: "Stakeholder", category: "Faculty Deficiency", title: "Faculty cadre ratio non-compliance — insufficient PhD-qualified faculty", description: "Inspection reveals faculty cadre ratio below AICTE norms.", assigned_officer: "Dr. Ramesh Gupta (RB)", status: "under_process", sla_days: 45, sla_deadline: dl(33), created_at: d(12), received_at: d(12), ageing_days: 12, sla_breached: false },
+    { case_id: "AICTE-2026-PGRC-0089", aicte_pid: "1-109723481", institution_code: "1-109723481", institution_name: "Shri Ram Institute of Technology", region: "Northern", bureau: "PGRC", complainant_name: "Prof. Sunita Sharma", complainant_email: "sunita.sharma.faculty@gmail.com", complainant_type: "Faculty", category: "Non-payment of Salary", title: "Non-payment of faculty salary for 4 consecutive months", description: "Multiple faculty members filed grievances regarding non-payment.", assigned_officer: "Ms. Priya Verma (PGRC)", status: "escalated", sla_days: 30, sla_deadline: dl(22), created_at: d(8), received_at: d(8), ageing_days: 8, sla_breached: false },
+    { case_id: "AICTE-2026-RB-0055", aicte_pid: "1-376234110", institution_code: "1-376234110", institution_name: "Thakur College of Engineering", region: "Western", bureau: "RB", complainant_name: "Rajesh V. Patil", complainant_email: "rajesh.patil.pta@gmail.com", complainant_type: "Stakeholder", category: "Fee Regulation Violation", title: "Excess fee collection beyond AICTE approved fee structure", description: "Fees collected beyond the AICTE approved structure for 2026-27.", assigned_officer: "Mr. Suresh Iyer (RB)", status: "under_process", sla_days: 30, sla_deadline: dl(25), created_at: d(5), received_at: d(5), ageing_days: 5, sla_breached: false },
+    { case_id: "AICTE-2026-PGRC-0034", aicte_pid: "1-204561892", institution_code: "1-204561892", institution_name: "KL University", region: "Southern", bureau: "PGRC", complainant_name: "K. Sai Praneeth", complainant_email: "sai.praneeth.k@gmail.com", complainant_type: "Student", category: "Ragging", title: "Ragging complaint — senior students intimidating juniors in hostel", description: "Multiple juniors reported systematic ragging in hostel.", assigned_officer: "Ms. Kavita Singh (PGRC)", status: "escalated", sla_days: 30, sla_deadline: d(1), created_at: d(31), received_at: d(31), ageing_days: 31, sla_breached: true },
+    { case_id: "AICTE-2026-RB-0021", aicte_pid: "1-445871203", institution_code: "1-445871203", institution_name: "Kalinga Institute of Technology", region: "Eastern", bureau: "RB", complainant_name: "Subhash Chandra Mohanty", complainant_email: "sc.mohanty@odisha-edu-vigil.in", complainant_type: "Public", category: "Infrastructure Deficiency", title: "Laboratory equipment deficiency — below AICTE norms", description: "EVC inspection revealed laboratories lacking minimum equipment.", assigned_officer: "Mr. Deepak Nair (RB)", status: "disposed", sla_days: 60, sla_deadline: d(15), created_at: d(75), received_at: d(75), resolved_at: d(15), ageing_days: 60, sla_breached: false },
+    { case_id: "AICTE-2026-PGRC-0078", aicte_pid: "1-512398067", institution_code: "1-512398067", institution_name: "SRM Institute of Science and Technology", region: "Southern", bureau: "PGRC", complainant_name: "Dr. M. Senthil Kumar", complainant_email: "m.senthil.chem@gmail.com", complainant_type: "Faculty", category: "Service Matters", title: "Wrongful termination of contractual faculty", description: "26 contractual faculty terminated without notice.", assigned_officer: "Dr. Ravi Kumar (PGRC)", status: "under_process", sla_days: 45, sla_deadline: dl(27), created_at: d(18), received_at: d(18), ageing_days: 18, sla_breached: false },
+    { case_id: "AICTE-2026-RO-0016", aicte_pid: "1-631047285", institution_code: "1-631047285", institution_name: "GLA University", region: "Northern", bureau: "RO", complainant_name: "Virendra Singh Rawat", complainant_email: "virendra.rawat.up@gmail.com", complainant_type: "Stakeholder", category: "Admissions Irregularity", title: "Over-admission beyond sanctioned intake in B.Tech CSE", description: "340 students admitted against sanctioned intake of 240.", assigned_officer: "RO Northern Cell", status: "transferred", sla_days: 30, sla_deadline: dl(8), created_at: d(22), received_at: d(22), ageing_days: 22, sla_breached: false },
+    { case_id: "AICTE-2026-PGRC-0145", aicte_pid: "1-788234501", institution_code: "1-788234501", institution_name: "Amity University Rajasthan", region: "Northern", bureau: "PGRC", complainant_name: "Harshwardhan Rathore", complainant_email: "h.rathore2026@gmail.com", complainant_type: "Student", category: "Academic Issues", title: "Examinations conducted without prescribed syllabus coverage", description: "End-semester exams conducted with questions outside AICTE model curriculum.", assigned_officer: "Ms. Shweta Patel (PGRC)", status: "received", sla_days: 30, sla_deadline: dl(27), created_at: d(3), received_at: d(3), ageing_days: 3, sla_breached: false },
+    { case_id: "AICTE-2026-RB-0071", aicte_pid: "1-923456789", institution_code: "1-923456789", institution_name: "Chandigarh University", region: "Northern", bureau: "RB", complainant_name: "Gurpreet Singh Gill", complainant_email: "gurpreet.gill.punjab@gmail.com", complainant_type: "Stakeholder", category: "Faculty Deficiency", title: "Insufficient visiting faculty against permanent positions", description: "60% teaching load handled by visiting faculty.", assigned_officer: "Mr. Arvind Mehta (RB)", status: "under_process", sla_days: 45, sla_deadline: dl(31), created_at: d(14), received_at: d(14), ageing_days: 14, sla_breached: false },
   ];
   return rawList.map(c => {
     const inst = getInstitutionByPid(c.aicte_pid);
     return {
       ...c,
       institution_name: inst.institution_name,
+      institution_code: c.institution_code || c.aicte_pid,
       region: inst.region,
     };
   });
@@ -229,24 +238,34 @@ function OverlapAlertCard({
   );
 }
 
-// ── Case Table Row (Officer column removed, clickable institution profile) ──
+// ── Case Table Row (Exact required column specification) ──
+// ── Case Table Row (Exact required column specification) ──
 function CaseRow({ 
   c, 
   onView, 
-  onViewProfile 
+  onViewProfile,
+  onEdit,
+  onDelete,
+  canManage,
 }: { 
   c: AICTECase; 
   onView: (c: AICTECase) => void;
   onViewProfile: (pid: string) => void;
+  onEdit?: (c: AICTECase) => void;
+  onDelete?: (caseId: string) => void;
+  canManage?: boolean;
 }) {
   return (
     <tr
       className="border-b border-border/20 hover:bg-white/3 cursor-pointer transition-colors group"
       onClick={() => onView(c)}
     >
+      {/* 1. Case ID */}
       <td className="px-3 py-3">
-        <span className="text-[11px] font-mono text-primary/80">{c.case_id}</span>
+        <span className="text-[11px] font-mono font-semibold text-primary/90">{c.case_id}</span>
       </td>
+
+      {/* 2. Institution */}
       <td className="px-3 py-3">
         <button
           type="button"
@@ -254,40 +273,90 @@ function CaseRow({
             e.stopPropagation();
             onViewProfile(c.aicte_pid);
           }}
-          className="text-xs font-semibold text-white/90 max-w-[220px] truncate hover:text-primary transition-colors hover:underline text-left cursor-pointer block"
+          className="text-xs font-semibold text-white/90 max-w-[200px] truncate hover:text-primary transition-colors hover:underline text-left cursor-pointer block"
           title="Click to view institution profile"
         >
           {c.institution_name}
         </button>
-        <div className="text-[10px] text-muted-foreground font-mono">{c.aicte_pid}</div>
       </td>
-      <td className="px-3 py-3"><BureauBadge bureau={c.bureau} /></td>
+
+      {/* 3. Institution Code */}
       <td className="px-3 py-3">
-        <span className="text-[11px] text-white/70">{c.category}</span>
+        <span className="text-[11px] font-mono text-muted-foreground">{c.institution_code || c.aicte_pid}</span>
       </td>
+
+      {/* 4. Bureau */}
+      <td className="px-3 py-3"><BureauBadge bureau={c.bureau} /></td>
+
+      {/* 5. Category */}
+      <td className="px-3 py-3">
+        <span className="text-[11px] text-white/80">{c.category}</span>
+      </td>
+
+      {/* 6. Status */}
       <td className="px-3 py-3"><StatusBadge status={c.status} /></td>
+
+      {/* 7. Ageing */}
       <td className="px-3 py-3">
         <div className="flex items-center gap-1.5">
-          <span className={cn("text-[11px] tabular-nums", c.sla_breached ? "text-red-400 font-bold" : "text-white/60")}>
+          <span className={cn("text-[11px] tabular-nums font-medium", c.sla_breached ? "text-red-400 font-bold" : "text-white/70")}>
             {c.ageing_days ?? 0}d
           </span>
           {c.sla_breached && <AlertOctagon className="w-3 h-3 text-red-400 animate-pulse" />}
         </div>
       </td>
+
+      {/* 8. Region */}
       <td className="px-3 py-3">
-        <span className="text-[10px] text-muted-foreground">{c.region}</span>
+        <span className="text-[11px] text-muted-foreground">{c.region}</span>
       </td>
-      <td className="px-3 py-3 opacity-0 group-hover:opacity-100 transition-opacity">
-        <ArrowUpRight className="w-3.5 h-3.5 text-primary" />
+
+      {/* 9. Actions (Edit & Delete for roles above Nodal Officer, View Details) */}
+      <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-end gap-1.5">
+          {canManage && onEdit && (
+            <button
+              type="button"
+              onClick={() => onEdit(c)}
+              className="p-1 rounded-lg border border-primary/30 bg-primary/10 hover:bg-primary/25 text-primary cursor-pointer transition-all active:scale-95"
+              title="Edit Case details"
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {canManage && onDelete && (
+            <button
+              type="button"
+              onClick={() => onDelete(c.case_id)}
+              className="p-1 rounded-lg border border-destructive/30 bg-destructive/10 hover:bg-destructive/25 text-destructive cursor-pointer transition-all active:scale-95"
+              title="Delete Case from database"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onView(c)}
+            className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+            title="View Case Overview"
+          >
+            <ArrowUpRight className="w-3.5 h-3.5 text-primary" />
+          </button>
+        </div>
       </td>
     </tr>
   );
 }
 
 // ── Institution Profile Drawer (Sliding from Right with Campus Photos) ──
-function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void }) {
+function InstitutionDrawer({ pid, onClose, liveCases }: { pid: string; onClose: () => void; liveCases?: AICTECase[] }) {
   const profile = useMemo(() => getInstitutionByPid(pid), [pid]);
-  const cases = useMemo(() => mockCases().filter(c => c.aicte_pid === pid), [pid]);
+  const cases = useMemo(() => {
+    if (liveCases && liveCases.length > 0) {
+      return liveCases.filter(c => c.aicte_pid === pid);
+    }
+    return mockCases().filter(c => c.aicte_pid === pid);
+  }, [pid, liveCases]);
   const [activePhoto, setActivePhoto] = useState(0);
 
   const rbCases = cases.filter(c => c.bureau === "RB");
@@ -392,11 +461,11 @@ function InstitutionDrawer({ pid, onClose }: { pid: string; onClose: () => void 
               <span>{profile.address}</span>
             </div>
             <div className="flex items-center gap-4 flex-wrap pt-1 text-muted-foreground">
-              <span>📧 {profile.contact_email}</span>
-              <span>📞 {profile.contact_phone}</span>
+              <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-primary" /> {profile.contact_email}</span>
+              <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-primary" /> {profile.contact_phone}</span>
               {profile.website && (
-                <a href={profile.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 font-medium">
-                  🌐 Visit Website
+                <a href={profile.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1.5 font-medium">
+                  <Globe className="w-3.5 h-3.5" /> Visit Website
                 </a>
               )}
             </div>
@@ -517,6 +586,93 @@ function CasesDashboard() {
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [selectedCase, setSelectedCase] = useState<AICTECase | null>(null);
 
+  // Authoritative permissions: roles above Nodal Officer
+  const canManageCases = ["super_admin", "bureau_head", "approval_officer"].includes(user?.role || "");
+
+  // Responsive Pagination (10 per page on desktop, 5 per page on Android/mobile)
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" ? window.innerWidth < 768 : false);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+  const pageSize = isMobile ? 5 : 10;
+  const [casePage, setCasePage] = useState(1);
+
+  // Edit Case State & Handlers
+  const [editingCase, setEditingCase] = useState<AICTECase | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editCategory, setEditCategory] = useState("General Grievance");
+  const [editBureau, setEditBureau] = useState("RB");
+  const [editStatus, setEditStatus] = useState("under_process");
+  const [editAssignedOfficer, setEditAssignedOfficer] = useState("");
+  const [editSlaDays, setEditSlaDays] = useState(30);
+  const [isSavingCase, setIsSavingCase] = useState(false);
+
+  useEffect(() => {
+    if (editingCase) {
+      setEditTitle(editingCase.title || "");
+      setEditDescription(editingCase.description || "");
+      setEditCategory(editingCase.category || "General Grievance");
+      setEditBureau(editingCase.bureau || "RB");
+      setEditStatus(editingCase.status || "under_process");
+      setEditAssignedOfficer(editingCase.assigned_officer || "");
+      setEditSlaDays(editingCase.sla_days || 30);
+    }
+  }, [editingCase]);
+
+  const handleSaveCaseEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCase) return;
+    setIsSavingCase(true);
+    try {
+      if (HAS_BACKEND) {
+        await api.updateCase(editingCase.case_id, {
+          title: editTitle.trim(),
+          description: editDescription.trim(),
+          category: editCategory,
+          bureau: editBureau,
+          status: editStatus,
+          assigned_officer: editAssignedOfficer.trim(),
+          sla_days: Number(editSlaDays) || 30,
+        });
+      }
+      setCases(prev => prev.map(c => c.case_id === editingCase.case_id ? {
+        ...c,
+        title: editTitle.trim(),
+        description: editDescription.trim(),
+        category: editCategory,
+        bureau: editBureau,
+        status: editStatus,
+        assigned_officer: editAssignedOfficer.trim(),
+        sla_days: Number(editSlaDays) || 30,
+      } : c));
+      toast.success(`Case ${editingCase.case_id} updated successfully.`);
+      setEditingCase(null);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update case");
+    } finally {
+      setIsSavingCase(false);
+    }
+  };
+
+  const handleDeleteCase = async (caseId: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete case ${caseId}? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      if (HAS_BACKEND) {
+        await api.deleteCase(caseId);
+      }
+      setCases(prev => prev.filter(c => c.case_id !== caseId));
+      if (selectedCase?.case_id === caseId) setSelectedCase(null);
+      toast.success(`Case ${caseId} deleted from database.`);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to delete case");
+    }
+  };
+
   // Fetch from backend
   const fetchData = useCallback(async () => {
     if (!HAS_BACKEND) return;
@@ -539,18 +695,75 @@ function CasesDashboard() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Re-sync cases when institution profiles are edited
+  // Re-sync cases from database when institution profiles or complaints are updated
   useEffect(() => {
     const handleUpdate = () => {
-      setCases(mockCases());
+      fetchData();
     };
     window.addEventListener("aicte_institution_updated", handleUpdate);
+    window.addEventListener("aicte_case_updated", handleUpdate);
     window.addEventListener("storage", handleUpdate);
     return () => {
       window.removeEventListener("aicte_institution_updated", handleUpdate);
+      window.removeEventListener("aicte_case_updated", handleUpdate);
       window.removeEventListener("storage", handleUpdate);
     };
-  }, []);
+  }, [fetchData]);
+
+  // File Complaint state
+  const [isFilingModalOpen, setIsFilingModalOpen] = useState(false);
+  const [submittingComplaint, setSubmittingComplaint] = useState(false);
+  const [complaintForm, setComplaintForm] = useState({
+    aicte_pid: "1-376234110",
+    bureau: "PGRC",
+    category: "Capitation Fee",
+    title: "",
+    description: "",
+    complainant_type: "Student",
+  });
+
+  const availableInstitutions = useMemo(() => getStoredInstitutions(), []);
+
+  const handleFileComplaintSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!complaintForm.title.trim()) {
+      toast.error("Please enter a complaint title or subject.");
+      return;
+    }
+    setSubmittingComplaint(true);
+    try {
+      const res = await api.createCase({
+        aicte_pid: complaintForm.aicte_pid,
+        bureau: complaintForm.bureau,
+        category: complaintForm.category,
+        title: complaintForm.title,
+        description: complaintForm.description,
+        complainant_type: complaintForm.complainant_type,
+      });
+      if (res && res.ok) {
+        toast.success(`Complaint registered successfully! Case Reference: ${res.case_id}`);
+        setIsFilingModalOpen(false);
+        setComplaintForm({
+          aicte_pid: "1-376234110",
+          bureau: "PGRC",
+          category: "Capitation Fee",
+          title: "",
+          description: "",
+          complainant_type: "Student",
+        });
+        await fetchData();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("aicte_case_updated"));
+        }
+      } else {
+        toast.error("Failed to register complaint. Database rejected the transaction.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to submit complaint to backend.");
+    } finally {
+      setSubmittingComplaint(false);
+    }
+  };
 
   // Derived filtered cases
   const filteredCases = useMemo(() => {
@@ -569,6 +782,20 @@ function CasesDashboard() {
       return true;
     });
   }, [cases, bureauFilter, statusFilter, regionFilter, searchQ]);
+
+  // Reset case page on filter changes
+  useEffect(() => {
+    setCasePage(1);
+  }, [bureauFilter, statusFilter, regionFilter, searchQ]);
+
+  const totalCasesCount = filteredCases.length;
+  const totalCasePages = Math.max(1, Math.ceil(totalCasesCount / pageSize));
+  const startCaseIndex = totalCasesCount === 0 ? 0 : (casePage - 1) * pageSize + 1;
+  const endCaseIndex = Math.min(casePage * pageSize, totalCasesCount);
+  const paginatedCases = useMemo(
+    () => filteredCases.slice((casePage - 1) * pageSize, casePage * pageSize),
+    [filteredCases, casePage, pageSize]
+  );
 
   // Overlap institutions (cases with both RB and PGRC)
   const overlapInstitutions = useMemo(() => {
@@ -650,6 +877,14 @@ function CasesDashboard() {
                 Demo Mode
               </span>
             )}
+            <button
+              id="file-complaint-btn"
+              onClick={() => setIsFilingModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-xs font-semibold shadow-md shadow-red-900/30 transition-all cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              File Complaint
+            </button>
             <button
               onClick={fetchData}
               disabled={loading}
@@ -749,7 +984,7 @@ function CasesDashboard() {
         <div className="flex flex-wrap gap-1">
           {([
             ["cases", "All Cases", FileText],
-            ["overlaps", `⚠️ Overlap Alerts (${overlapInstitutions.length})`, Siren],
+            ["overlaps", `Overlap Alerts (${overlapInstitutions.length})`, Siren],
             ["institutions", "Institutions", Building2],
             ["analytics", "Analytics", BarChart3],
           ] as [typeof activeTab, string, any][]).map(([k, label, Icon]) => (
@@ -805,29 +1040,92 @@ function CasesDashboard() {
               <select value={regionFilter} onChange={e => setRegionFilter(e.target.value)} className="h-8 px-2 rounded-lg bg-input border border-border/30 text-xs text-white" id="cases-region-filter">
                 {REGIONS.map(r => <option key={r} value={r}>{r === "ALL" ? "All Regions" : r}</option>)}
               </select>
-              <span className="text-[11px] text-muted-foreground ml-auto">{filteredCases.length} cases</span>
+              {/* Responsive Pagination Controls */}
+              <div className="flex items-center gap-2 ml-auto">
+                <span className="text-[11px] text-muted-foreground font-medium">
+                  {startCaseIndex}–{endCaseIndex} of {totalCasesCount} cases
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCasePage(p => Math.max(1, p - 1))}
+                    disabled={casePage <= 1}
+                    className="p-1 rounded-md border border-border/30 bg-secondary/40 hover:bg-secondary text-foreground disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition-all"
+                    title="Previous page"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCasePage(p => Math.min(totalCasePages, p + 1))}
+                    disabled={casePage >= totalCasePages}
+                    className="p-1 rounded-md border border-border/30 bg-secondary/40 hover:bg-secondary text-foreground disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition-all"
+                    title="Next page"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
 
             {/* Table */}
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[800px]">
+              <table className="w-full min-w-[950px]">
                 <thead>
                   <tr className="border-b border-border/20">
-                    {["Case ID", "Institution", "Bureau", "Category", "Status", "Ageing", "Region", ""].map(h => (
-                      <th key={h} className="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
+                    {["Case ID", "Institution", "Institution Code", "Bureau", "Category", "Status", "Ageing", "Region", "Actions"].map(h => (
+                      <th key={h} className={cn("px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground", h === "Actions" ? "text-right" : "text-left")}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCases.length === 0 && (
-                    <tr><td colSpan={8} className="px-3 py-8 text-center text-xs text-muted-foreground">No cases match your filters.</td></tr>
+                  {totalCasesCount === 0 && (
+                    <tr><td colSpan={9} className="px-3 py-8 text-center text-xs text-muted-foreground">No cases match your filters.</td></tr>
                   )}
-                  {filteredCases.map(c => (
-                    <CaseRow key={c.case_id} c={c} onView={setSelectedCase} onViewProfile={setSelectedProfile} />
+                  {paginatedCases.map(c => (
+                    <CaseRow
+                      key={c.case_id}
+                      c={c}
+                      onView={setSelectedCase}
+                      onViewProfile={setSelectedProfile}
+                      onEdit={setEditingCase}
+                      onDelete={handleDeleteCase}
+                      canManage={canManageCases}
+                    />
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {/* Bottom pagination toolbar when multiple pages */}
+            {totalCasePages > 1 && (
+              <div className="px-4 py-2.5 border-t border-border/20 flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">
+                  Showing {startCaseIndex} to {endCaseIndex} of {totalCasesCount} cases ({pageSize} per page)
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCasePage(p => Math.max(1, p - 1))}
+                    disabled={casePage <= 1}
+                    className="px-2.5 py-1 text-xs rounded-lg border border-border/30 bg-secondary/40 hover:bg-secondary text-foreground disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed transition-all"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-xs font-semibold px-2 text-primary">
+                    {casePage} / {totalCasePages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCasePage(p => Math.min(totalCasePages, p + 1))}
+                    disabled={casePage >= totalCasePages}
+                    className="px-2.5 py-1 text-xs rounded-lg border border-border/30 bg-secondary/40 hover:bg-secondary text-foreground disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed transition-all"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1028,7 +1326,7 @@ function CasesDashboard() {
 
       {/* ── Institution Profile Drawer ──────────────────────────────── */}
       {selectedProfile && (
-        <InstitutionDrawer pid={selectedProfile} onClose={() => setSelectedProfile(null)} />
+        <InstitutionDrawer pid={selectedProfile} liveCases={cases} onClose={() => setSelectedProfile(null)} />
       )}
 
       {/* ── Case Detail Modal ──────────────────────────────────────── */}
@@ -1055,13 +1353,15 @@ function CasesDashboard() {
             <div className="grid grid-cols-2 gap-2 text-[11px]">
               {[
                 ["Institution", selectedCase.institution_name],
-                ["AICTE PID", selectedCase.aicte_pid],
+                ["Institution Code", selectedCase.institution_code || selectedCase.aicte_pid],
                 ["Region", selectedCase.region],
+                ["Bureau", selectedCase.bureau],
                 ["Category", selectedCase.category],
-                ["Complainant", selectedCase.complainant_type],
-                ["Officer", selectedCase.assigned_officer],
+                ["Status", selectedCase.status],
                 ["Ageing", `${selectedCase.ageing_days ?? 0} days`],
-                ["SLA Days", `${selectedCase.sla_days} days`],
+                ["Submitted By", selectedCase.complainant_name || selectedCase.complainant_type || "Public"],
+                ["Complainant Email", selectedCase.complainant_email || "N/A"],
+                ["Received At", selectedCase.received_at ? new Date(selectedCase.received_at).toLocaleDateString() : (selectedCase.created_at ? new Date(selectedCase.created_at).toLocaleDateString() : "N/A")],
               ].map(([k, v]) => (
                 <div key={k} className="bg-secondary/30 rounded-lg p-2">
                   <div className="text-muted-foreground text-[9px] uppercase tracking-wider">{k}</div>
@@ -1082,6 +1382,336 @@ function CasesDashboard() {
                 <Eye className="w-3.5 h-3.5" /> View Institution Profile
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── File Complaint Modal (Integrated Database Persistence) ── */}
+      {isFilingModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !submittingComplaint && setIsFilingModalOpen(false)} />
+          <div className="relative w-full max-w-lg bg-card border border-border/50 rounded-2xl shadow-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border/30 pb-3">
+              <div>
+                <h2 className="text-base font-bold flex items-center gap-2 text-white">
+                  <Gavel className="w-4 h-4 text-red-500" />
+                  File AICTE Complaint
+                </h2>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Direct submission to persistent VigilOS database with atomic Case ID generation
+                </p>
+              </div>
+              <button
+                onClick={() => !submittingComplaint && setIsFilingModalOpen(false)}
+                className="p-1 rounded-lg text-muted-foreground hover:text-white hover:bg-secondary/60"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleFileComplaintSubmit} className="space-y-3.5 text-xs">
+              {/* Institution Selection */}
+              <div>
+                <label className="block text-[11px] font-semibold text-white/80 mb-1">Target Institution</label>
+                <select
+                  value={complaintForm.aicte_pid}
+                  onChange={(e) => setComplaintForm({ ...complaintForm, aicte_pid: e.target.value })}
+                  className="w-full h-9 px-3 rounded-lg bg-secondary/40 border border-border/50 text-white text-xs outline-none focus:border-primary"
+                  required
+                >
+                  {availableInstitutions.map((inst) => (
+                    <option key={inst.aicte_pid} value={inst.aicte_pid} className="bg-neutral-900 text-white">
+                      {inst.institution_name} ({inst.aicte_pid}) — {inst.region}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Bureau & Complainant Type */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-white/80 mb-1">Responsible Bureau</label>
+                  <select
+                    value={complaintForm.bureau}
+                    onChange={(e) => setComplaintForm({ ...complaintForm, bureau: e.target.value })}
+                    className="w-full h-9 px-3 rounded-lg bg-secondary/40 border border-border/50 text-white text-xs outline-none focus:border-primary"
+                  >
+                    <option value="PGRC" className="bg-neutral-900 text-white">PGRC (Grievance Redressal)</option>
+                    <option value="RB" className="bg-neutral-900 text-white">RB (Regulation Bureau)</option>
+                    <option value="RO" className="bg-neutral-900 text-white">RO (Regional Office)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-white/80 mb-1">Complainant Role</label>
+                  <select
+                    value={complaintForm.complainant_type}
+                    onChange={(e) => setComplaintForm({ ...complaintForm, complainant_type: e.target.value })}
+                    className="w-full h-9 px-3 rounded-lg bg-secondary/40 border border-border/50 text-white text-xs outline-none focus:border-primary"
+                  >
+                    <option value="Student" className="bg-neutral-900 text-white">Student</option>
+                    <option value="Faculty" className="bg-neutral-900 text-white">Faculty</option>
+                    <option value="Stakeholder" className="bg-neutral-900 text-white">Parent / Stakeholder</option>
+                    <option value="Institutional User" className="bg-neutral-900 text-white">Institutional Representative</option>
+                    <option value="Public" className="bg-neutral-900 text-white">Public Citizen</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-[11px] font-semibold text-white/80 mb-1">Complaint Category</label>
+                <select
+                  value={complaintForm.category}
+                  onChange={(e) => setComplaintForm({ ...complaintForm, category: e.target.value })}
+                  className="w-full h-9 px-3 rounded-lg bg-secondary/40 border border-border/50 text-white text-xs outline-none focus:border-primary"
+                  required
+                >
+                  <option value="Capitation Fee" className="bg-neutral-900 text-white">Capitation Fee</option>
+                  <option value="Faculty Deficiency" className="bg-neutral-900 text-white">Faculty Deficiency</option>
+                  <option value="Non-payment of Salary" className="bg-neutral-900 text-white">Non-payment of Salary</option>
+                  <option value="Ragging" className="bg-neutral-900 text-white">Ragging / Harassment</option>
+                  <option value="Infrastructure Deficiency" className="bg-neutral-900 text-white">Infrastructure Deficiency</option>
+                  <option value="Admissions Irregularity" className="bg-neutral-900 text-white">Admissions Irregularity</option>
+                  <option value="Academic Issues" className="bg-neutral-900 text-white">Academic Issues</option>
+                  <option value="Fee Regulation Violation" className="bg-neutral-900 text-white">Fee Regulation Violation</option>
+                  <option value="Service Matters" className="bg-neutral-900 text-white">Service Matters</option>
+                </select>
+              </div>
+
+              {/* Title / Subject */}
+              <div>
+                <label className="block text-[11px] font-semibold text-white/80 mb-1">Subject / Summary</label>
+                <input
+                  type="text"
+                  value={complaintForm.title}
+                  onChange={(e) => setComplaintForm({ ...complaintForm, title: e.target.value })}
+                  placeholder="e.g. Demand for excess capitation fee during admission"
+                  className="w-full h-9 px-3 rounded-lg bg-secondary/40 border border-border/50 text-white text-xs outline-none focus:border-primary"
+                  required
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[11px] font-semibold text-white/80 mb-1">Detailed Description</label>
+                <textarea
+                  rows={4}
+                  value={complaintForm.description}
+                  onChange={(e) => setComplaintForm({ ...complaintForm, description: e.target.value })}
+                  placeholder="Provide complete facts, specific departments, affected students or faculty..."
+                  className="w-full p-3 rounded-lg bg-secondary/40 border border-border/50 text-white text-xs outline-none focus:border-primary resize-none"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/30">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsFilingModalOpen(false)}
+                  disabled={submittingComplaint}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={submittingComplaint}
+                  className="bg-red-600 hover:bg-red-500 text-white flex items-center gap-1.5"
+                >
+                  {submittingComplaint ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Submitting to Database...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Submit Authoritative Complaint
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Case Modal (Roles above Nodal Officer) ─────────────── */}
+      {editingCase && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-card max-w-xl w-full border border-primary/40 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-border/30 bg-primary/10">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-primary" />
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">Edit Case Record</h3>
+                  <p className="text-[11px] font-mono text-muted-foreground">ID: {editingCase.case_id} • {editingCase.institution_name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCase(null)}
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCaseEdit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Bureau */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                    Bureau Jurisdiction *
+                  </label>
+                  <select
+                    value={editBureau}
+                    onChange={(e) => setEditBureau(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg bg-input border border-border/40 text-foreground text-xs outline-none focus:border-primary"
+                    required
+                  >
+                    <option value="RB" className="bg-neutral-900 text-white">RB (Regulation Bureau)</option>
+                    <option value="PGRC" className="bg-neutral-900 text-white">PGRC (Grievance Cell)</option>
+                    <option value="RO" className="bg-neutral-900 text-white">RO (Regional Office)</option>
+                  </select>
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                    Case Status *
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full h-9 px-3 rounded-lg bg-input border border-border/40 text-foreground text-xs outline-none focus:border-primary"
+                    required
+                  >
+                    <option value="received" className="bg-neutral-900 text-white">Received</option>
+                    <option value="under_process" className="bg-neutral-900 text-white">Under Process</option>
+                    <option value="transferred" className="bg-neutral-900 text-white">Transferred</option>
+                    <option value="escalated" className="bg-neutral-900 text-white">Escalated</option>
+                    <option value="disposed" className="bg-neutral-900 text-white">Disposed</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  Case Category *
+                </label>
+                <select
+                  value={editCategory}
+                  onChange={(e) => setEditCategory(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg bg-input border border-border/40 text-foreground text-xs outline-none focus:border-primary"
+                  required
+                >
+                  <option value="Capitation Fee" className="bg-neutral-900 text-white">Capitation Fee</option>
+                  <option value="Faculty Deficiency" className="bg-neutral-900 text-white">Faculty Deficiency</option>
+                  <option value="Non-payment of Salary" className="bg-neutral-900 text-white">Non-payment of Salary</option>
+                  <option value="Ragging" className="bg-neutral-900 text-white">Ragging / Harassment</option>
+                  <option value="Infrastructure Deficiency" className="bg-neutral-900 text-white">Infrastructure Deficiency</option>
+                  <option value="Admissions Irregularity" className="bg-neutral-900 text-white">Admissions Irregularity</option>
+                  <option value="Academic Issues" className="bg-neutral-900 text-white">Academic Issues</option>
+                  <option value="Fee Regulation Violation" className="bg-neutral-900 text-white">Fee Regulation Violation</option>
+                  <option value="Service Matters" className="bg-neutral-900 text-white">Service Matters</option>
+                  <option value="General Grievance" className="bg-neutral-900 text-white">General Grievance</option>
+                </select>
+              </div>
+
+              {/* Title / Subject */}
+              <div>
+                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  Case Subject / Title *
+                </label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="e.g. Investigation regarding unauthorized fee collection"
+                  className="w-full h-9 px-3 rounded-lg bg-input border border-border/40 text-foreground text-xs outline-none focus:border-primary"
+                  required
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                  Detailed Case Description
+                </label>
+                <textarea
+                  rows={4}
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Specific details, inspection notes, observations..."
+                  className="w-full p-3 rounded-lg bg-input border border-border/40 text-foreground text-xs outline-none focus:border-primary resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Assigned Officer */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                    Assigned Officer
+                  </label>
+                  <input
+                    type="text"
+                    value={editAssignedOfficer}
+                    onChange={(e) => setEditAssignedOfficer(e.target.value)}
+                    placeholder="e.g. Dr. Rajesh Kumar"
+                    className="w-full h-9 px-3 rounded-lg bg-input border border-border/40 text-foreground text-xs outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* SLA Days */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                    SLA Window (Days)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="180"
+                    value={editSlaDays}
+                    onChange={(e) => setEditSlaDays(parseInt(e.target.value, 10) || 30)}
+                    className="w-full h-9 px-3 rounded-lg bg-input border border-border/40 text-foreground text-xs outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border/30">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditingCase(null)}
+                  disabled={isSavingCase}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isSavingCase}
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-1.5"
+                >
+                  {isSavingCase ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Saving Changes...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Save Case Changes
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

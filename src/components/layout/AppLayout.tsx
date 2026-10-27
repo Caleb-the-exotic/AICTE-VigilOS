@@ -7,6 +7,8 @@ import BottomTabs from "../BottomTabs";
 import { CommandPalette, useCommandPalette } from "../CommandPalette";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { WorkspaceLoadingScreen } from "@/components/common/WorkspaceLoadingScreen";
+
 
 export default function AppLayout({
   children,
@@ -48,7 +50,14 @@ export default function AppLayout({
     return () => window.removeEventListener("keydown", onKey);
   }, [navigate, setCmdOpen]);
 
-  if (loading) return <div className="min-h-screen grid place-items-center bg-background text-muted-foreground">Loading…</div>;
+  if (loading) {
+    return (
+      <WorkspaceLoadingScreen
+        heading="Preparing your secure workspace"
+        message="Verifying your authenticated session and loading dashboard..."
+      />
+    );
+  }
 
   const handlePaletteAction = (action: string) => {
     if (action === "logout") {

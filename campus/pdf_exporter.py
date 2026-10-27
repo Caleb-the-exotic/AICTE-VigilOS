@@ -314,7 +314,7 @@ def generate_cases_pdf(
 
             sla_text = f"<font color='{status_color}'><b>{status_val.replace('_', ' ').upper()}</b></font><br/><font size='6.5' color='#64748B'>Ageing: {ageing}d / SLA: {sla_days}d</font>"
             if is_breached:
-                sla_text += "<br/><font size='6.5' color='#DC2626'><b>⚠ SLA BREACHED</b></font>"
+                sla_text += "<br/><font size='6.5' color='#DC2626'><b>[BREACHED] SLA BREACHED</b></font>"
             c6 = Paragraph(sla_text, cell_style)
 
             table_data.append([c1, c2, c3, c4, c5, c6])

@@ -17,7 +17,7 @@ ROLES = {
         "tone": "friendly, supportive, simple",
         "language_level": "non-technical",
         "behavior": "Guide, explain clearly with step-by-step help, confirm grievance details",
-        "icon": "👤",
+        "icon": "user",
     },
     "nodal_officer": {
         "name": "Nodal Officer",
@@ -26,7 +26,7 @@ ROLES = {
         "tone": "professional, investigative, collaborative",
         "language_level": "moderately technical",
         "behavior": "Provide institutional liaison updates, coordinate state/regional actions",
-        "icon": "🌐",
+        "icon": "globe",
     },
     "approval_officer": {
         "name": "Approval Officer",
@@ -35,7 +35,7 @@ ROLES = {
         "tone": "thorough, analytical, administrative",
         "language_level": "professional and compliance-oriented",
         "behavior": "Review grievances, verify evidence, issue orders, manage hearings and compliance",
-        "icon": "📋",
+        "icon": "clipboard-check",
     },
     "bureau_head": {
         "name": "Bureau Head",
@@ -44,7 +44,7 @@ ROLES = {
         "tone": "authoritative, strategic, regulatory",
         "language_level": "executive and regulatory",
         "behavior": "Oversee bureau caseload, resolve cross-bureau conflicts, approve escalated actions",
-        "icon": "🏛️",
+        "icon": "landmark",
     },
     "super_admin": {
         "name": "Super Admin",
@@ -53,7 +53,7 @@ ROLES = {
         "tone": "concise, authoritative, operational",
         "language_level": "technical and system-oriented",
         "behavior": "System-wide oversight, cross-bureau arbitration, role management, audit logging",
-        "icon": "🔑",
+        "icon": "key-round",
     },
 }
 
@@ -328,4 +328,4 @@ def get_role_choices() -> list[tuple[str, str]]:
 
 def get_role_icon(role: str) -> str:
     """Get the icon for a role."""
-    return ROLES.get(role, ROLES[DEFAULT_ROLE]).get("icon", "👤")
+    return ROLES.get(role, ROLES[DEFAULT_ROLE]).get("icon", "user")

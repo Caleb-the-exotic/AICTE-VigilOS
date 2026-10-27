@@ -311,11 +311,11 @@ function LoginPage() {
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-muted-foreground"><Building2 className="w-4 h-4" /></div>
                     <select value={signUpRole} onChange={(e) => setSignUpRole(e.target.value as Role)} className="w-full pl-10 pr-4 py-2 bg-secondary/30 hover:bg-secondary/40 focus:bg-background border border-border/70 focus:border-red-500/60 rounded-xl text-sm text-foreground outline-none transition-all focus:ring-2 focus:ring-red-500/20 appearance-none cursor-pointer">
-                      <option value="approval_officer" className="bg-card text-foreground">📋 Approval Officer (Case Handler)</option>
-                      <option value="bureau_head" className="bg-card text-foreground">🏛️ Bureau Head (RB / PGRC / RO)</option>
-                      <option value="super_admin" className="bg-card text-foreground">🔑 Super Admin (Central Vigilance)</option>
-                      <option value="nodal_officer" className="bg-card text-foreground">🌐 State / Regional Nodal Officer</option>
-                      <option value="citizen" className="bg-card text-foreground">👤 Citizen / Complainant</option>
+                      <option value="approval_officer" className="bg-card text-foreground">Approval Officer (Case Handler)</option>
+                      <option value="bureau_head" className="bg-card text-foreground">Bureau Head (RB / PGRC / RO)</option>
+                      <option value="super_admin" className="bg-card text-foreground">Super Admin (Central Vigilance)</option>
+                      <option value="nodal_officer" className="bg-card text-foreground">State / Regional Nodal Officer</option>
+                      <option value="citizen" className="bg-card text-foreground">Citizen / Complainant</option>
                     </select>
                   </div>
                 </div>

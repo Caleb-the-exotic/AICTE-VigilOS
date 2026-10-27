@@ -71,9 +71,9 @@ def _answer_attendance(query_text: str, username: str = "") -> str:
 
     pct = get_attendance(student_id)
 
-    status = "✅ sufficient" if pct >= 75 else "⚠️ below the required 75% threshold"
+    status = "[SUFFICIENT] sufficient" if pct >= 75 else "[ALERT] below the required 75% threshold"
     return (
-        f"📊 **Attendance Report for {student_id}**\n\n"
+        f"**Attendance Report for {student_id}**\n\n"
         f"- **Attendance:** `{pct:.1f}%`\n"
         f"- **Status:** {status}\n\n"
         f"{'The student is eligible to apply for leave.' if pct >= 75 else 'The student must attend more classes before applying for leave.'}"
@@ -191,7 +191,7 @@ class LLMOrchestrator:
                     result = _data_editor.execute_data_command(parsed_action, username, role)
 
                     if on_log:
-                        status = "✅ success" if result.get("success") else "❌ denied/error"
+                        status = "[SUCCESS] success" if result.get("success") else "[FAILED] denied/error"
                         on_log(f"ORCHESTRATOR: Data modification {status}")
 
                     return {

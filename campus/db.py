@@ -1,45 +1,176 @@
 # ============================================================
-# campus/db.py — SQLite Persistence Layer
+# campus/db.py — PostgreSQL Authoritative Persistence Layer
 # ============================================================
-# All campus workflows, messages, logs, and audit trails are
-# stored here. Replaces the JSON file system for all new data.
-# Existing chat_history/ JSON sessions are still supported for
-# the message display layer in main.py.
+# All campus workflows, messages, logs, audit trails, and accounts
+# are stored here. PostgreSQL is the sole production source of truth.
 # ============================================================
 
-import sqlite3
 import os
+import sys
 import json
 import datetime
 import uuid
 import re
+from collections.abc import Mapping
 
 try:
     import psycopg2
-    from psycopg2.extras import DictCursor
+    from psycopg2.pool import ThreadedConnectionPool
+    from psycopg2.extras import RealDictCursor
     HAS_PG = True
 except ImportError:
     HAS_PG = False
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "campusflow.db")
+_POOL = None
 
-# ── POSTGRESQL WRAPPERS FOR COMPATIBILITY ──────────────────────────
+def get_pool():
+    global _POOL
+    if _POOL is None:
+        db_url = os.getenv("DATABASE_URL") or "postgresql://postgres@localhost:5433/campusflow"
+        if db_url.startswith("postgres://"):
+            db_url = "postgresql://" + db_url[len("postgres://"):]
+        try:
+            _POOL = ThreadedConnectionPool(minconn=1, maxconn=25, dsn=db_url)
+        except Exception as e:
+            print(f"[PostgreSQL Connection Pool Error] {e}", file=sys.stderr)
+            raise e
+    return _POOL
+
+class UniversalRow(Mapping):
+    """
+    Unified dict-like row supporting key access (row['name']),
+    attribute/get access (row.get('name')), and positional access (row[0]),
+    ensuring 100% compatibility with SQLite row access and JSON serialization.
+    """
+    def __init__(self, d):
+        self._d = d if isinstance(d, dict) else dict(d)
+        self._values = None
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            if self._values is None:
+                self._values = list(self._d.values())
+            return self._values[key]
+        return self._d[key]
+
+    def __iter__(self):
+        return iter(self._d)
+
+    def __len__(self):
+        return len(self._d)
+
+    def __repr__(self):
+        return repr(self._d)
+
+    def get(self, key, default=None):
+        return self._d.get(key, default)
+
+    def keys(self):
+        return self._d.keys()
+
+    def values(self):
+        return self._d.values()
+
+    def items(self):
+        return self._d.items()
+
+class PGCursorWrapper:
+    def __init__(self, cur):
+        self._cur = cur
+
+    def _adapt_sql(self, sql: str) -> str:
+        s = sql.strip()
+        # Support PRAGMA table_info and PRAGMA foreign_keys
+        if s.upper().startswith("PRAGMA"):
+            if "FOREIGN_KEYS" in s.upper():
+                return "SELECT 1 AS foreign_keys"
+            if "TABLE_INFO" in s.upper():
+                m = re.search(r'(?i)PRAGMA\s+table_info\((\w+)\)', s)
+                if m:
+                    tbl = m.group(1).lower()
+                    return f"SELECT ordinal_position AS cid, column_name AS name, data_type AS type FROM information_schema.columns WHERE table_name = '{tbl}' ORDER BY ordinal_position"
+            return ""
+
+        # Translate INSERT OR IGNORE INTO <table> (...)
+        if "INSERT OR IGNORE" in s.upper():
+            s = re.sub(r'(?i)INSERT\s+OR\s+IGNORE\s+INTO', 'INSERT INTO', s)
+            if "ON CONFLICT" not in s.upper():
+                s = s + " ON CONFLICT DO NOTHING"
+
+        # Translate INSERT OR REPLACE INTO internal_idempotency_keys
+        if "INSERT OR REPLACE INTO" in s.upper() and "INTERNAL_IDEMPOTENCY_KEYS" in s.upper():
+            s = re.sub(r'(?i)INSERT\s+OR\s+REPLACE\s+INTO\s+internal_idempotency_keys', 'INSERT INTO internal_idempotency_keys', s)
+            if "ON CONFLICT" not in s.upper():
+                s = s + " ON CONFLICT (idempotency_key) DO UPDATE SET response_json = EXCLUDED.response_json, message_id = EXCLUDED.message_id"
+
+        # Convert ? placeholders to %s while preserving literal %
+        if "?" in s:
+            s = s.replace("?", "\x00PARAM\x00")
+            s = s.replace("%", "%%")
+            s = s.replace("\x00PARAM\x00", "%s")
+
+        return s
+
+    def execute(self, sql, params=None):
+        adapted = self._adapt_sql(sql)
+        if not adapted:
+            return self
+
+        if params is not None:
+            if not isinstance(params, (tuple, list)):
+                params = (params,)
+            self._cur.execute(adapted, params)
+        else:
+            self._cur.execute(adapted)
+        return self
+
+    def executemany(self, sql, params_seq):
+        adapted = self._adapt_sql(sql)
+        if not adapted:
+            return self
+        self._cur.executemany(adapted, params_seq)
+        return self
+
+    def fetchall(self):
+        rows = self._cur.fetchall()
+        return [UniversalRow(r) for r in rows]
+
+    def fetchone(self):
+        r = self._cur.fetchone()
+        return UniversalRow(r) if r is not None else None
+
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
+    @property
+    def description(self):
+        return self._cur.description
+
+    def close(self):
+        self._cur.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
 class PGConnectionWrapper:
-    def __init__(self, conn):
+    def __init__(self, conn, pool=None):
         self._conn = conn
-    
+        self._pool = pool
+        self._closed = False
+
     def cursor(self):
-        return PGCursorWrapper(self._conn.cursor(cursor_factory=DictCursor))
-    
+        return PGCursorWrapper(self._conn.cursor(cursor_factory=RealDictCursor))
+
     def execute(self, sql, params=None):
         cur = self.cursor()
         cur.execute(sql, params)
         return cur
-        
+
     def executescript(self, sql_script):
-        # PostgreSQL does not have executescript, we split and run individually
-        # Convert auto-increments
-        sql_script = sql_script.replace('INTEGER PRIMARY KEY AUTOINCREMENT', 'SERIAL PRIMARY KEY')
         cur = self.cursor()
         for statement in sql_script.split(';'):
             cleaned = statement.strip()
@@ -51,97 +182,40 @@ class PGConnectionWrapper:
         self._conn.commit()
 
     def rollback(self):
-        self._conn.rollback()
+        try:
+            self._conn.rollback()
+        except Exception:
+            pass
 
     def close(self):
-        self._conn.close()
+        if not self._closed:
+            self._closed = True
+            if self._pool is not None:
+                self._pool.putconn(self._conn)
+            else:
+                self._conn.close()
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type:
-            self.rollback()
-        else:
-            self.commit()
-        self.close()
-
-class PGCursorWrapper:
-    def __init__(self, cur):
-        self._cur = cur
-
-    def execute(self, sql, params=None):
-        # Convert SQLite ? placeholders to PG %s
-        sql = sql.replace('?', '%s')
-        
-        # Translate SQLite INSERT OR IGNORE to PG INSERT ON CONFLICT DO NOTHING
-        if 'INSERT OR IGNORE' in sql.upper():
-            sql = re.sub(r'(?i)INSERT\s+OR\s+IGNORE\s+INTO', 'INSERT INTO', sql)
-            if 'ON CONFLICT' not in sql.upper():
-                sql = sql + ' ON CONFLICT DO NOTHING'
-                
-        # PRAGMA statements are SQLite specific, no-op them
-        if sql.strip().upper().startswith('PRAGMA'):
-            return self
-
-        if params is not None:
-            if not isinstance(params, (tuple, list)):
-                params = (params,)
-            self._cur.execute(sql, params)
-        else:
-            self._cur.execute(sql)
-        return self
-
-    def fetchall(self):
-        rows = self._cur.fetchall()
-        return [DictRowWrapper(r) for r in rows]
-
-    def fetchone(self):
-        row = self._cur.fetchone()
-        return DictRowWrapper(row) if row else None
-
-    @property
-    def rowcount(self):
-        return self._cur.rowcount
-
-class DictRowWrapper:
-    def __init__(self, row):
-        self._row = row
-
-    def __getitem__(self, key):
-        if isinstance(key, int):
-            return self._row[key]
-        return self._row.get(key)
-
+        try:
+            if exc_type:
+                self.rollback()
+            else:
+                self.commit()
+        finally:
+            self.close()
 
 def get_conn():
-    """Return a thread-safe connection (SQLite or PostgreSQL if configured)."""
-    use_pg = os.getenv("USE_POSTGRES", "false").lower() in ("true", "1", "yes")
-    pg_url = os.getenv("DATABASE_URL")
-    if HAS_PG and use_pg and pg_url and not pg_url.startswith("sqlite"):
-        pg_host = os.getenv("POSTGRES_HOST")
-        if pg_url or (pg_host and os.getenv("POSTGRES_DB")):
-            try:
-                if pg_url:
-                    conn = psycopg2.connect(pg_url)
-                else:
-                    conn = psycopg2.connect(
-                        host=pg_host,
-                        database=os.getenv("POSTGRES_DB"),
-                        user=os.getenv("POSTGRES_USER", "postgres"),
-                        password=os.getenv("POSTGRES_PASSWORD", ""),
-                        port=os.getenv("POSTGRES_PORT", "5432")
-                    )
-                return PGConnectionWrapper(conn)
-            except Exception as e:
-                import sys
-                print(f"[Postgres Connection Error] {e}. Falling back to SQLite...", file=sys.stderr)
+    """
+    Return a thread-safe connection to the authoritative PostgreSQL database.
+    Centralized single source of truth for AICTE VigilOS.
+    """
+    pool = get_pool()
+    raw_conn = pool.getconn()
+    return PGConnectionWrapper(raw_conn, pool)
 
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
 
 
 
@@ -179,195 +253,15 @@ def get_exam_dates() -> list[str]:
 
 
 def init_db():
-    """Create all tables if they don't exist."""
+    """Create all PostgreSQL tables, indexes, and initial seeds."""
+    from campus.pg_schema import init_postgres_schema
     conn = get_conn()
-    with conn:
-        conn.executescript("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            id          TEXT PRIMARY KEY,
-            title       TEXT,
-            created_at  TEXT,
-            role        TEXT DEFAULT 'citizen',
-            user_id     TEXT,
-            workflow_type TEXT
-        );
+    try:
+        init_postgres_schema(conn)
+    finally:
+        conn.close()
 
-        CREATE TABLE IF NOT EXISTS messages (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id  TEXT REFERENCES sessions(id) ON DELETE CASCADE,
-            role        TEXT,
-            content     TEXT,
-            created_at  TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS live_chat_messages (
-            id          TEXT PRIMARY KEY,
-            sender_id   TEXT NOT NULL,
-            sender_name TEXT NOT NULL,
-            sender_role TEXT,
-            text        TEXT NOT NULL,
-            created_at  TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS requests (
-            id              TEXT PRIMARY KEY,
-            session_id      TEXT REFERENCES sessions(id) ON DELETE CASCADE,
-            workflow_type   TEXT,
-            schema_json     TEXT,
-            status          TEXT DEFAULT 'pending',
-            policy_result   TEXT,
-            policy_reason   TEXT,
-            alternatives    TEXT,
-            created_at      TEXT,
-            updated_at      TEXT,
-            retry_count     INTEGER DEFAULT 0,
-            last_attempt    TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS logs (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id  TEXT,
-            level       TEXT DEFAULT 'INFO',
-            message     TEXT,
-            created_at  TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS audit (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id  TEXT,
-            actor_role  TEXT,
-            action      TEXT,
-            target      TEXT,
-            result      TEXT,
-            created_at  TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS kpis (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id      TEXT,
-            workflow_type   TEXT,
-            submitted_at    TEXT,
-            resolved_at     TEXT,
-            resolution_mins REAL,
-            outcome         TEXT,
-            loops_used      INTEGER
-        );
-
-        CREATE TABLE IF NOT EXISTS bookings (
-            id            TEXT PRIMARY KEY,
-            resource_id   TEXT NOT NULL,
-            resource_type TEXT NOT NULL,
-            date          TEXT NOT NULL,
-            time_slot     TEXT NOT NULL,
-            session_id    TEXT,
-            status        TEXT DEFAULT 'confirmed',
-            created_at    TEXT,
-            expires_at    TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS academic_calendar (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_type  TEXT NOT NULL,
-            event_name  TEXT,
-            date        TEXT NOT NULL UNIQUE,
-            created_at  TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS scheduler_logs (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            job_name    TEXT NOT NULL,
-            executed_at TEXT NOT NULL,
-            outcome     TEXT,
-            detail      TEXT
-        );
-
-        CREATE TABLE IF NOT EXISTS agent_execution_steps (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            session_id      TEXT NOT NULL,
-            request_id      TEXT,
-            step_type       TEXT NOT NULL,
-            agent_role      TEXT NOT NULL,
-            input_payload   TEXT,
-            output_payload  TEXT,
-            confidence_score REAL,
-            created_at      TEXT
-        );
-
-        -- ── PS26264: AICTE Institution Registry ──────────────────────────
-        CREATE TABLE IF NOT EXISTS aicte_institutions (
-            aicte_pid       TEXT PRIMARY KEY,
-            institution_name TEXT NOT NULL,
-            region          TEXT NOT NULL,
-            state           TEXT NOT NULL,
-            district        TEXT,
-            address         TEXT,
-            inst_type       TEXT DEFAULT 'Engineering College',
-            created_at      TEXT
-        );
-
-        -- ── PS26264: AICTE Complaint / Case Tracker ───────────────────────
-        CREATE TABLE IF NOT EXISTS aicte_cases (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            case_id         TEXT UNIQUE NOT NULL,
-            aicte_pid       TEXT NOT NULL REFERENCES aicte_institutions(aicte_pid),
-            institution_name TEXT,
-            region          TEXT,
-            bureau          TEXT NOT NULL,
-            complainant_type TEXT DEFAULT 'Public',
-            category        TEXT NOT NULL,
-            title           TEXT NOT NULL,
-            description     TEXT,
-            assigned_officer TEXT,
-            status          TEXT DEFAULT 'received',
-            sla_days        INTEGER DEFAULT 30,
-            sla_deadline    TEXT,
-            disposed_at     TEXT,
-            linked_case_ids TEXT DEFAULT '[]',
-            created_at      TEXT NOT NULL,
-            updated_at      TEXT
-        );
-
-        -- ── PS26264: Overlap Alert Log ────────────────────────────────────
-        CREATE TABLE IF NOT EXISTS aicte_overlap_alerts (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            aicte_pid       TEXT NOT NULL,
-            rb_case_id      TEXT,
-            pgrc_case_id    TEXT,
-            overlap_score   REAL,
-            overlap_type    TEXT,
-            shared_root_cause TEXT,
-            recommended_action TEXT,
-            reason          TEXT,
-            resolved        INTEGER DEFAULT 0,
-            created_at      TEXT
-        );
-        """)
-        
-        # ── Migration: Add user_id if missing and assign old chats to admin ──
-        try:
-            conn.execute("ALTER TABLE sessions ADD COLUMN user_id TEXT")
-            conn.execute("UPDATE sessions SET user_id='admin' WHERE user_id IS NULL")
-        except sqlite3.OperationalError:
-            pass # Column already exists
-
-        # ── Migration: Add workflow_type to sessions if missing ─────────────
-        try:
-            conn.execute("ALTER TABLE sessions ADD COLUMN workflow_type TEXT")
-        except sqlite3.OperationalError:
-            pass
-            
-    conn.close()
     _seed_academic_calendar()
-    try:
-        from campus.migrate_roles import run_migration
-        run_migration()
-    except Exception as _mig_e:
-        print("[DB Init] Notice during role migration:", _mig_e)
-    try:
-        from campus.rbac_migration import run_migration as run_rbac_migration
-        run_rbac_migration()
-    except Exception as _mig_e2:
-        print("[DB Init] Notice during RBAC migration:", _mig_e2)
 
 
 # ── SESSION CRUD ─────────────────────────────────────────────────
@@ -493,7 +387,7 @@ def get_live_chat_messages(limit: int = 200) -> list[dict]:
     conn = get_conn()
     try:
         rows = conn.execute(
-            "SELECT id, sender_id, sender_name, sender_role, text, created_at FROM live_chat_messages ORDER BY created_at ASC LIMIT ?",
+            "SELECT id, sender_id, sender_name, sender_role, text, created_at FROM live_chat_messages WHERE deleted_at IS NULL ORDER BY created_at ASC LIMIT ?",
             (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
@@ -506,16 +400,44 @@ def get_live_chat_messages(limit: int = 200) -> list[dict]:
                 sender_name TEXT NOT NULL,
                 sender_role TEXT,
                 text        TEXT NOT NULL,
-                created_at  TEXT NOT NULL
+                created_at  TEXT NOT NULL,
+                deleted_at  TEXT
             );
             """)
-        rows = conn.execute(
-            "SELECT id, sender_id, sender_name, sender_role, text, created_at FROM live_chat_messages ORDER BY created_at ASC LIMIT ?",
-            (limit,)
-        ).fetchall()
-        return [dict(r) for r in rows]
+        try:
+            rows = conn.execute(
+                "SELECT id, sender_id, sender_name, sender_role, text, created_at FROM live_chat_messages WHERE deleted_at IS NULL ORDER BY created_at ASC LIMIT ?",
+                (limit,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
     finally:
         conn.close()
+
+
+def delete_live_chat_message(message_id: str, actor_id: str = "admin") -> bool:
+    """Soft delete a live chat message and record audit trail."""
+    conn = get_conn()
+    now = datetime.datetime.now().isoformat()
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE live_chat_messages SET deleted_at = ? WHERE id = ?",
+                (now, message_id)
+            )
+            try:
+                conn.execute(
+                    """INSERT INTO assignment_audit (user_id, changed_by, action, created_at)
+                       VALUES (?, ?, 'DELETE_LIVE_CHAT_MESSAGE', ?)""",
+                    (actor_id, actor_id, now)
+                )
+            except Exception:
+                pass
+        return True
+    finally:
+        conn.close()
+
 
 
 # ── REQUEST CRUD ─────────────────────────────────────────────────
@@ -781,32 +703,194 @@ init_db()
 # PS26264 — AICTE INSTITUTION REGISTRY
 # ═══════════════════════════════════════════════════════════════════
 
+def _format_institution_record(row) -> dict:
+    if not row:
+        return {}
+    d = dict(row)
+    images_raw = d.get("images_json") or "[]"
+    try:
+        d["images"] = json.loads(images_raw) if isinstance(images_raw, str) else list(images_raw)
+    except Exception:
+        d["images"] = []
+    if "city" not in d or not d["city"]:
+        d["city"] = d.get("district") or ""
+    if "approval_status" not in d or not d["approval_status"]:
+        d["approval_status"] = "AICTE Approved (EOA 2026-27)"
+    if "established_year" not in d or d["established_year"] is None:
+        d["established_year"] = 2000
+    if "total_faculty" not in d or d["total_faculty"] is None:
+        d["total_faculty"] = 50
+    if "total_students" not in d or d["total_students"] is None:
+        d["total_students"] = 1000
+    return d
+
+
 def get_all_institutions() -> list[dict]:
     conn = get_conn()
     rows = conn.execute("SELECT * FROM aicte_institutions ORDER BY institution_name").fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    return [_format_institution_record(r) for r in rows]
 
 
 def get_institution(aicte_pid: str) -> dict | None:
     conn = get_conn()
     row = conn.execute("SELECT * FROM aicte_institutions WHERE aicte_pid=?", (aicte_pid,)).fetchone()
     conn.close()
-    return dict(row) if row else None
+    return _format_institution_record(row) if row else None
+
+
+def save_institution(inst_data: dict) -> dict:
+    """Save or update an institutional portfolio in the persistent database."""
+    pid = inst_data.get("aicte_pid")
+    if not pid:
+        raise ValueError("aicte_pid is required to save an institution")
+
+    now = datetime.datetime.now().isoformat()
+    images = inst_data.get("images", [])
+    images_json = json.dumps(images if isinstance(images, list) else [])
+    
+    name = inst_data.get("institution_name", "").strip()
+    region = inst_data.get("region", "Central").strip()
+    state = inst_data.get("state", "").strip()
+    city = inst_data.get("city", "").strip()
+    district = inst_data.get("district", "").strip() or city
+    address = inst_data.get("address", "").strip()
+    inst_type = inst_data.get("inst_type", "Engineering College").strip()
+    approval_status = inst_data.get("approval_status", "AICTE Approved (EOA 2026-27)").strip()
+    principal_name = inst_data.get("principal_name", "").strip()
+    contact_email = inst_data.get("contact_email", "").strip()
+    contact_phone = inst_data.get("contact_phone", "").strip()
+    website = inst_data.get("website", "").strip()
+    established_year = int(inst_data.get("established_year") or 2000)
+    total_faculty = int(inst_data.get("total_faculty") or 50)
+    total_students = int(inst_data.get("total_students") or 1000)
+
+    conn = get_conn()
+    with conn:
+        existing = conn.execute("SELECT * FROM aicte_institutions WHERE aicte_pid=?", (pid,)).fetchone()
+        if existing:
+            ex_d = dict(existing)
+            name = name or ex_d.get("institution_name", "")
+            region = region or ex_d.get("region", "")
+            state = state or ex_d.get("state", "")
+            city = city or ex_d.get("city", "")
+            district = district or ex_d.get("district", "")
+            address = address or ex_d.get("address", "")
+            inst_type = inst_type or ex_d.get("inst_type", "")
+            approval_status = approval_status or ex_d.get("approval_status", "")
+            principal_name = principal_name or ex_d.get("principal_name", "")
+            contact_email = contact_email or ex_d.get("contact_email", "")
+            contact_phone = contact_phone or ex_d.get("contact_phone", "")
+            website = website or ex_d.get("website", "")
+            if not inst_data.get("images") and ex_d.get("images_json"):
+                images_json = ex_d["images_json"]
+            if not inst_data.get("established_year") and ex_d.get("established_year"):
+                established_year = ex_d["established_year"]
+            if not inst_data.get("total_faculty") and ex_d.get("total_faculty"):
+                total_faculty = ex_d["total_faculty"]
+            if not inst_data.get("total_students") and ex_d.get("total_students"):
+                total_students = ex_d["total_students"]
+
+            conn.execute("""
+                UPDATE aicte_institutions SET
+                    institution_name = ?,
+                    region = ?,
+                    state = ?,
+                    city = ?,
+                    district = ?,
+                    address = ?,
+                    inst_type = ?,
+                    approval_status = ?,
+                    principal_name = ?,
+                    contact_email = ?,
+                    contact_phone = ?,
+                    website = ?,
+                    established_year = ?,
+                    total_faculty = ?,
+                    total_students = ?,
+                    images_json = ?,
+                    updated_at = ?
+                WHERE aicte_pid = ?
+            """, (
+                name, region, state, city, district, address, inst_type,
+                approval_status, principal_name, contact_email, contact_phone,
+                website, established_year, total_faculty, total_students,
+                images_json, now, pid
+            ))
+        else:
+            conn.execute("""
+                INSERT INTO aicte_institutions (
+                    aicte_pid, institution_name, region, state, city, district,
+                    address, inst_type, approval_status, principal_name,
+                    contact_email, contact_phone, website, established_year,
+                    total_faculty, total_students, images_json, created_at, updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                pid, name, region, state, city, district, address, inst_type,
+                approval_status, principal_name, contact_email, contact_phone,
+                website, established_year, total_faculty, total_students,
+                images_json, now, now
+            ))
+
+        # Keep case institution references in sync
+        conn.execute("""
+            UPDATE aicte_cases
+            SET institution_name = ?, region = ?, updated_at = ?
+            WHERE aicte_pid = ?
+        """, (name, region, now, pid))
+
+    conn.close()
+    return get_institution(pid)
 
 
 def upsert_institution(aicte_pid: str, institution_name: str, region: str, state: str,
                        district: str = "", address: str = "", inst_type: str = "Engineering College") -> None:
-    now = datetime.datetime.now().isoformat()
+    save_institution({
+        "aicte_pid": aicte_pid,
+        "institution_name": institution_name,
+        "region": region,
+        "state": state,
+        "district": district,
+        "address": address,
+        "inst_type": inst_type,
+    })
+
+
+def delete_institution(aicte_pid: str) -> bool:
+    """Delete an institution from aicte_institutions."""
     conn = get_conn()
     with conn:
-        conn.execute(
-            """INSERT OR IGNORE INTO aicte_institutions
-               (aicte_pid, institution_name, region, state, district, address, inst_type, created_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (aicte_pid, institution_name, region, state, district, address, inst_type, now)
-        )
+        conn.execute("DELETE FROM aicte_institutions WHERE aicte_pid=?", (aicte_pid,))
     conn.close()
+    return True
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PS26264 — AICTE CASE SEQUENCE GENERATOR
+# ═══════════════════════════════════════════════════════════════════
+
+def get_next_case_id(bureau: str, year: int = None) -> str:
+    """
+    Generate an atomic, concurrency-safe, sequential Case ID on the server.
+    Format: AICTE-{year}-{bureau}-{number:04d} (e.g. AICTE-2026-PGRC-0113)
+    """
+    if not year:
+        year = datetime.datetime.now().year
+    bureau_clean = bureau.strip().upper() if bureau else "PGRC"
+    conn = get_conn()
+    with conn:
+        conn.execute("""
+            INSERT INTO aicte_case_sequences (bureau, year, last_seq)
+            VALUES (?, ?, 1)
+            ON CONFLICT(bureau, year) DO UPDATE SET last_seq = aicte_case_sequences.last_seq + 1
+        """, (bureau_clean, year))
+        row = conn.execute(
+            "SELECT last_seq FROM aicte_case_sequences WHERE bureau=? AND year=?",
+            (bureau_clean, year)
+        ).fetchone()
+        next_seq = row[0] if row else 1
+    conn.close()
+    return f"AICTE-{year}-{bureau_clean}-{next_seq:04d}"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -816,18 +900,29 @@ def upsert_institution(aicte_pid: str, institution_name: str, region: str, state
 def create_aicte_case(case_id: str, aicte_pid: str, institution_name: str, region: str,
                       bureau: str, complainant_type: str, category: str, title: str,
                       description: str = "", assigned_officer: str = "",
-                      sla_days: int = 30, status: str = "received") -> str:
+                      sla_days: int = 30, status: str = "received",
+                      institution_code: str = "", complainant_user_id: str = "",
+                      complainant_name: str = "", complainant_email: str = "",
+                      received_at: str = "") -> str:
     now = datetime.datetime.now().isoformat()
+    received_time = received_at or now
     sla_deadline = (datetime.datetime.now() + datetime.timedelta(days=sla_days)).isoformat()
+    inst_code = institution_code or aicte_pid
+    comp_name = complainant_name or complainant_type or "Public"
+
     conn = get_conn()
     with conn:
         conn.execute(
             """INSERT OR IGNORE INTO aicte_cases
-               (case_id, aicte_pid, institution_name, region, bureau, complainant_type, category,
-                title, description, assigned_officer, status, sla_days, sla_deadline, created_at, updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (case_id, aicte_pid, institution_name, region, bureau, complainant_type, category,
-             title, description, assigned_officer, status, sla_days, sla_deadline, now, now)
+               (case_id, aicte_pid, institution_code, institution_name, region, bureau,
+                complainant_user_id, complainant_name, complainant_email, complainant_type,
+                category, title, description, assigned_officer, status, sla_days,
+                sla_deadline, received_at, created_at, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (case_id, aicte_pid, inst_code, institution_name, region, bureau,
+             complainant_user_id, comp_name, complainant_email, complainant_type,
+             category, title, description, assigned_officer, status, sla_days,
+             sla_deadline, received_time, now, now)
         )
     conn.close()
     return case_id
@@ -859,14 +954,78 @@ def list_aicte_cases(bureau: str = None, status: str = None, aicte_pid: str = No
         (*params, limit)
     ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+
+    cases = [dict(r) for r in rows]
+    now = datetime.datetime.now()
+
+    # Authoritative calculation of ageing_days and SLA status
+    for c in cases:
+        if not c.get("institution_code"):
+            c["institution_code"] = c.get("aicte_pid", "")
+        if not c.get("complainant_name"):
+            c["complainant_name"] = c.get("complainant_type") or "Public"
+
+        r_time = c.get("received_at") or c.get("created_at")
+        is_disposed = c.get("status") in ("disposed", "resolved", "closed")
+
+        if is_disposed and (c.get("resolved_at") or c.get("disposed_at")):
+            end_time = c.get("resolved_at") or c.get("disposed_at")
+            try:
+                delta = datetime.datetime.fromisoformat(end_time) - datetime.datetime.fromisoformat(r_time)
+                c["ageing_days"] = max(0, delta.days)
+            except Exception:
+                c["ageing_days"] = 0
+        else:
+            try:
+                delta = now - datetime.datetime.fromisoformat(r_time)
+                c["ageing_days"] = max(0, delta.days)
+            except Exception:
+                c["ageing_days"] = 0
+
+        sla_dl = c.get("sla_deadline")
+        if sla_dl and not is_disposed:
+            try:
+                c["sla_breached"] = now > datetime.datetime.fromisoformat(sla_dl)
+            except Exception:
+                c["sla_breached"] = False
+        else:
+            c["sla_breached"] = False
+
+    return cases
 
 
 def get_aicte_case(case_id: str) -> dict | None:
     conn = get_conn()
     row = conn.execute("SELECT * FROM aicte_cases WHERE case_id=?", (case_id,)).fetchone()
     conn.close()
-    return dict(row) if row else None
+    if not row:
+        return None
+    c = dict(row)
+    now = datetime.datetime.now()
+    r_time = c.get("received_at") or c.get("created_at")
+    is_disposed = c.get("status") in ("disposed", "resolved", "closed")
+    if is_disposed and (c.get("resolved_at") or c.get("disposed_at")):
+        end_time = c.get("resolved_at") or c.get("disposed_at")
+        try:
+            delta = datetime.datetime.fromisoformat(end_time) - datetime.datetime.fromisoformat(r_time)
+            c["ageing_days"] = max(0, delta.days)
+        except Exception:
+            c["ageing_days"] = 0
+    else:
+        try:
+            delta = now - datetime.datetime.fromisoformat(r_time)
+            c["ageing_days"] = max(0, delta.days)
+        except Exception:
+            c["ageing_days"] = 0
+    sla_dl = c.get("sla_deadline")
+    if sla_dl and not is_disposed:
+        try:
+            c["sla_breached"] = now > datetime.datetime.fromisoformat(sla_dl)
+        except Exception:
+            c["sla_breached"] = False
+    else:
+        c["sla_breached"] = False
+    return c
 
 
 def update_aicte_case_status(case_id: str, status: str, assigned_officer: str = None,
@@ -895,6 +1054,42 @@ def update_aicte_case_status(case_id: str, status: str, assigned_officer: str = 
                 "UPDATE aicte_cases SET disposed_at=? WHERE case_id=?", (now, case_id)
             )
     conn.close()
+
+
+def update_aicte_case_details(case_id: str, updates: dict) -> dict:
+    """Update title, description, category, bureau, status, assigned_officer, sla_days, etc."""
+    now = datetime.datetime.now().isoformat()
+    conn = get_conn()
+    cur = conn.cursor()
+    allowed = ["title", "description", "category", "bureau", "status", "assigned_officer", "sla_days", "region"]
+    set_clauses = []
+    params = []
+    for f in allowed:
+        if f in updates and updates[f] is not None:
+            set_clauses.append(f"{f} = ?")
+            params.append(updates[f])
+
+    if set_clauses:
+        set_clauses.append("updated_at = ?")
+        params.append(now)
+        params.append(case_id)
+        cur.execute(f"UPDATE aicte_cases SET {', '.join(set_clauses)} WHERE case_id = ?", tuple(params))
+        if updates.get("status") == "disposed":
+            cur.execute("UPDATE aicte_cases SET disposed_at = ? WHERE case_id = ?", (now, case_id))
+        conn.commit()
+    conn.close()
+    return get_aicte_case(case_id)
+
+
+def delete_aicte_case(case_id: str) -> bool:
+    """Permanently delete an AICTE case record from the database."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM aicte_cases WHERE case_id = ?", (case_id,))
+    conn.commit()
+    conn.close()
+    return True
+
 
 
 def get_overlap_cases() -> list[dict]:
@@ -1010,28 +1205,36 @@ def seed_aicte_demo_data():
     _SEEDED = True
 
     # ── Institutions ─────────────────────────────────────────────
-    institutions = [
-        ("1-109723481", "Shri Ram Institute of Technology", "Northern", "Uttar Pradesh", "Lucknow", "Engineering College"),
-        ("1-204561892", "KL University", "Southern", "Andhra Pradesh", "Guntur", "Deemed University"),
-        ("1-376234110", "Thakur College of Engineering", "Western", "Maharashtra", "Mumbai", "Engineering College"),
-        ("1-445871203", "Kalinga Institute of Technology", "Eastern", "Odisha", "Bhubaneswar", "Engineering College"),
-        ("1-512398067", "SRM Institute of Science and Technology", "Southern", "Tamil Nadu", "Chennai", "Deemed University"),
-        ("1-631047285", "GLA University", "Northern", "Uttar Pradesh", "Mathura", "Private University"),
-        ("1-788234501", "Amity University Rajasthan", "Northern", "Rajasthan", "Jaipur", "Private University"),
-        ("1-890123456", "VIT Bhopal University", "Central", "Madhya Pradesh", "Bhopal", "Deemed University"),
-        ("1-923456789", "Chandigarh University", "Northern", "Punjab", "Mohali", "Private University"),
-        ("1-101234567", "Dr. A.P.J. Abdul Kalam Technical University", "Northern", "Uttar Pradesh", "Lucknow", "State University"),
-    ]
+    # Only seed if table is completely empty
+    conn_check = get_conn()
+    cur_check = conn_check.cursor()
+    cur_check.execute("SELECT COUNT(*) FROM aicte_institutions")
+    inst_count = cur_check.fetchone()[0]
+    conn_check.close()
 
-    for pid, name, region, state, district, itype in institutions:
-        upsert_institution(pid, name, region, state, district, "", itype)
+    if inst_count == 0:
+        institutions = [
+            ("1-109723481", "Shri Ram Institute of Technology", "Northern", "Uttar Pradesh", "Lucknow", "Engineering College"),
+            ("1-204561892", "KL University", "Southern", "Andhra Pradesh", "Guntur", "Deemed University"),
+            ("1-376234110", "Thakur College of Engineering", "Western", "Maharashtra", "Mumbai", "Engineering College"),
+            ("1-445871203", "Kalinga Institute of Technology", "Eastern", "Odisha", "Bhubaneswar", "Engineering College"),
+            ("1-512398067", "SRM Institute of Science and Technology", "Southern", "Tamil Nadu", "Chennai", "Deemed University"),
+            ("1-631047285", "GLA University", "Northern", "Uttar Pradesh", "Mathura", "Private University"),
+            ("1-788234501", "Amity University Rajasthan", "Northern", "Rajasthan", "Jaipur", "Private University"),
+            ("1-890123456", "VIT Bhopal University", "Central", "Madhya Pradesh", "Bhopal", "Deemed University"),
+            ("1-923456789", "Chandigarh University", "Northern", "Punjab", "Mohali", "Private University"),
+            ("1-101234567", "Dr. A.P.J. Abdul Kalam Technical University", "Northern", "Uttar Pradesh", "Lucknow", "State University"),
+        ]
+
+        for pid, name, region, state, district, itype in institutions:
+            upsert_institution(pid, name, region, state, district, "", itype)
 
     # ── Cases (realistic AICTE scenarios) ────────────────────────
     import datetime as dt
     now = dt.datetime.now()
 
     cases = [
-        # 🔴 OVERLAP SCENARIO 1: Shri Ram — Faculty non-payment (PGRC) + cadre ratio (RB)
+        # [OVERLAP SCENARIO 1]: Shri Ram — Faculty non-payment (PGRC) + cadre ratio (RB)
         {
             "case_id": "AICTE-2026-RB-0042",
             "aicte_pid": "1-109723481",
@@ -1062,7 +1265,7 @@ def seed_aicte_demo_data():
             "sla_days": 30,
             "created_at": (now - dt.timedelta(days=8)).isoformat(),
         },
-        # 🔴 OVERLAP SCENARIO 2: Thakur College — Capitation fee (PGRC) + fee regulation (RB)
+        # [OVERLAP SCENARIO 2]: Thakur College — Capitation fee (PGRC) + fee regulation (RB)
         {
             "case_id": "AICTE-2026-RB-0055",
             "aicte_pid": "1-376234110",
@@ -1093,7 +1296,7 @@ def seed_aicte_demo_data():
             "sla_days": 30,
             "created_at": (now - dt.timedelta(days=2)).isoformat(),
         },
-        # ⚠️ SLA BREACH SCENARIO: KL University — approaching deadline
+        # [SLA BREACH SCENARIO]: KL University — approaching deadline
         {
             "case_id": "AICTE-2026-PGRC-0034",
             "aicte_pid": "1-204561892",
@@ -1109,7 +1312,7 @@ def seed_aicte_demo_data():
             "sla_days": 30,
             "created_at": (now - dt.timedelta(days=31)).isoformat(),
         },
-        # ✅ DISPOSED — complete with audit history
+        # [DISPOSED]: complete with audit history
         {
             "case_id": "AICTE-2026-RB-0021",
             "aicte_pid": "1-445871203",

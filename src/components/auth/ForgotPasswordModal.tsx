@@ -322,7 +322,7 @@ export default function ForgotPasswordModal({
             <div className="space-y-1">
               <h3 className="text-base font-bold text-foreground">Password Reset Successfully!</h3>
               <p className="text-xs text-muted-foreground max-w-xs">
-                Your password has been securely updated in the SQLite authentication directory. You can now log in.
+                Your password has been securely updated in the authoritative authentication directory. You can now log in.
               </p>
             </div>
             <button

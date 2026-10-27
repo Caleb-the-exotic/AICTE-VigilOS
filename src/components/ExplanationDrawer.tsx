@@ -144,7 +144,7 @@ function seedSteps(): AgentStep[] {
     { id: "5", request_id: "demo", session_id: "", step_type: "UPDATE",
       agent_name: "Executor", score: null, status: "done", created_at: now,
       input_payload: {},
-      output_payload: { chat_reply: "✅ LAB204 booked for tomorrow 2:00–4:00 PM. See you there!" } },
+      output_payload: { chat_reply: "LAB204 booked for tomorrow 2:00–4:00 PM. See you there!" } },
   ];
 }
 

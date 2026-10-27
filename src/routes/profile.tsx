@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
 import { useAuth, formatRole } from "@/lib/auth";
 import { useTheme } from "@/lib/theme";
-import { UserCircle, Upload, ShieldCheck, Monitor, LogOut, Key, Clock, Shield, Sun, Moon, Home } from "lucide-react";
+import { UserCircle, Upload, ShieldCheck, Monitor, LogOut, Key, Clock, Shield, Sun, Moon, Home, KeyRound, Landmark, ClipboardCheck, Globe, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { prefsStore } from "@/lib/prefs-store";
 import { toast } from "sonner";
@@ -163,11 +163,11 @@ function Profile() {
               <Shield className="w-3.5 h-3.5 text-primary" /> Official Role Designation
             </span>
             <div className="h-10 px-4 rounded-xl bg-secondary/60 border border-border/50 text-xs font-semibold text-foreground flex items-center gap-2.5 min-w-[240px] w-full sm:w-auto shadow-sm select-none">
-              {user.role === "super_admin" && <span>🔑</span>}
-              {user.role === "bureau_head" && <span>🏛️</span>}
-              {user.role === "approval_officer" && <span>📋</span>}
-              {user.role === "nodal_officer" && <span>🌐</span>}
-              {user.role === "citizen" && <span>👤</span>}
+              {user.role === "super_admin" && <KeyRound className="w-4 h-4 text-red-400" />}
+              {user.role === "bureau_head" && <Landmark className="w-4 h-4 text-amber-400" />}
+              {user.role === "approval_officer" && <ClipboardCheck className="w-4 h-4 text-blue-400" />}
+              {user.role === "nodal_officer" && <Globe className="w-4 h-4 text-emerald-400" />}
+              {user.role === "citizen" && <User className="w-4 h-4 text-purple-400" />}
               <span className="truncate">
                 {user.role === "approval_officer" && "Approval Officer (Case Handler)"}
                 {user.role === "bureau_head" && "Bureau Head (RB / PGRC / RO)"}

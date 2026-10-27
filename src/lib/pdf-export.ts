@@ -250,7 +250,7 @@ function generateClientSidePdf(options: ExportCasesOptions, filename: string) {
       c.sla_days ?? 30
     }d`;
     if (c.sla_breached) {
-      slaStatus += "\n⚠ SLA BREACHED";
+      slaStatus += "\n[BREACHED] SLA BREACHED";
     }
 
     return [caseId, inst, bureau, category, officer, slaStatus];

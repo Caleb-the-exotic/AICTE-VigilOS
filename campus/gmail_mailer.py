@@ -68,12 +68,34 @@ def get_access_token() -> str:
     _cached_token = (access_token, now + expires_in)
     return access_token
 
-def send_email(to_email: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
+def send_email(
+    to_email: str,
+    subject: str,
+    html_body: Optional[str] = None,
+    text_body: Optional[str] = None,
+    body: Optional[str] = None,
+) -> bool:
     """
     Send an email via the Gmail API v1 messages.send endpoint.
+    Supports html_body, text_body, and convenient 'body' argument.
     """
     _, _, _, sender_email = get_gmail_credentials()
     access_token = get_access_token()
+
+    if body and not text_body:
+        text_body = body
+
+    if not html_body and text_body:
+        import html
+        escaped = html.escape(text_body).replace("\n", "<br/>")
+        html_body = f"""<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0b0f19; color: #f1f5f9; padding: 20px;">
+  <div style="max-width: 600px; margin: 0 auto; background: #111827; border: 1px solid #dc2626; border-radius: 10px; padding: 20px;">
+    <div style="font-size: 14px; line-height: 1.6; color: #e5e7eb; white-space: pre-wrap;">{escaped}</div>
+  </div>
+</body>
+</html>"""
 
     msg = MIMEMultipart("alternative")
     msg["From"] = f"AICTE VigilOS Security <{sender_email}>"
@@ -82,7 +104,8 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: Optional[
 
     if text_body:
         msg.attach(MIMEText(text_body, "plain", "utf-8"))
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
+    if html_body:
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     raw_message = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
 
@@ -93,10 +116,11 @@ def send_email(to_email: str, subject: str, html_body: str, text_body: Optional[
     }
     payload = {"raw": raw_message}
 
-    res = requests.post(send_url, json=payload, headers=headers, timeout=12)
+    res = requests.post(send_url, json=payload, headers=headers, timeout=15)
     if res.status_code not in (200, 201):
         raise RuntimeError(f"Gmail API error {res.status_code}: {res.text}")
 
+    print(f"[Gmail Dispatcher] Successfully sent email to {to_email} (status {res.status_code})")
     return True
 
 def send_otp_email(to_email: str, otp_code: str, name: Optional[str] = None, purpose: str = "Password Reset") -> bool:

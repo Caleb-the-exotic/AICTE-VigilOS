@@ -6,12 +6,12 @@
 # Migrates all hardcoded officers and existing users into SQLite.
 # ============================================================
 
-import sqlite3
-import hashlib
 import os
+import hashlib
 import datetime
 import json
 import uuid
+from campus.db import get_conn
 
 MIGRATION_VERSION = "20261025_02_rbac_schema"
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "campusflow.db")
@@ -26,19 +26,17 @@ def _sha256_hash(password: str) -> str:
 
 def run_migration(db_path: str = DB_PATH) -> dict:
     """
-    Run versioned transactional migration on SQLite database.
+    Run versioned transactional migration on authoritative database.
     Idempotent and safe to rerun.
     """
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
+    conn = get_conn()
     cur = conn.cursor()
 
     # 1. Check if already executed
     cur.execute('''
         CREATE TABLE IF NOT EXISTS schema_migrations (
-            version TEXT PRIMARY KEY,
-            applied_at TEXT NOT NULL,
+            version VARCHAR(100) PRIMARY KEY,
+            applied_at VARCHAR(100) NOT NULL,
             details TEXT
         )
     ''')
@@ -50,7 +48,6 @@ def run_migration(db_path: str = DB_PATH) -> dict:
     now = datetime.datetime.now().isoformat()
 
     try:
-        cur.execute("BEGIN TRANSACTION;")
 
         # ── 2. Create Bureaus & Regions ──────────────────────────────
         cur.execute('''

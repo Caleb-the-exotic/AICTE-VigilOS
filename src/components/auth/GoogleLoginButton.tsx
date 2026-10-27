@@ -64,16 +64,29 @@ export default function GoogleLoginButton() {
           // ignore
         }
 
-        g.accounts.id.renderButton(container, {
-          theme: "filled_black",
-          size: "large",
-          width: 380,
-          text: "signin_with",
-          shape: "pill",
-          logo_alignment: "left",
-        });
+        const computeWidth = () => {
+          const parentWidth = container.parentElement ? container.parentElement.clientWidth : 0;
+          const screenWidth = typeof window !== "undefined" ? window.innerWidth : 360;
+          const base = parentWidth > 120 ? parentWidth - 8 : screenWidth - 64;
+          return Math.min(Math.max(Math.floor(base), 220), 320);
+        };
 
+        const renderGoogleBtn = () => {
+          const w = computeWidth();
+          container.innerHTML = "";
+          g.accounts.id.renderButton(container, {
+            theme: "filled_black",
+            size: "large",
+            width: w,
+            text: "signin_with",
+            shape: "pill",
+            logo_alignment: "left",
+          });
+        };
+
+        renderGoogleBtn();
         setBtnReady(true);
+        window.addEventListener("resize", renderGoogleBtn);
       }
 
       if (timer) clearInterval(timer);
@@ -110,12 +123,12 @@ export default function GoogleLoginButton() {
   return (
     <div className="w-full flex flex-col items-center">
       {/* Outer stylized glass frame with red hover glow */}
-      <div className="w-full max-w-[380px] relative group rounded-xl p-[1px] bg-gradient-to-r from-border/70 via-red-500/20 to-border/70 hover:from-red-500/40 hover:via-rose-500/40 hover:to-red-500/40 transition-all duration-300">
+      <div className="w-full max-w-[340px] relative group rounded-xl p-[1px] bg-gradient-to-r from-border/70 via-red-500/20 to-border/70 hover:from-red-500/40 hover:via-rose-500/40 hover:to-red-500/40 transition-all duration-300">
         <div className="w-full bg-secondary/40 backdrop-blur-md rounded-[11px] p-1 flex items-center justify-center min-h-[46px] relative overflow-hidden">
           {/* Actual Google rendered button container */}
           <div
             id="google-btn-rendered"
-            className="w-full flex justify-center [&>div]:!w-full [&_iframe]:!w-full [&_iframe]:!max-w-full"
+            className="w-full flex items-center justify-center overflow-hidden [&>div]:!mx-auto [&_iframe]:!mx-auto"
             style={{ display: btnReady ? "flex" : "none" }}
           />
 

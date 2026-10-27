@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useCallback } from "react";
-import { 
-  Shield, Users, ShieldAlert, ChevronDown, Check, 
+import {
+  Shield, Users, ShieldAlert, ChevronDown, Check,
   Search, ShieldCheck, ArrowLeft, Filter, Building2,
   Edit3, MapPin, Globe, Image as ImageIcon, X, Save, Plus,
-  Trash2, UserPlus
+  Trash2, UserPlus, KeyRound, Landmark, ClipboardCheck, User, RefreshCw
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
@@ -21,7 +21,9 @@ import {
   type InstitutionProfile,
   getStoredInstitutions,
   saveInstitution,
+  createInstitution,
   deleteInstitution,
+  fetchInstitutionsAsync,
 } from "@/lib/institutions";
 
 export const Route = createFileRoute("/admin")({ component: AdminPanel });
@@ -40,12 +42,12 @@ interface UserItem {
   permissions?: string[];
 }
 
-const ROLE_OPTIONS: { role: Role; label: string; emoji: string; desc: string; badgeClass: string }[] = [
-  { role: "super_admin", label: "Super Admin", emoji: "🔑", desc: "Central Vigilance & Platform Authority", badgeClass: "bg-red-500/15 text-red-400 border-red-500/30" },
-  { role: "bureau_head", label: "Bureau Head", emoji: "🏛️", desc: "RB / PGRC / Regional Bureau Chief", badgeClass: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
-  { role: "approval_officer", label: "Approval Officer", emoji: "📋", desc: "Grievance Case Handler & Investigator", badgeClass: "bg-blue-500/15 text-blue-300 border-blue-500/30" },
-  { role: "nodal_officer", label: "Regional Nodal Officer", emoji: "🌐", desc: "State & Regional Institutional Liaison", badgeClass: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
-  { role: "citizen", label: "Citizen / Complainant", emoji: "👤", desc: "Public Complainant & Grievance Submitter", badgeClass: "bg-purple-500/15 text-purple-300 border-purple-500/30" },
+const ROLE_OPTIONS: { role: Role; label: string; icon: any; desc: string; badgeClass: string }[] = [
+  { role: "super_admin", label: "Super Admin", icon: KeyRound, desc: "Central Vigilance & Platform Authority", badgeClass: "bg-red-500/15 text-red-400 border-red-500/30" },
+  { role: "bureau_head", label: "Bureau Head", icon: Landmark, desc: "RB / PGRC / Regional Bureau Chief", badgeClass: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+  { role: "approval_officer", label: "Approval Officer", icon: ClipboardCheck, desc: "Grievance Case Handler & Investigator", badgeClass: "bg-blue-500/15 text-blue-300 border-blue-500/30" },
+  { role: "nodal_officer", label: "Regional Nodal Officer", icon: Globe, desc: "State & Regional Institutional Liaison", badgeClass: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
+  { role: "citizen", label: "Citizen / Complainant", icon: User, desc: "Public Complainant & Grievance Submitter", badgeClass: "bg-purple-500/15 text-purple-300 border-purple-500/30" },
 ];
 
 function AdminPanel() {
@@ -74,7 +76,7 @@ function AdminPanel() {
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
 
-  // Authoritative Database Sync from SQLite Backend
+  // Authoritative Database Sync from PostgreSQL Backend
   const refreshUsers = useCallback(async () => {
     if (HAS_BACKEND && user?.role === "super_admin") {
       try {
@@ -104,7 +106,7 @@ function AdminPanel() {
         if (meta?.regions) setRegions(meta.regions);
       } catch (err: any) {
         console.error("Failed to load users from backend:", err);
-        toast.error("Failed to load personnel records from SQLite.");
+        toast.error("Failed to load personnel records from database.");
       } finally {
         setLoadingUsers(false);
       }
@@ -201,16 +203,69 @@ function AdminPanel() {
     }
   };
 
+  // ── Edit User Modal State ───────────────────────────────────────────
+  const [editingUser, setEditingUser] = useState<UserItem | null>(null);
+  const [editUserName, setEditUserName] = useState("");
+  const [editUserEmail, setEditUserEmail] = useState("");
+  const [editUserPassword, setEditUserPassword] = useState("");
+  const [isUpdatingUser, setIsUpdatingUser] = useState(false);
+
+  const handleOpenEditUser = (u: UserItem) => {
+    setEditingUser(u);
+    setEditUserName(u.name || "");
+    setEditUserEmail(u.email || "");
+    setEditUserPassword("");
+  };
+
+  const handleSaveUserEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    if (!editUserName.trim()) {
+      toast.error("Official Full Name is required.");
+      return;
+    }
+    if (!editUserEmail.trim()) {
+      toast.error("Official Email Address is required.");
+      return;
+    }
+    setIsUpdatingUser(true);
+    try {
+      if (HAS_BACKEND) {
+        await api.adminUpdateUserProfile(editingUser.id, {
+          name: editUserName.trim(),
+          email: editUserEmail.trim().toLowerCase(),
+          password: editUserPassword.trim() || undefined,
+        });
+      }
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === editingUser.id
+            ? { ...u, name: editUserName.trim(), email: editUserEmail.trim().toLowerCase() }
+            : u
+        )
+      );
+      toast.success(`Personnel information updated for ${editUserName.trim()}`);
+      setEditingUser(null);
+      loadUsers();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update personnel records");
+    } finally {
+      setIsUpdatingUser(false);
+    }
+  };
+
   // ── Tab & Institution State ─────────────────────────────────────────
   const [adminTab, setAdminTab] = useState<"users" | "institutions">("users");
   const [institutions, setInstitutions] = useState<InstitutionProfile[]>(getStoredInstitutions);
   const [instSearch, setInstSearch] = useState("");
   const [instRegionFilter, setInstRegionFilter] = useState("all");
   const [editingInst, setEditingInst] = useState<InstitutionProfile | null>(null);
+  const [editingApprovalMode, setEditingApprovalMode] = useState<string>("auto");
   const [imagesText, setImagesText] = useState("");
 
   // Create Institution state
   const [isCreatingInst, setIsCreatingInst] = useState(false);
+  const [newApprovalMode, setNewApprovalMode] = useState<string>("AICTE Approved (EOA 2026-27)");
   const [newInst, setNewInst] = useState<InstitutionProfile>({
     aicte_pid: `1-${Math.floor(100000000 + Math.random() * 900000000)}`,
     institution_name: "",
@@ -236,8 +291,18 @@ function AdminPanel() {
     "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=1000&q=80\nhttps://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&w=800&q=80"
   );
 
-  // Sync institutions across tabs/windows
+  // Sync institutions from backend and across tabs/windows
+  const refreshInstitutions = useCallback(async () => {
+    try {
+      const live = await fetchInstitutionsAsync();
+      setInstitutions(live);
+    } catch {
+      setInstitutions(getStoredInstitutions());
+    }
+  }, []);
+
   useEffect(() => {
+    refreshInstitutions();
     const sync = () => setInstitutions(getStoredInstitutions());
     window.addEventListener("aicte_institution_updated", sync);
     window.addEventListener("storage", sync);
@@ -245,15 +310,27 @@ function AdminPanel() {
       window.removeEventListener("aicte_institution_updated", sync);
       window.removeEventListener("storage", sync);
     };
-  }, []);
+  }, [refreshInstitutions]);
+
+  useEffect(() => {
+    if (adminTab === "institutions") {
+      refreshInstitutions();
+    }
+  }, [adminTab, refreshInstitutions]);
 
   const startEditing = (inst: InstitutionProfile) => {
     setEditingInst({ ...inst });
     setImagesText((inst.images || []).join("\n"));
+    if (inst.approval_status === "AICTE Approved (EOA 2026-27)" || inst.approval_status === "Not Approved") {
+      setEditingApprovalMode(inst.approval_status);
+    } else {
+      setEditingApprovalMode("Other");
+    }
   };
 
   const openCreateModal = () => {
     const generatedPid = `1-${Math.floor(100000000 + Math.random() * 900000000)}`;
+    setNewApprovalMode("AICTE Approved (EOA 2026-27)");
     setNewInst({
       aicte_pid: generatedPid,
       institution_name: "",
@@ -281,7 +358,7 @@ function AdminPanel() {
     setIsCreatingInst(true);
   };
 
-  const handleCreateInstitution = (e: React.FormEvent) => {
+  const handleCreateInstitution = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newInst.institution_name.trim()) {
       toast.error("Please enter the institution name");
@@ -304,13 +381,17 @@ function AdminPanel() {
       ],
     };
 
-    saveInstitution(created);
-    setInstitutions(getStoredInstitutions());
-    toast.success(`New institution "${created.institution_name}" (PID: ${created.aicte_pid}) created successfully!`);
-    setIsCreatingInst(false);
+    try {
+      const saved = await createInstitution(created);
+      setInstitutions(getStoredInstitutions());
+      toast.success(`New institution "${saved.institution_name}" (PID: ${saved.aicte_pid}) saved and persisted to database!`);
+      setIsCreatingInst(false);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to persist new institution to database.");
+    }
   };
 
-  const handleSaveInstitution = (e: React.FormEvent) => {
+  const handleSaveInstitution = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingInst) return;
     const cleanedImages = imagesText
@@ -321,10 +402,14 @@ function AdminPanel() {
       ...editingInst,
       images: cleanedImages.length > 0 ? cleanedImages : editingInst.images,
     };
-    saveInstitution(updated);
-    setInstitutions(getStoredInstitutions());
-    toast.success(`Profile for "${updated.institution_name}" updated successfully! Changes reflected across cases.`);
-    setEditingInst(null);
+    try {
+      const saved = await saveInstitution(updated);
+      setInstitutions(getStoredInstitutions());
+      toast.success(`Profile for "${saved.institution_name}" persisted to authoritative database!`);
+      setEditingInst(null);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to persist changes to database. Please check your connection.");
+    }
   };
 
   // Confirmation Modal State
@@ -341,16 +426,20 @@ function AdminPanel() {
     setConfirmDeleteModal({
       isOpen: true,
       title: "Delete Institution Profile?",
-      description: `Are you sure you want to permanently delete "${inst.institution_name}" (PID: ${inst.aicte_pid})? This will remove the institutional record from the directory and update cases.`,
+      description: `Are you sure you want to permanently delete "${inst.institution_name}" (PID: ${inst.aicte_pid})? This will remove the institutional record from the authoritative database.`,
       confirmLabel: "Delete Institution",
-      onConfirm: () => {
-        deleteInstitution(inst.aicte_pid);
-        setInstitutions(getStoredInstitutions());
-        if (editingInst?.aicte_pid === inst.aicte_pid) {
-          setEditingInst(null);
+      onConfirm: async () => {
+        try {
+          await deleteInstitution(inst.aicte_pid);
+          setInstitutions(getStoredInstitutions());
+          if (editingInst?.aicte_pid === inst.aicte_pid) {
+            setEditingInst(null);
+          }
+          toast.success(`Institution "${inst.institution_name}" (PID: ${inst.aicte_pid}) deleted from database.`);
+          setConfirmDeleteModal(null);
+        } catch (err: any) {
+          toast.error(err?.message || "Failed to delete institution from database.");
         }
-        toast.success(`Institution "${inst.institution_name}" (PID: ${inst.aicte_pid}) deleted successfully.`);
-        setConfirmDeleteModal(null);
       },
     });
   };
@@ -407,7 +496,7 @@ function AdminPanel() {
           ]);
         }
       }
-      toast.success(`Account for "${newUser.name.trim()}" (${emailKey}) successfully created in SQLite!`);
+      toast.success(`Account for "${newUser.name.trim()}" (${emailKey}) successfully created in database!`);
       setIsCreatingUser(false);
       setNewUser({
         name: "",
@@ -445,6 +534,7 @@ function AdminPanel() {
           }
           setUsers((prev) => prev.filter((u) => u.id !== targetUser.id));
           toast.success(`Account for "${targetUser.name}" (${targetUser.email}) deleted from database.`);
+          await refreshUsers();
         } catch (err: any) {
           toast.error(err?.message || "Failed to delete account");
         } finally {
@@ -589,16 +679,16 @@ function AdminPanel() {
             {/* Metric summary chips */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               {[
-                { label: "Super Admins", count: counts.super_admin, emoji: "🔑", color: "border-red-500/30 bg-red-500/10 text-red-400" },
-                { label: "Bureau Heads", count: counts.bureau_head, emoji: "🏛️", color: "border-amber-500/30 bg-amber-500/10 text-amber-300" },
-                { label: "Approval Officers", count: counts.approval_officer, emoji: "📋", color: "border-blue-500/30 bg-blue-500/10 text-blue-300" },
-                { label: "Nodal Officers", count: counts.nodal_officer, emoji: "🌐", color: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" },
-                { label: "Citizens / Complainants", count: counts.citizen, emoji: "👤", color: "border-purple-500/30 bg-purple-500/10 text-purple-300" },
+                { label: "Super Admins", count: counts.super_admin, icon: KeyRound, color: "border-red-500/30 bg-red-500/10 text-red-400" },
+                { label: "Bureau Heads", count: counts.bureau_head, icon: Landmark, color: "border-amber-500/30 bg-amber-500/10 text-amber-300" },
+                { label: "Approval Officers", count: counts.approval_officer, icon: ClipboardCheck, color: "border-blue-500/30 bg-blue-500/10 text-blue-300" },
+                { label: "Nodal Officers", count: counts.nodal_officer, icon: Globe, color: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" },
+                { label: "Citizens / Complainants", count: counts.citizen, icon: User, color: "border-purple-500/30 bg-purple-500/10 text-purple-300" },
               ].map((c) => (
                 <div key={c.label} className={cn("p-3 rounded-xl border flex flex-col justify-between transition-all", c.color)}>
                   <div className="flex items-center justify-between text-xs font-semibold">
                     <span>{c.label}</span>
-                    <span>{c.emoji}</span>
+                    <c.icon className="w-4 h-4 opacity-80" />
                   </div>
                   <div className="text-2xl font-bold mt-1">{c.count}</div>
                 </div>
@@ -606,7 +696,7 @@ function AdminPanel() {
             </div>
 
             {/* Users Panel Card */}
-            <div className="glass-card overflow-hidden">
+            <div id="authorized-personnel-container" className="glass-card overflow-hidden -mx-[1px] w-[calc(100%+6px)]">
               <div className="p-4 border-b border-border/30 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-primary" />
@@ -674,7 +764,17 @@ function AdminPanel() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/20">
-                    {filtered.length === 0 ? (
+                    {loadingUsers ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-16 text-center text-muted-foreground text-sm">
+                          <div className="flex flex-col items-center justify-center gap-2.5">
+                            <RefreshCw className="w-6 h-6 text-primary animate-spin" />
+                            <span className="font-semibold text-xs text-foreground/90">Synchronizing personnel directory with database...</span>
+                            <span className="text-[11px] text-muted-foreground">Verifying access controls, official jurisdictions, and active accounts</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : filtered.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground text-sm">
                           No personnel matching &ldquo;{search}&rdquo;
@@ -721,7 +821,7 @@ function AdminPanel() {
                                     )}
                                     title="Click to change role for this user"
                                   >
-                                    <span>{roleMeta.emoji}</span>
+                                    <roleMeta.icon className="w-3.5 h-3.5" />
                                     <span>{roleMeta.label}</span>
                                     <ChevronDown className="w-3.5 h-3.5 ml-1 transition-transform opacity-70" />
                                   </button>
@@ -752,7 +852,7 @@ function AdminPanel() {
                                         )}
                                       >
                                         <div className="flex items-center gap-2 truncate">
-                                          <span className="text-sm shrink-0">{opt.emoji}</span>
+                                          <opt.icon className="w-3.5 h-3.5 shrink-0 text-muted-foreground group-hover:text-foreground" />
                                           <div className="truncate">
                                             <div className="truncate font-semibold">{opt.label}</div>
                                           </div>
@@ -913,8 +1013,8 @@ function AdminPanel() {
                                   isSelf
                                     ? "Cannot deactivate your own active session"
                                     : isMasterAdmin
-                                    ? "Cannot deactivate Master Super Admin"
-                                    : `Click to ${u.status === "active" ? "deactivate" : "activate"} account`
+                                      ? "Cannot deactivate Master Super Admin"
+                                      : `Click to ${u.status === "active" ? "deactivate" : "activate"} account`
                                 }
                               >
                                 <span
@@ -927,28 +1027,38 @@ function AdminPanel() {
                               </button>
                             </td>
 
-                            {/* Actions: Delete Account */}
+                            {/* Actions: Edit & Delete Account */}
                             <td className="px-4 py-3 text-right">
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteUser(u)}
-                                disabled={isSelf || isMasterAdmin}
-                                className={cn(
-                                  "p-1.5 rounded-lg border transition-all inline-flex items-center justify-center",
-                                  isSelf || isMasterAdmin
-                                    ? "opacity-25 cursor-not-allowed border-border/20 text-muted-foreground"
-                                    : "border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive cursor-pointer active:scale-90"
-                                )}
-                                title={
-                                  isSelf
-                                    ? "Cannot delete active session account"
-                                    : isMasterAdmin
-                                    ? "Master Super Admin account protected"
-                                    : `Delete account for ${u.name}`
-                                }
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditUser(u)}
+                                  className="p-1.5 rounded-lg border border-primary/30 bg-primary/10 hover:bg-primary/25 text-primary cursor-pointer active:scale-90 transition-all inline-flex items-center justify-center"
+                                  title={`Edit information for ${u.name}`}
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteUser(u)}
+                                  disabled={isSelf || isMasterAdmin}
+                                  className={cn(
+                                    "p-1.5 rounded-lg border transition-all inline-flex items-center justify-center",
+                                    isSelf || isMasterAdmin
+                                      ? "opacity-25 cursor-not-allowed border-border/20 text-muted-foreground"
+                                      : "border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive cursor-pointer active:scale-90"
+                                  )}
+                                  title={
+                                    isSelf
+                                      ? "Cannot delete active session account"
+                                      : isMasterAdmin
+                                        ? "Master Super Admin account protected"
+                                        : `Delete account for ${u.name}`
+                                  }
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1036,7 +1146,7 @@ function AdminPanel() {
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
-                      
+
                       {/* Top overlay badges */}
                       <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2">
                         <span className="font-mono text-[10px] bg-black/75 backdrop-blur-md border border-white/20 text-white px-2 py-0.5 rounded-md font-semibold">
@@ -1239,14 +1349,60 @@ function AdminPanel() {
                 </div>
 
                 {/* Approval Status */}
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <label className="font-semibold text-white/90">Approval Status</label>
-                  <input
-                    type="text"
-                    value={editingInst.approval_status}
-                    onChange={(e) => setEditingInst({ ...editingInst, approval_status: e.target.value })}
-                    className="w-full h-9 px-3 rounded-lg bg-background border border-border/40 text-foreground focus:outline-none focus:border-primary"
-                  />
+                  <div className="space-y-2">
+                    <select
+                      value={
+                        editingApprovalMode === "Other"
+                          ? "Other"
+                          : editingInst.approval_status === "AICTE Approved (EOA 2026-27)"
+                            ? "AICTE Approved (EOA 2026-27)"
+                            : editingInst.approval_status === "Not Approved"
+                              ? "Not Approved"
+                              : "Other"
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditingApprovalMode(val);
+                        if (val === "Other") {
+                          if (
+                            editingInst.approval_status === "AICTE Approved (EOA 2026-27)" ||
+                            editingInst.approval_status === "Not Approved"
+                          ) {
+                            setEditingInst({ ...editingInst, approval_status: "" });
+                          }
+                        } else {
+                          setEditingInst({ ...editingInst, approval_status: val });
+                        }
+                      }}
+                      className="w-full h-9 px-3 rounded-lg bg-background border border-border/40 text-foreground focus:outline-none focus:border-primary cursor-pointer"
+                    >
+                      <option value="AICTE Approved (EOA 2026-27)">AICTE Approved (EOA 2026-27)</option>
+                      <option value="Not Approved">Not Approved</option>
+                      <option value="Other">Other</option>
+                    </select>
+
+                    {/* When 'Other' is chosen, allow typing custom statement */}
+                    {(editingApprovalMode === "Other" ||
+                      (editingInst.approval_status !== "AICTE Approved (EOA 2026-27)" &&
+                        editingInst.approval_status !== "Not Approved")) && (
+                        <div className="space-y-1 animate-in fade-in duration-150">
+                          <input
+                            type="text"
+                            required
+                            value={editingInst.approval_status}
+                            onChange={(e) => setEditingInst({ ...editingInst, approval_status: e.target.value })}
+                            placeholder="Type custom approval status statement..."
+                            className="w-full h-9 px-3 rounded-lg bg-background border border-primary/50 text-foreground focus:outline-none focus:border-primary text-xs"
+                            autoFocus
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            Specify official status statement (e.g. Conditional Extension, Notice Issued, Under Review)
+                          </p>
+                        </div>
+                      )}
+                  </div>
                 </div>
 
                 {/* Principal / Director */}
@@ -1477,15 +1633,60 @@ function AdminPanel() {
                 </div>
 
                 {/* Approval Status */}
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <label className="font-semibold text-white/90">Approval Status</label>
-                  <input
-                    type="text"
-                    value={newInst.approval_status}
-                    onChange={(e) => setNewInst({ ...newInst, approval_status: e.target.value })}
-                    placeholder="AICTE Approved (EOA 2026-27)"
-                    className="w-full h-9 px-3 rounded-lg bg-background border border-border/40 text-foreground focus:outline-none focus:border-primary"
-                  />
+                  <div className="space-y-2">
+                    <select
+                      value={
+                        newApprovalMode === "Other"
+                          ? "Other"
+                          : newInst.approval_status === "AICTE Approved (EOA 2026-27)"
+                            ? "AICTE Approved (EOA 2026-27)"
+                            : newInst.approval_status === "Not Approved"
+                              ? "Not Approved"
+                              : "Other"
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setNewApprovalMode(val);
+                        if (val === "Other") {
+                          if (
+                            newInst.approval_status === "AICTE Approved (EOA 2026-27)" ||
+                            newInst.approval_status === "Not Approved"
+                          ) {
+                            setNewInst({ ...newInst, approval_status: "" });
+                          }
+                        } else {
+                          setNewInst({ ...newInst, approval_status: val });
+                        }
+                      }}
+                      className="w-full h-9 px-3 rounded-lg bg-background border border-border/40 text-foreground focus:outline-none focus:border-primary cursor-pointer"
+                    >
+                      <option value="AICTE Approved (EOA 2026-27)">AICTE Approved (EOA 2026-27)</option>
+                      <option value="Not Approved">Not Approved</option>
+                      <option value="Other">Other</option>
+                    </select>
+
+                    {/* When 'Other' is chosen, allow typing custom statement */}
+                    {(newApprovalMode === "Other" ||
+                      (newInst.approval_status !== "AICTE Approved (EOA 2026-27)" &&
+                        newInst.approval_status !== "Not Approved")) && (
+                        <div className="space-y-1 animate-in fade-in duration-150">
+                          <input
+                            type="text"
+                            required
+                            value={newInst.approval_status}
+                            onChange={(e) => setNewInst({ ...newInst, approval_status: e.target.value })}
+                            placeholder="Type custom approval status statement..."
+                            className="w-full h-9 px-3 rounded-lg bg-background border border-primary/50 text-foreground focus:outline-none focus:border-primary text-xs"
+                            autoFocus
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            Specify official status statement (e.g. Conditional Extension, Notice Issued, Under Review)
+                          </p>
+                        </div>
+                      )}
+                  </div>
                 </div>
 
                 {/* Principal / Director */}
@@ -1657,11 +1858,11 @@ function AdminPanel() {
                     onChange={(e) => setNewUser({ ...newUser, role: e.target.value as Role })}
                     className="w-full h-9 px-3 rounded-lg bg-background border border-border/40 text-foreground focus:outline-none focus:border-primary cursor-pointer"
                   >
-                    <option value="approval_officer">📋 Approval Officer</option>
-                    <option value="bureau_head">🏛️ Bureau Head</option>
-                    <option value="super_admin">🔑 Super Admin</option>
-                    <option value="nodal_officer">🌐 Regional Nodal Officer</option>
-                    <option value="citizen">👤 Citizen / Complainant</option>
+                    <option value="approval_officer">Approval Officer</option>
+                    <option value="bureau_head">Bureau Head</option>
+                    <option value="super_admin">Super Admin</option>
+                    <option value="nodal_officer">Regional Nodal Officer</option>
+                    <option value="citizen">Citizen / Complainant</option>
                   </select>
                 </div>
 
@@ -1777,6 +1978,103 @@ function AdminPanel() {
                 <span>{confirmDeleteModal.confirmLabel || "Delete"}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT USER MODAL ────────────────────────────────────────── */}
+      {editingUser && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setEditingUser(null)} />
+          <div className="relative w-full max-w-lg bg-card border border-border/50 rounded-2xl shadow-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-200 z-10">
+            <div className="flex items-start justify-between gap-3 border-b border-border/30 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[11px] bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded-md font-bold">
+                    EDIT USER
+                  </span>
+                  <span className="text-xs text-muted-foreground">AICTE Personnel Directory</span>
+                </div>
+                <h2 className="text-lg font-bold text-white mt-1">Edit Personnel Information</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-white cursor-pointer transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUserEdit} className="space-y-4 text-xs">
+              <div className="space-y-3">
+                {/* Full Name */}
+                <div className="space-y-1">
+                  <label className="font-semibold text-white/90">Official Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editUserName}
+                    onChange={(e) => setEditUserName(e.target.value)}
+                    placeholder="e.g. Dr. Rajesh Kumar"
+                    className="w-full h-9 px-3 rounded-lg bg-background border border-border/40 text-foreground focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* Email Address */}
+                <div className="space-y-1">
+                  <label className="font-semibold text-white/90">Official Email Address *</label>
+                  <input
+                    type="email"
+                    required
+                    value={editUserEmail}
+                    onChange={(e) => setEditUserEmail(e.target.value)}
+                    placeholder="e.g: officer@aicte.gov.in"
+                    className="w-full h-9 px-3 rounded-lg bg-background border border-border/40 text-foreground font-mono focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* Current / New Password */}
+                <div className="space-y-1">
+                  <label className="font-semibold text-white/90">current password*</label>
+                  <input
+                    type="text"
+                    value={editUserPassword}
+                    onChange={(e) => setEditUserPassword(e.target.value)}
+                    placeholder="Leave blank to preserve current password, or enter new password"
+                    className="w-full h-9 px-3 rounded-lg bg-background border border-border/40 text-foreground font-mono focus:outline-none focus:border-primary"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Enter a new password to reset this officer's portal credentials, or leave blank to keep existing password.</p>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-border/30 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-4 py-2 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground font-semibold cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUpdatingUser}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold cursor-pointer transition-all active:scale-[0.98] shadow-md shadow-primary/20 disabled:opacity-50"
+                >
+                  {isUpdatingUser ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Save Changes</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -42,7 +42,7 @@ export const dmStore = {
       const delay = 800 + Math.random() * 1400;
       setTimeout(() => {
         this.setTyping(to, from, false);
-        const replies = ["Got it 👍", "Thanks for the update.", "I'll check and revert.", "Approved on my end.", "Can we discuss in 10m?"];
+        const replies = ["Got it.", "Thanks for the update.", "I'll check and revert.", "Approved on my end.", "Can we discuss in 10m?"];
         const reply: DM = { id: "dm-" + Date.now() + Math.random(), from: to, to: from, text: replies[Math.floor(Math.random() * replies.length)], ts: Date.now(), read: false };
         const all = read();
         all.push(reply);

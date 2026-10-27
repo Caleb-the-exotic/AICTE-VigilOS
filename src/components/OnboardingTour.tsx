@@ -3,7 +3,7 @@ import { Sparkles, X, ArrowRight } from "lucide-react";
 
 const KEY = "aicte_tour_done_v1";
 const STEPS = [
-  { title: "Welcome to VigilOS 👋", body: "AICTE-aligned cross-bureau complaint monitoring, overlap prevention, and autonomous intelligence." },
+  { title: "Welcome to VigilOS", body: "AICTE-aligned cross-bureau complaint monitoring, overlap prevention, and autonomous intelligence." },
   { title: "Submit an OD in seconds", body: "Click 'New Request' or use the AI quick-draft to convert natural language into a request." },
   { title: "Stay in the loop", body: "Track status with the timeline, chat with reviewers, and get notifications across mail, in-app, and push." },
   { title: "Press ? anytime", body: "See keyboard shortcuts. Use G then D/R/N/C to navigate without the mouse." },

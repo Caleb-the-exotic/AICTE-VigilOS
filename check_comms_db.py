@@ -1,0 +1,10 @@
+from campus.db import get_conn
+conn = get_conn()
+cur = conn.cursor()
+cur.execute('SELECT id, user_id, subject, created_at, updated_at FROM internal_drafts')
+print('Drafts:', [dict(r) for r in cur.fetchall()])
+cur.execute("SELECT id, message_ref, subject, sender_user_id, sender_folder FROM internal_messages")
+print('Messages:', [dict(r) for r in cur.fetchall()])
+cur.execute("SELECT id, message_id, recipient_user_id, recipient_email, folder FROM internal_message_recipients")
+print('Recipients:', [dict(r) for r in cur.fetchall()])
+conn.close()

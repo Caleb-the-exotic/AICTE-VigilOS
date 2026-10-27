@@ -37,7 +37,7 @@ function seed(): Mail[] {
   return [];
 }
 
-export const DEFAULT_LABELS = ["Important", "OD", "Admin", "Personal"];
+export const DEFAULT_LABELS = ["Important", "Admin", "Personal"];
 
 export const mailStore = {
   list(folder: Mail["folder"]) { return read().filter((m) => m.folder === folder).sort((a, b) => b.ts - a.ts); },

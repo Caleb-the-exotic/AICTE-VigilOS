@@ -44,6 +44,8 @@ venv/
 campusflow.db
 campusflow.db-shm
 campusflow.db-wal
-*.bak
+*_backup*.db
+*.db.bak
 chat_history/
 chat_history.json
+scratch/

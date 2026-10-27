@@ -187,23 +187,64 @@ export const DEFAULT_INSTITUTIONS: InstitutionProfile[] = [
 
 const STORAGE_KEY = "aicte_institutions_profiles";
 
+import { api, HAS_BACKEND } from "./api";
+
+/**
+ * Authoritative Backend Fetch: retrieves latest saved institutional portfolios from database.
+ */
+export async function fetchInstitutionsAsync(): Promise<InstitutionProfile[]> {
+  if (HAS_BACKEND) {
+    try {
+      const liveList = await api.getInstitutions();
+      if (Array.isArray(liveList) && liveList.length > 0) {
+        for (const item of liveList) {
+          const d = DEFAULT_INSTITUTIONS.find(x => x.aicte_pid === item.aicte_pid);
+          if (d) {
+            if (!item.principal_name && d.principal_name) item.principal_name = d.principal_name;
+            if (!item.contact_email && d.contact_email) item.contact_email = d.contact_email;
+            if (!item.contact_phone && d.contact_phone) item.contact_phone = d.contact_phone;
+            if (!item.website && d.website) item.website = d.website;
+            if ((!item.images || item.images.length === 0) && d.images && d.images.length > 0) item.images = d.images;
+          }
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(liveList));
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("aicte_institution_updated", { detail: { count: liveList.length } }));
+        }
+        return liveList;
+      }
+    } catch (err) {
+      console.warn("[Institutions] Backend fetch fallback to cached/default records:", err);
+    }
+  }
+  return getStoredInstitutions();
+}
+
 export function getStoredInstitutions(): InstitutionProfile[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_INSTITUTIONS));
+      if (typeof window !== "undefined") {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_INSTITUTIONS));
+      }
       return DEFAULT_INSTITUTIONS;
     }
     const parsed: InstitutionProfile[] = JSON.parse(raw);
-    // Merge any missing default institutions
     let changed = false;
     for (const d of DEFAULT_INSTITUTIONS) {
-      if (!parsed.some(p => p.aicte_pid === d.aicte_pid)) {
+      const match = parsed.find(p => p.aicte_pid === d.aicte_pid);
+      if (!match) {
         parsed.push(d);
         changed = true;
+      } else {
+        if (!match.principal_name && d.principal_name) { match.principal_name = d.principal_name; changed = true; }
+        if (!match.contact_email && d.contact_email) { match.contact_email = d.contact_email; changed = true; }
+        if (!match.contact_phone && d.contact_phone) { match.contact_phone = d.contact_phone; changed = true; }
+        if (!match.website && d.website) { match.website = d.website; changed = true; }
+        if ((!match.images || match.images.length === 0) && d.images && d.images.length > 0) { match.images = d.images; changed = true; }
       }
     }
-    if (changed) {
+    if (changed && typeof window !== "undefined") {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
     }
     return parsed;
@@ -213,26 +254,82 @@ export function getStoredInstitutions(): InstitutionProfile[] {
   }
 }
 
-export function saveInstitution(updated: InstitutionProfile): void {
+/**
+ * Persist Institutional Portfolio directly to Backend SQLite / PostgreSQL Database.
+ */
+export async function saveInstitution(updated: InstitutionProfile): Promise<InstitutionProfile> {
+  let savedResult = updated;
+  if (HAS_BACKEND) {
+    // Write directly to database through backend API
+    const res = await api.updateInstitution(updated.aicte_pid, updated);
+    if (!res || !res.ok) {
+      throw new Error(`Failed to persist portfolio changes for ${updated.institution_name} to database.`);
+    }
+    if (res.institution) {
+      savedResult = res.institution;
+    }
+  }
+
+  // Update local memory/cache with authoritative saved response
   try {
     const list = getStoredInstitutions();
-    const idx = list.findIndex(i => i.aicte_pid === updated.aicte_pid);
+    const idx = list.findIndex(i => i.aicte_pid === savedResult.aicte_pid);
     if (idx >= 0) {
-      list[idx] = updated;
+      list[idx] = savedResult;
     } else {
-      list.push(updated);
+      list.push(savedResult);
     }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-    // Dispatch custom event for real-time reactivity across components
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("aicte_institution_updated", { detail: updated }));
+      window.dispatchEvent(new CustomEvent("aicte_institution_updated", { detail: savedResult }));
     }
   } catch (err) {
-    console.error("Error saving institution:", err);
+    console.error("Error caching saved institution:", err);
   }
+
+  return savedResult;
 }
 
-export function deleteInstitution(pid: string): void {
+/**
+ * Register New Institution Portfolio into Backend Database.
+ */
+export async function createInstitution(newInst: InstitutionProfile): Promise<InstitutionProfile> {
+  let createdResult = newInst;
+  if (HAS_BACKEND) {
+    const res = await api.createInstitution(newInst);
+    if (!res || !res.ok) {
+      throw new Error(`Failed to create institutional record for ${newInst.institution_name} in database.`);
+    }
+    if (res.institution) {
+      createdResult = res.institution;
+    }
+  }
+
+  try {
+    const list = getStoredInstitutions();
+    list.push(createdResult);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("aicte_institution_updated", { detail: createdResult }));
+    }
+  } catch (err) {
+    console.error("Error caching new institution:", err);
+  }
+
+  return createdResult;
+}
+
+/**
+ * Delete Institution from Persistent Database.
+ */
+export async function deleteInstitution(pid: string): Promise<void> {
+  if (HAS_BACKEND) {
+    const res = await api.deleteInstitution(pid);
+    if (!res || !res.ok) {
+      throw new Error(`Failed to delete institution ${pid} from database.`);
+    }
+  }
+
   try {
     const list = getStoredInstitutions().filter(i => i.aicte_pid !== pid);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
@@ -240,7 +337,7 @@ export function deleteInstitution(pid: string): void {
       window.dispatchEvent(new CustomEvent("aicte_institution_updated", { detail: { deletedPid: pid } }));
     }
   } catch (err) {
-    console.error("Error deleting institution:", err);
+    console.error("Error deleting cached institution:", err);
   }
 }
 
@@ -256,7 +353,7 @@ export function getInstitutionByPid(pid: string): InstitutionProfile {
     city: "HQ",
     address: "AICTE Accredited Campus",
     inst_type: "Technical Institute",
-    approval_status: "Active",
+    approval_status: "AICTE Approved (EOA 2026-27)",
     principal_name: "Principal Officer",
     contact_email: "contact@institute.edu.in",
     contact_phone: "+91 11 29581000",
@@ -268,4 +365,11 @@ export function getInstitutionByPid(pid: string): InstitutionProfile {
       "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=1000&q=80",
     ],
   };
+}
+
+// Automatically sync latest institutions from authoritative backend on client boot
+if (typeof window !== "undefined" && HAS_BACKEND) {
+  setTimeout(() => {
+    fetchInstitutionsAsync().catch(() => {});
+  }, 100);
 }

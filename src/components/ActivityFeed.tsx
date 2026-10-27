@@ -14,12 +14,12 @@ import { api, tryApi, type ActivityEvent } from "@/lib/api";
 // ── Icon map ──────────────────────────────────────────────────────────────────
 function EventIcon({ icon, action }: { icon: string; action: string }) {
   const cls = "w-3.5 h-3.5";
-  if (icon === "✅" || action.includes("approved"))   return <CheckCircle2 className={`${cls} text-emerald-400`} />;
-  if (icon === "❌" || action.includes("rejected"))   return <XCircle      className={`${cls} text-red-400`} />;
-  if (icon === "⚠️"|| action.includes("escalated"))  return <AlertTriangle className={`${cls} text-amber-400`} />;
-  if (icon === "🤖" || action.includes("submit"))     return <Bot           className={`${cls} text-violet-400`} />;
-  if (icon === "🔐" || action.includes("login"))      return <Lock          className={`${cls} text-blue-400`} />;
-  if (icon === "⚡" || action.includes("request."))   return <Zap           className={`${cls} text-cyan-400`} />;
+  if (icon === "check" || action.includes("approved"))   return <CheckCircle2 className={`${cls} text-emerald-400`} />;
+  if (icon === "x" || action.includes("rejected"))       return <XCircle      className={`${cls} text-red-400`} />;
+  if (icon === "alert" || action.includes("escalated"))  return <AlertTriangle className={`${cls} text-amber-400`} />;
+  if (icon === "bot" || action.includes("submit"))       return <Bot           className={`${cls} text-violet-400`} />;
+  if (icon === "lock" || action.includes("login"))       return <Lock          className={`${cls} text-blue-400`} />;
+  if (icon === "zap" || action.includes("request."))     return <Zap           className={`${cls} text-cyan-400`} />;
   return <FileText className={`${cls} text-white/40`} />;
 }
 
@@ -36,13 +36,13 @@ function resultBadge(result: string) {
 function seedFeed(): ActivityEvent[] {
   const t = Date.now();
   return [
-    { id: "1", session_id: "", actor_role: "citizen",           action: "leave_request submitted",       target: "REQ-1024", result: "APPROVED",  created_at: new Date(t - 1000 * 60 * 1).toISOString(), icon: "✅" },
-    { id: "2", session_id: "", actor_role: "SYSTEM",            action: "request.classified",             target: "REQ-1025", result: "",          created_at: new Date(t - 1000 * 60 * 3).toISOString(), icon: "⚡" },
-    { id: "3", session_id: "", actor_role: "citizen",           action: "lab_booking submitted",          target: "LAB204",   result: "REJECTED",  created_at: new Date(t - 1000 * 60 * 7).toISOString(), icon: "❌" },
-    { id: "4", session_id: "", actor_role: "bureau_head",       action: "escalated_leave reviewed",       target: "REQ-1022", result: "APPROVED",  created_at: new Date(t - 1000 * 60 * 12).toISOString(),icon: "✅" },
-    { id: "5", session_id: "", actor_role: "citizen",           action: "user login",                     target: "stu_001",  result: "",          created_at: new Date(t - 1000 * 60 * 20).toISOString(), icon: "🔐" },
-    { id: "6", session_id: "", actor_role: "SYSTEM",            action: "request.completed",              target: "REQ-1019", result: "APPROVED",  created_at: new Date(t - 1000 * 60 * 35).toISOString(), icon: "✅" },
-    { id: "7", session_id: "", actor_role: "citizen",           action: "complaint submitted",             target: "COMP-12",  result: "ESCALATED", created_at: new Date(t - 1000 * 60 * 60).toISOString(), icon: "⚠️" },
+    { id: "1", session_id: "", actor_role: "citizen",           action: "leave_request submitted",       target: "REQ-1024", result: "APPROVED",  created_at: new Date(t - 1000 * 60 * 1).toISOString(), icon: "check" },
+    { id: "2", session_id: "", actor_role: "SYSTEM",            action: "request.classified",             target: "REQ-1025", result: "",          created_at: new Date(t - 1000 * 60 * 3).toISOString(), icon: "zap" },
+    { id: "3", session_id: "", actor_role: "citizen",           action: "lab_booking submitted",          target: "LAB204",   result: "REJECTED",  created_at: new Date(t - 1000 * 60 * 7).toISOString(), icon: "x" },
+    { id: "4", session_id: "", actor_role: "bureau_head",       action: "escalated_leave reviewed",       target: "REQ-1022", result: "APPROVED",  created_at: new Date(t - 1000 * 60 * 12).toISOString(),icon: "check" },
+    { id: "5", session_id: "", actor_role: "citizen",           action: "user login",                     target: "stu_001",  result: "",          created_at: new Date(t - 1000 * 60 * 20).toISOString(), icon: "lock" },
+    { id: "6", session_id: "", actor_role: "SYSTEM",            action: "request.completed",              target: "REQ-1019", result: "APPROVED",  created_at: new Date(t - 1000 * 60 * 35).toISOString(), icon: "check" },
+    { id: "7", session_id: "", actor_role: "citizen",           action: "complaint submitted",             target: "COMP-12",  result: "ESCALATED", created_at: new Date(t - 1000 * 60 * 60).toISOString(), icon: "alert" },
   ];
 }
 
