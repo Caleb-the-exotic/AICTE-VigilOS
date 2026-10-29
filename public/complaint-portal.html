@@ -1424,12 +1424,12 @@
             </div>
             <div class="form-field">
               <label class="field-label">Set Portal Password *</label>
-              <input type="password" id="inst_password" required minlength="6" class="field-input" placeholder="Min 6 characters">
-              <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem; display: block;">Used to log in after AICTE approval.</span>
+              <input type="password" id="inst_password" required minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" class="field-input" placeholder="Min 6 characters (e.g. VigiloS#2026!)">
+              <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem; display: block;">Used to sign in after AICTE approval. Please use a unique password (e.g. VigiloS#2026!) so the browser's built-in password monitor doesn't warn about commonly breached passwords.</span>
             </div>
             <div class="form-field">
               <label class="field-label">Confirm Password *</label>
-              <input type="password" id="inst_confirm_password" required minlength="6" class="field-input" placeholder="Re-type password">
+              <input type="password" id="inst_confirm_password" required minlength="6" autocomplete="new-password" data-lpignore="true" data-1p-ignore="true" class="field-input" placeholder="Re-type password">
             </div>
           </div>
           <div style="display: flex; justify-content: space-between; margin-top: 1.5rem;">
