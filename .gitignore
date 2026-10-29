@@ -49,3 +49,9 @@ campusflow.db-wal
 chat_history/
 chat_history.json
 scratch/
+
+# Test Python files
+test_*.py
+*_test.py
+tests/
+test/

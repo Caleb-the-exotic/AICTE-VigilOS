@@ -1072,16 +1072,16 @@ function StatusDonutBreakdown({ cases }: { cases: AICTECase[] }) {
           formatter: () => `{val|${totalCases}}\n{lbl|TOTAL CASES}`,
           rich: {
             val: {
-              fontSize: 26,
+              fontSize: 28,
               fontWeight: 800,
               color: textColor,
               fontFamily: "monospace",
-              lineHeight: 32,
+              lineHeight: 36,
             },
             lbl: {
               fontSize: 10,
               color: subTextColor,
-              fontWeight: 600,
+              fontWeight: 700,
               letterSpacing: 1,
             },
           },
@@ -1094,23 +1094,7 @@ function StatusDonutBreakdown({ cases }: { cases: AICTECase[] }) {
             shadowColor: isDark ? "rgba(0, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.15)",
           },
           label: {
-            show: true,
-            formatter: (params: any) => `{val|${params.value}}\n{lbl|${params.name.toUpperCase()}}`,
-            rich: {
-              val: {
-                fontSize: 26,
-                fontWeight: 800,
-                color: textColor,
-                fontFamily: "monospace",
-                lineHeight: 32,
-              },
-              lbl: {
-                fontSize: 10,
-                color: "#dc2626",
-                fontWeight: 700,
-                letterSpacing: 1,
-              },
-            },
+            show: false,
           },
         },
         data: chartData,
@@ -1273,8 +1257,25 @@ function ComplainantTypesBarChart({ cases }: { cases: AICTECase[] }) {
 function CasesDashboard() {
   const nav = useNavigate();
   const { user } = useAuth();
-  const [kpi, setKpi] = useState<KPIs>(mockKpis());
-  const [cases, setCases] = useState<AICTECase[]>(mockCases());
+  // Initialize from cache or fallback so latest persisted data shows immediately without flash
+  const [kpi, setKpi] = useState<KPIs>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const c = localStorage.getItem("aicte_cached_kpi");
+        if (c) return JSON.parse(c);
+      } catch {}
+    }
+    return mockKpis();
+  });
+  const [cases, setCases] = useState<AICTECase[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const c = localStorage.getItem("aicte_cached_cases");
+        if (c) return JSON.parse(c);
+      } catch {}
+    }
+    return mockCases();
+  });
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -1387,8 +1388,16 @@ function CasesDashboard() {
         fetch(`${API_BASE_URL}/api/aicte/kpi`, { headers }),
         fetch(`${API_BASE_URL}/api/aicte/cases`, { headers }),
       ]);
-      if (kpiRes.ok) setKpi(await kpiRes.json());
-      if (casesRes.ok) setCases(await casesRes.json());
+      if (kpiRes.ok) {
+        const kData = await kpiRes.json();
+        setKpi(kData);
+        try { localStorage.setItem("aicte_cached_kpi", JSON.stringify(kData)); } catch {}
+      }
+      if (casesRes.ok) {
+        const cData = await casesRes.json();
+        setCases(cData);
+        try { localStorage.setItem("aicte_cached_cases", JSON.stringify(cData)); } catch {}
+      }
     } catch (e) {
       /* falls back to mock data */
     } finally {
