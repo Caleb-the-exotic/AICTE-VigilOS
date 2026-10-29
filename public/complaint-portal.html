@@ -1317,7 +1317,7 @@
         <div class="reg-step-node" id="rs-4">4</div>
       </div>
 
-      <form id="portal-reg-form" onsubmit="submitRegistrationApplication(event)">
+      <form id="portal-reg-form" novalidate onsubmit="submitRegistrationApplication(event)">
         <!-- Step 1 -->
         <div id="reg-step-1" class="step-card">
           <h3 style="font-size: 1.15rem; font-weight: 800; margin-bottom: 1.25rem;">Stage 1: Institutional Profile</h3>
@@ -1455,7 +1455,7 @@
 
           <div style="display: flex; justify-content: space-between;">
             <button type="button" class="btn-hero-secondary" onclick="setRegStep(3)">← Previous</button>
-            <button type="submit" id="reg-submit-btn" class="btn-hero-primary">
+            <button type="submit" id="reg-submit-btn" onclick="submitRegistrationApplication(event)" class="btn-hero-primary">
               Submit Registration Application
             </button>
           </div>
@@ -1691,7 +1691,7 @@
 
   <!-- ── JAVASCRIPT LOGIC ── -->
   <script>
-    const API_BASE = window.location.port === '8000' ? '' : (window.location.origin.includes('8080') ? '' : 'http://localhost:8000');
+    const API_BASE = window.location.port === '8000' ? '' : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:8000' : '');
 
     async function apiCall(endpoint, options = {}) {
       const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
@@ -1890,49 +1890,87 @@
       }
     }
 
+    // Validate step fields with user-friendly alerts
+    function validateRegStep(step) {
+      if (step === 1) {
+        const name = (document.getElementById('inst_name')?.value || '').trim();
+        const aff = (document.getElementById('inst_affiliation')?.value || '').trim();
+        const email = (document.getElementById('inst_email')?.value || '').trim();
+        if (!name) { alert('Please enter Official Institution Name in Stage 1.'); setRegStep(1); document.getElementById('inst_name')?.focus(); return false; }
+        if (!aff) { alert('Please enter Affiliating University in Stage 1.'); setRegStep(1); document.getElementById('inst_affiliation')?.focus(); return false; }
+        if (!email || !email.includes('@')) { alert('Please enter a valid Institutional Email in Stage 1.'); setRegStep(1); document.getElementById('inst_email')?.focus(); return false; }
+      }
+      if (step === 2) {
+        const addr = (document.getElementById('inst_address')?.value || '').trim();
+        const city = (document.getElementById('inst_city')?.value || '').trim();
+        const state = (document.getElementById('inst_state')?.value || '').trim();
+        if (!addr) { alert('Please enter Campus Address in Stage 2.'); setRegStep(2); document.getElementById('inst_address')?.focus(); return false; }
+        if (!city) { alert('Please enter City / Town in Stage 2.'); setRegStep(2); document.getElementById('inst_city')?.focus(); return false; }
+        if (!state) { alert('Please enter State / UT in Stage 2.'); setRegStep(2); document.getElementById('inst_state')?.focus(); return false; }
+      }
+      if (step === 3) {
+        const repName = (document.getElementById('inst_rep_name')?.value || '').trim();
+        const repDesig = (document.getElementById('inst_rep_desig')?.value || '').trim();
+        const repEmail = (document.getElementById('inst_rep_email')?.value || '').trim();
+        const pw = document.getElementById('inst_password')?.value || '';
+        const confirmPw = document.getElementById('inst_confirm_password')?.value || '';
+        if (!repName) { alert('Please enter Authorized Person\'s Name in Stage 3.'); setRegStep(3); document.getElementById('inst_rep_name')?.focus(); return false; }
+        if (!repDesig) { alert('Please enter Authorized Person\'s Designation in Stage 3.'); setRegStep(3); document.getElementById('inst_rep_desig')?.focus(); return false; }
+        if (!repEmail || !repEmail.includes('@')) { alert('Please enter Representative Email in Stage 3.'); setRegStep(3); document.getElementById('inst_rep_email')?.focus(); return false; }
+        if (!pw || pw.length < 6) { alert('Please enter a portal password of at least 6 characters in Stage 3.'); setRegStep(3); document.getElementById('inst_password')?.focus(); return false; }
+        if (pw !== confirmPw) { alert('Passwords do not match. Please verify your confirm password in Stage 3.'); setRegStep(3); document.getElementById('inst_confirm_password')?.focus(); return false; }
+      }
+      return true;
+    }
+
     // Submit Registration Application
     async function submitRegistrationApplication(e) {
-      e.preventDefault();
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      
+      // Step-by-step friendly validation
+      if (!validateRegStep(1)) return;
+      if (!validateRegStep(2)) return;
+      if (!validateRegStep(3)) return;
+
+      const decl = document.getElementById('inst_decl');
+      if (!decl || !decl.checked) {
+        alert('Please tick the declaration checkbox to confirm accuracy before submitting.');
+        setRegStep(4);
+        if (decl) decl.focus();
+        return;
+      }
+
       const pw = document.getElementById('inst_password').value;
-      const confirmPw = document.getElementById('inst_confirm_password').value;
-
-      if (!pw || pw.length < 6) {
-        alert('Please enter an account password of at least 6 characters.');
-        setRegStep(3);
-        document.getElementById('inst_password').focus();
-        return;
-      }
-      if (pw !== confirmPw) {
-        alert('Passwords do not match. Please verify your confirm password.');
-        setRegStep(3);
-        document.getElementById('inst_confirm_password').focus();
-        return;
-      }
-
       const payload = {
         institution_name: document.getElementById('inst_name').value.trim(),
-        aicte_code: document.getElementById('inst_code').value.trim(),
+        aicte_code: (document.getElementById('inst_code').value || '').trim(),
         inst_type: document.getElementById('inst_type').value,
         affiliation: document.getElementById('inst_affiliation').value.trim(),
         address: document.getElementById('inst_address').value.trim(),
         city: document.getElementById('inst_city').value.trim(),
-        district: document.getElementById('inst_district').value.trim(),
+        district: (document.getElementById('inst_district').value || '').trim(),
         state: document.getElementById('inst_state').value.trim(),
         region: document.getElementById('inst_region').value,
         official_email: document.getElementById('inst_email').value.trim().toLowerCase(),
-        contact_phone: document.getElementById('inst_phone').value.trim(),
+        contact_phone: (document.getElementById('inst_phone').value || '').trim(),
         rep_name: document.getElementById('inst_rep_name').value.trim(),
         rep_designation: document.getElementById('inst_rep_desig').value.trim(),
         rep_email: document.getElementById('inst_rep_email').value.trim().toLowerCase(),
-        rep_phone: document.getElementById('inst_rep_phone').value.trim(),
-        website: document.getElementById('inst_website').value.trim(),
-        declaration_accepted: document.getElementById('inst_decl').checked,
+        rep_phone: (document.getElementById('inst_rep_phone').value || '').trim(),
+        website: (document.getElementById('inst_website').value || '').trim(),
+        declaration_accepted: true,
         password: pw,
       };
 
       const btn = document.getElementById('reg-submit-btn');
-      btn.innerText = 'Submitting to Central Registry...';
-      btn.disabled = true;
+      const origText = btn ? btn.innerHTML : 'Submit Registration Application';
+      if (btn) {
+        btn.innerText = 'Submitting to Central Registry...';
+        btn.disabled = true;
+      }
 
       try {
         const res = await apiCall('/api/institution/register', {
@@ -1950,10 +1988,12 @@
         document.getElementById('track-query-input').value = res.application_id;
         executeStatusLookup();
       } catch (err) {
-        alert(err.message || 'Failed to submit registration application.');
+        alert('Registration submission error: ' + (err.message || 'Server rejected registration'));
       } finally {
-        btn.innerText = 'Submit Registration Application';
-        btn.disabled = false;
+        if (btn) {
+          btn.innerHTML = origText;
+          btn.disabled = false;
+        }
       }
     }
 

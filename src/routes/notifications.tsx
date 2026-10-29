@@ -27,15 +27,15 @@ function formatTimeAgo(isoString: string): string {
 function getIconAndColor(type: string) {
   switch (type) {
     case "institution_registration":
-      return { icon: Building2, color: "text-amber-400 bg-amber-500/15 border-amber-500/30" };
+      return { icon: Building2, color: "text-primary bg-primary/10 border-primary/25" };
     case "registration_approved":
-      return { icon: CheckCircle2, color: "text-emerald-400 bg-emerald-500/15 border-emerald-500/30" };
+      return { icon: CheckCircle2, color: "text-primary bg-primary/10 border-primary/25" };
     case "registration_rejected":
-      return { icon: ShieldAlert, color: "text-red-400 bg-red-500/15 border-red-500/30" };
+      return { icon: ShieldAlert, color: "text-primary bg-primary/10 border-primary/25" };
     case "case_alert":
-      return { icon: AlertCircle, color: "text-rose-400 bg-rose-500/15 border-rose-500/30" };
+      return { icon: AlertCircle, color: "text-primary bg-primary/10 border-primary/25" };
     default:
-      return { icon: Info, color: "text-primary bg-primary/15 border-primary/30" };
+      return { icon: Info, color: "text-primary bg-primary/10 border-primary/25" };
   }
 }
 
