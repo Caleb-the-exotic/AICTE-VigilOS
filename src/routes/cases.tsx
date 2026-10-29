@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   AlertTriangle, Building2, CheckCircle2, Clock, Download,
-  FileText, Filter, Gavel, GitMerge, Globe, Layers,
+  FileText, Filter, Gavel, GitMerge, GitGraph, Globe, Layers,
   RefreshCw, Search, Shield, Siren, TrendingUp, Users,
   X, ChevronRight, ChevronLeft, ArrowUpRight, Eye, AlertOctagon,
   BarChart3, MapPin, Calendar, Link2, Zap, Info, Loader2,
