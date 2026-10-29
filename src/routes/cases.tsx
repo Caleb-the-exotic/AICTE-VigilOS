@@ -1096,7 +1096,23 @@ function StatusDonutBreakdown({ cases }: { cases: AICTECase[] }) {
             shadowColor: isDark ? "rgba(0, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.15)",
           },
           label: {
-            show: false,
+            show: true,
+            formatter: () => `{val|${totalCases}}\n{lbl|TOTAL CASES}`,
+            rich: {
+              val: {
+                fontSize: 28,
+                fontWeight: 800,
+                color: textColor,
+                fontFamily: "monospace",
+                lineHeight: 36,
+              },
+              lbl: {
+                fontSize: 10,
+                color: subTextColor,
+                fontWeight: 700,
+                letterSpacing: 1,
+              },
+            },
           },
         },
         data: chartData,
@@ -1899,8 +1915,8 @@ function CasesDashboard() {
             ["cases", "All Cases", FileText],
             ...(canManageCases ? [["registrations", "Registrations", Building2] as [typeof activeTab, string, any]] : []),
             ["overlaps", `Overlap Alerts (${pendingOverlapCount})`, Siren],
-            ["graph", "Relationship Graph", GitGraph],
             ["institutions", `Institutions (${allDisplayInstitutions.length})`, Building2],
+            ["graph", "Relationship Graph", GitGraph],
             ["analytics", "Analytics", BarChart3],
           ] as [typeof activeTab, string, any][]).map(([k, label, Icon]) => (
             <button
