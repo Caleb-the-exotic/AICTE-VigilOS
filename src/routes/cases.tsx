@@ -18,6 +18,8 @@ import { exportCasesAsPdf } from "@/lib/pdf-export";
 import { getInstitutionByPid, getStoredInstitutions, fetchInstitutionsAsync, type InstitutionProfile } from "@/lib/institutions";
 import InstitutionRegistrationsTab from "@/components/cases/InstitutionRegistrationsTab";
 import { IndiaRegionalMap } from "@/components/cases/IndiaRegionalMap";
+import { CaseRelationshipGraph } from "@/components/cases/CaseRelationshipGraph";
+import { ActionHistoryViewer, type CaseAction, detectActionConflicts } from "@/components/cases/ActionHistoryViewer";
 import ReactECharts from "echarts-for-react";
 import { useTheme } from "@/lib/theme";
 
@@ -1286,7 +1288,78 @@ function CasesDashboard() {
   const [searchQ, setSearchQ] = useState("");
 
   // Views
-  const [activeTab, setActiveTab] = useState<"cases" | "overlaps" | "institutions" | "analytics" | "registrations">("cases");
+  const [activeTab, setActiveTab] = useState<"cases" | "overlaps" | "graph" | "institutions" | "analytics" | "registrations">("cases");
+
+  // Persistent Action History Data Model for Cases
+  const [caseActions, setCaseActions] = useState<CaseAction[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("aicte_case_actions");
+        if (stored) return JSON.parse(stored);
+      } catch {}
+    }
+    // Initial sample actions showcasing verified actions & duplicate/conflict rules
+    return [
+      {
+        id: "act-1",
+        case_id: "AICTE-2026-RB-0042",
+        aicte_pid: "1-109723481",
+        bureau: "RB",
+        action_type: "INSPECTION_SCHEDULED",
+        title: "Surprise Inspection Committee Scheduled",
+        details: "EVC appointed for faculty register and biometric audit on campus.",
+        actor: "Dr. Ramesh Gupta (RB)",
+        timestamp: new Date(Date.now() - 3 * 86400000).toISOString(),
+      },
+      {
+        id: "act-2",
+        case_id: "AICTE-2026-PGRC-0089",
+        aicte_pid: "1-109723481",
+        bureau: "PGRC",
+        action_type: "INSPECTION_SCHEDULED",
+        title: "Faculty Grievance Site Investigation",
+        details: "Grievance cell field officer deputed for direct faculty interview.",
+        actor: "Ms. Priya Verma (PGRC)",
+        timestamp: new Date(Date.now() - 1 * 86400000).toISOString(),
+      },
+      {
+        id: "act-3",
+        case_id: "AICTE-2026-RB-0055",
+        aicte_pid: "1-376234110",
+        bureau: "RB",
+        action_type: "DOCUMENT_REQUESTED",
+        title: "Audited Fee Statement Demanded",
+        details: "Submission of approved fee structure vs bank credit statement demanded within 10 days.",
+        actor: "Mr. Suresh Iyer (RB)",
+        timestamp: new Date(Date.now() - 4 * 86400000).toISOString(),
+      },
+      {
+        id: "act-4",
+        case_id: "AICTE-2026-PGRC-0112",
+        aicte_pid: "1-376234110",
+        bureau: "PGRC",
+        action_type: "DOCUMENT_REQUESTED",
+        title: "Bank Fee Challans Demanded",
+        details: "Demand for student receipts and cash deposit ledger.",
+        actor: "Dr. Anita Sharma (PGRC)",
+        timestamp: new Date(Date.now() - 2 * 86400000).toISOString(),
+      },
+    ];
+  });
+
+  const handleAddCaseAction = (newAction: Omit<CaseAction, "id" | "timestamp">) => {
+    const act: CaseAction = {
+      ...newAction,
+      id: "act-" + Date.now(),
+      timestamp: new Date().toISOString(),
+    };
+    setCaseActions((prev) => {
+      const updated = [act, ...prev];
+      try { localStorage.setItem("aicte_case_actions", JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+    toast.success(`Action "${act.title}" recorded to audit history.`);
+  };
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [selectedCase, setSelectedCase] = useState<AICTECase | null>(null);
 
@@ -1826,6 +1899,7 @@ function CasesDashboard() {
             ["cases", "All Cases", FileText],
             ...(canManageCases ? [["registrations", "Registrations", Building2] as [typeof activeTab, string, any]] : []),
             ["overlaps", `Overlap Alerts (${pendingOverlapCount})`, Siren],
+            ["graph", "Relationship Graph", GitGraph],
             ["institutions", `Institutions (${allDisplayInstitutions.length})`, Building2],
             ["analytics", "Analytics", BarChart3],
           ] as [typeof activeTab, string, any][]).map(([k, label, Icon]) => (
@@ -1845,6 +1919,15 @@ function CasesDashboard() {
             </button>
           ))}
         </div>
+
+        {/* ── TAB: Relationship Graph ─────────────────────────────── */}
+        {activeTab === "graph" && (
+          <CaseRelationshipGraph
+            cases={cases}
+            onSelectCase={(c) => setSelectedCase(c as AICTECase)}
+            onSelectInstitution={(pid) => setSelectedProfile(pid)}
+          />
+        )}
 
         {/* ── TAB: All Cases ─────────────────────────────────────────── */}
         {activeTab === "cases" && (
@@ -2306,6 +2389,17 @@ function CasesDashboard() {
                   {selectedCase.description}
                 </div>
               )}
+
+              {/* Action History & Cross-Bureau Conflict Inspector */}
+              <div className="border-t border-border/20 pt-3">
+                <ActionHistoryViewer
+                  caseId={selectedCase.case_id}
+                  aictePid={selectedCase.aicte_pid}
+                  bureau={selectedCase.bureau}
+                  allCasesActions={caseActions}
+                  onAddAction={handleAddCaseAction}
+                />
+              </div>
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={() => { setSelectedProfile(selectedCase.aicte_pid); setSelectedCase(null); }}
