@@ -521,6 +521,92 @@ export const api = {
     request<{ ok: boolean; deleted_count: number; message: string }>("/api/notifications", {
       method: "DELETE",
     }),
+
+  // ===== Comprehensive Audit Trail =====
+  getInstitutionAuditTrail: () =>
+    request<{
+      total_complaints: number;
+      total_registrations: number;
+      complaints: Array<{
+        case_id: string;
+        aicte_pid: string;
+        institution_name: string;
+        region: string;
+        bureau: string;
+        category: string;
+        title: string;
+        description: string;
+        complainant_name: string;
+        complainant_type: string;
+        created_at: string;
+        status: string;
+        event_type: string;
+        action_label: string;
+      }>;
+      registrations: Array<{
+        registration_id: string;
+        institution_name: string;
+        official_email: string;
+        inst_type: string;
+        city: string;
+        state: string;
+        region: string;
+        status: string;
+        created_at: string;
+        rep_name: string;
+        rep_designation: string;
+        event_type: string;
+        action_label: string;
+      }>;
+      portfolio_updates: Array<{
+        audit_id: number;
+        actor_role: string;
+        action: string;
+        target: string;
+        result: string;
+        created_at: string;
+        event_type: string;
+        action_label: string;
+      }>;
+    }>("/api/admin/audit/institutions"),
+
+  getOfficerAuditTrail: () =>
+    request<{
+      total_personnel_audits: number;
+      total_system_audits: number;
+      deleted_users_count: number;
+      status_changes_count: number;
+      personnel_audits: Array<{
+        id: number;
+        user_id: string;
+        changed_by: string;
+        action: string;
+        old_role_key?: string;
+        new_role_key?: string;
+        old_bureau_code?: string;
+        new_bureau_code?: string;
+        old_region_code?: string;
+        new_region_code?: string;
+        created_at: string;
+        target_name: string;
+        target_email: string;
+        actor_name: string;
+        actor_email: string;
+        deletion_reason?: string;
+        is_deleted_user: number;
+        domain: string;
+      }>;
+      system_audits: Array<{
+        id: number;
+        session_id: string;
+        actor_role: string;
+        action: string;
+        target: string;
+        result: string;
+        created_at: string;
+        domain: string;
+      }>;
+    }>("/api/admin/audit/officers"),
 };
 
 // ===== Registration & Notification Types =====

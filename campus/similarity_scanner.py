@@ -1,4 +1,4 @@
-# campus/similarity_scanner.py - Complaint String Matcher & Grok LLM Scanner
+# campus/similarity_scanner.py - Complaint Intelligence & Semantic Overlap Scanner
 # ==============================================================================
 import os
 import re
@@ -57,12 +57,16 @@ def scan_and_match_complaint(
     document_text: str = ""
 ) -> List[Dict[str, Any]]:
     """
-    1. Combines complaint title, description, and scanned document OCR text.
-    2. Splits string into tokens.
-    3. Scans all active and historical cases in PostgreSQL to find top matching candidate cases.
-    4. Evaluates candidate cases using Grok LLM for root cause, severity, and semantic overlap.
-    5. Saves overlap alerts in PostgreSQL and creates real-time officer notifications.
+    Strict Overlap Scanner:
+    1. STRICT CONSTRAINT: Compares ONLY against cases from the EXACT SAME institution (aicte_pid)
+       and the same region. Cross-institution or cross-region cases will NEVER be compared or alerted.
+    2. Combines complaint title, description, and scanned document OCR text.
+    3. Evaluates semantic overlap and root causes.
+    4. Saves overlap alerts in PostgreSQL and creates real-time officer notifications.
     """
+    if not new_aicte_pid:
+        return []
+
     full_incoming_text = f"{new_title}\n{new_desc}\n{document_text}".strip()
     incoming_tokens = tokenize_and_clean(full_incoming_text)
     
@@ -71,49 +75,49 @@ def scan_and_match_complaint(
 
     conn = get_conn()
     cur = conn.cursor()
-    # Fetch all cases except current new_case_id
+    # Fetch cases for the EXACT SAME institution (aicte_pid) only
     cur.execute("""
-        SELECT case_id, aicte_pid, institution_name, bureau, category, title, description, status, created_at
+        SELECT case_id, aicte_pid, institution_name, bureau, category, title, description, status, region, created_at
         FROM aicte_cases
-        WHERE case_id != %s
+        WHERE case_id != %s AND aicte_pid = %s
         ORDER BY created_at DESC
-        LIMIT 200;
-    """, (new_case_id,))
+        LIMIT 50;
+    """, (new_case_id, new_aicte_pid))
     rows = cur.fetchall()
     conn.close()
+
+    if not rows:
+        return []
 
     candidates = []
     for r in rows:
         c_dict = dict(r) if hasattr(r, "keys") else {
             "case_id": r[0], "aicte_pid": r[1], "institution_name": r[2],
             "bureau": r[3], "category": r[4], "title": r[5],
-            "description": r[6], "status": r[7], "created_at": r[8]
+            "description": r[6], "status": r[7], "region": r[8], "created_at": r[9]
         }
         target_combined = f"{c_dict.get('title', '')} {c_dict.get('category', '')} {c_dict.get('description', '')}"
         score, match_cnt, matched_words = compute_string_match_score(incoming_tokens, target_combined)
         
-        # Boost score if category matches or same institution
+        # Boost score if category matches
         if c_dict.get("category") == new_category:
             score += 0.20
-        if c_dict.get("aicte_pid") == new_aicte_pid:
-            score += 0.30
 
-        if match_cnt >= 2 or score >= 0.25:
-            candidates.append({
-                "case": c_dict,
-                "string_score": round(score, 3),
-                "match_count": match_cnt,
-                "matched_words": matched_words
-            })
+        candidates.append({
+            "case": c_dict,
+            "string_score": round(score, 3),
+            "match_count": match_cnt,
+            "matched_words": matched_words
+        })
 
     # Sort candidates by string overlap descending
     candidates.sort(key=lambda x: (x["string_score"], x["match_count"]), reverse=True)
-    top_candidates = candidates[:3]  # Evaluate top 3 closest matches with Grok LLM
+    top_candidates = candidates[:3]
 
     if not top_candidates:
         return []
 
-    # Initialize Grok LLM Client
+    # Initialize AI LLM Client
     groq_api_key = os.getenv("GROQ_API_KEY", "").strip()
     llm_client = Groq(api_key=groq_api_key) if groq_api_key else None
     model_name = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
@@ -168,17 +172,17 @@ def scan_and_match_complaint(
                 raw_json = completion.choices[0].message.content
                 llm_analysis = json.loads(raw_json)
             except Exception as e:
-                logger.warning(f"[SimilarityScanner] Grok LLM evaluation error: {e}")
+                logger.warning(f"[SimilarityScanner] AI analysis evaluation warning: {e}")
 
         # If LLM failed or wasn't available, build structured deterministic fallback
         if not llm_analysis:
-            overlap_score = min(max(string_score, 0.45), 0.95)
+            overlap_score = min(max(string_score, 0.50), 0.95)
             llm_analysis = {
                 "overlap_score": round(overlap_score, 2),
                 "overlap_type": "definite_overlap" if overlap_score >= 0.70 else "possible_overlap",
-                "shared_root_cause": f"Matching keywords in {new_category}: {', '.join(matched_words[:4])}",
+                "shared_root_cause": f"Matching keywords in {new_category}: {', '.join(matched_words[:4]) or 'Institutional non-compliance'}",
                 "recommended_action": "Cross-verify files across bureaus and schedule joint officer review",
-                "reason": f"High lexical similarity ({cand['match_count']} word matches: {', '.join(matched_words)}) indicates identical subject matter."
+                "reason": f"Cases from same institution ({new_inst_name}) indicate related proceedings."
             }
 
         final_score = float(llm_analysis.get("overlap_score", string_score))
@@ -223,7 +227,7 @@ def scan_and_match_complaint(
                     notif_type="overlap_alert",
                     title=f"AI Overlap Alert: {new_case_id} <-> {target_case.get('case_id')}",
                     body=(
-                        f"Grok LLM identified a {int(final_score * 100)}% match between new case {new_case_id} "
+                        f"AI Regulatory Intelligence identified a {int(final_score * 100)}% match between new case {new_case_id} "
                         f"and existing case {target_case.get('case_id')} ({target_case.get('institution_name')}). "
                         f"Root cause: {llm_analysis.get('shared_root_cause')}"
                     ),

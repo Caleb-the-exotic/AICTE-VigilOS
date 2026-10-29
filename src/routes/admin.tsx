@@ -4,8 +4,11 @@ import {
   Shield, Users, ShieldAlert, ChevronDown, Check,
   Search, ShieldCheck, ArrowLeft, Filter, Building2,
   Edit3, MapPin, Globe, Image as ImageIcon, X, Save, Plus,
-  Trash2, UserPlus, KeyRound, Landmark, ClipboardCheck, User, RefreshCw
+  Trash2, UserPlus, KeyRound, Landmark, ClipboardCheck, User, RefreshCw,
+  History, UserX, FileText, BellOff, Layers
 } from "lucide-react";
+import { InstitutionAuditSubpage } from "@/components/admin/InstitutionAuditSubpage";
+import { OfficerAuditSubpage } from "@/components/admin/OfficerAuditSubpage";
 import AppLayout from "@/components/layout/AppLayout";
 import { cn } from "@/lib/utils";
 import { useAuth, formatRole, type Role } from "@/lib/auth";
@@ -266,7 +269,56 @@ function AdminPanel() {
   };
 
   // ── Tab & Institution State ─────────────────────────────────────────
-  const [adminTab, setAdminTab] = useState<"users" | "institutions">("users");
+  const [adminTab, setAdminTab] = useState<"users" | "institutions" | "audit">("users");
+  const [auditSubTab, setAuditSubTab] = useState<"institutions" | "officers">("institutions");
+  const [loadingAudit, setLoadingAudit] = useState(false);
+  const [institutionAuditData, setInstitutionAuditData] = useState<{
+    complaints: any[];
+    registrations: any[];
+    portfolioUpdates: any[];
+  }>({ complaints: [], registrations: [], portfolioUpdates: [] });
+  const [officerAuditData, setOfficerAuditData] = useState<{
+    personnelAudits: any[];
+    systemAudits: any[];
+    deletedUsersCount: number;
+    statusChangesCount: number;
+  }>({ personnelAudits: [], systemAudits: [], deletedUsersCount: 0, statusChangesCount: 0 });
+
+  const loadAuditData = useCallback(async () => {
+    if (!HAS_BACKEND || user?.role !== "super_admin") return;
+    try {
+      setLoadingAudit(true);
+      const [instRes, offRes] = await Promise.all([
+        api.getInstitutionAuditTrail().catch(() => null),
+        api.getOfficerAuditTrail().catch(() => null),
+      ]);
+      if (instRes) {
+        setInstitutionAuditData({
+          complaints: instRes.complaints || [],
+          registrations: instRes.registrations || [],
+          portfolioUpdates: instRes.portfolio_updates || [],
+        });
+      }
+      if (offRes) {
+        setOfficerAuditData({
+          personnelAudits: offRes.personnel_audits || [],
+          systemAudits: offRes.system_audits || [],
+          deletedUsersCount: offRes.deleted_users_count || 0,
+          statusChangesCount: offRes.status_changes_count || 0,
+        });
+      }
+    } catch (e) {
+      console.error("Failed to fetch audit data:", e);
+    } finally {
+      setLoadingAudit(false);
+    }
+  }, [user?.role]);
+
+  useEffect(() => {
+    if (adminTab === "audit") {
+      loadAuditData();
+    }
+  }, [adminTab, loadAuditData]);
   const [institutions, setInstitutions] = useState<InstitutionProfile[]>(getStoredInstitutions);
   const [instSearch, setInstSearch] = useState("");
   const [instRegionFilter, setInstRegionFilter] = useState("all");
@@ -680,6 +732,27 @@ function AdminPanel() {
               adminTab === "institutions" ? "bg-black/20 dark:bg-black/40 text-white" : "bg-secondary text-muted-foreground"
             )}>
               {institutions.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            id="admin-tab-audit"
+            onClick={() => setAdminTab("audit")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border",
+              adminTab === "audit"
+                ? "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/20"
+                : "bg-secondary/40 border-border/30 text-muted-foreground hover:text-white hover:bg-secondary/70"
+            )}
+          >
+            <History className="w-4 h-4" />
+            <span>Audit Trail & Records</span>
+            <span className={cn(
+              "text-[10px] px-1.5 py-0.5 rounded-full font-mono",
+              adminTab === "audit" ? "bg-black/20 dark:bg-black/40 text-white" : "bg-secondary text-muted-foreground"
+            )}>
+              {institutionAuditData.complaints.length + officerAuditData.personnelAudits.length + officerAuditData.systemAudits.length || "Live"}
             </span>
           </button>
         </div>
@@ -1255,6 +1328,86 @@ function AdminPanel() {
                 ))
               )}
             </div>
+          </div>
+        )}
+        {/* ── VIEW: AUDIT LOG (SUBPAGE 3) ─────────────────────────────── */}
+        {adminTab === "audit" && (
+          <div className="space-y-5">
+            {/* Subpage Header & Selector: Institution Actions vs Officer Actions */}
+            <div className="glass-card p-4 rounded-2xl border border-border/40 bg-secondary/15 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-md font-bold uppercase">
+                    AUTHORITATIVE AUDIT REPOSITORY
+                  </span>
+                  <span className="text-xs text-muted-foreground">VigilOS Immutable Records</span>
+                </div>
+                <h2 className="text-base font-bold text-white mt-1">Platform Activity & Operations Audit Trail</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Tracks verifiable institutional submissions alongside protected officer operations (including purged accounts and deletions excluded from notification feeds).
+                </p>
+              </div>
+
+              {/* Sub-navigation tabs: Institutions vs Officers */}
+              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-background/80 border border-border/40 shrink-0">
+                <button
+                  type="button"
+                  id="audit-subtab-institutions"
+                  onClick={() => setAuditSubTab("institutions")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                    auditSubTab === "institutions"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-white"
+                  )}
+                >
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>Institution Filings</span>
+                  <span className="text-[10px] font-mono opacity-80">
+                    ({institutionAuditData.complaints.length + institutionAuditData.registrations.length})
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  id="audit-subtab-officers"
+                  onClick={() => setAuditSubTab("officers")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                    auditSubTab === "officers"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-white"
+                  )}
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Officer Actions</span>
+                  <span className="text-[10px] font-mono opacity-80">
+                    ({officerAuditData.personnelAudits.length + officerAuditData.systemAudits.length})
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Subpage 1: Institution Activity & Grievance Submissions */}
+            {auditSubTab === "institutions" && (
+              <InstitutionAuditSubpage
+                complaints={institutionAuditData.complaints}
+                registrations={institutionAuditData.registrations}
+                portfolioUpdates={institutionAuditData.portfolioUpdates}
+                loading={loadingAudit}
+              />
+            )}
+
+            {/* Subpage 2: Officer & Admin Actions (Including Deleted Users & Purged Records) */}
+            {auditSubTab === "officers" && (
+              <OfficerAuditSubpage
+                personnelAudits={officerAuditData.personnelAudits}
+                systemAudits={officerAuditData.systemAudits}
+                deletedUsersCount={officerAuditData.deletedUsersCount}
+                statusChangesCount={officerAuditData.statusChangesCount}
+                loading={loadingAudit}
+              />
+            )}
           </div>
         )}
       </div>

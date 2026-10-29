@@ -862,6 +862,172 @@ def legacy_admin_update_role_endpoint(body: AdminUpdateAssignmentBody, user: dic
     return {"status": "ok"}
 
 # ═══════════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
+# COMPREHENSIVE AUDIT TRAIL ENDPOINTS (INSTITUTIONS & OFFICERS)
+# ═══════════════════════════════════════════════════════════════
+@app.get("/api/admin/audit/institutions")
+def get_institution_audit_trail(user: dict = Depends(_get_current_user)):
+    """
+    Authoritative audit trail for institutions:
+    Includes all regulatory complaints filed, registration submissions, and portfolio updates.
+    Accessible to authorized administrators.
+    """
+    if user.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Super Admin privileges required")
+    try:
+        conn = db.get_conn()
+        cur = conn.cursor()
+
+        # 1. Complaints filed by institutions
+        cur.execute("""
+            SELECT 
+                c.case_id,
+                c.aicte_pid,
+                c.institution_name,
+                c.region,
+                c.bureau,
+                c.category,
+                c.title,
+                c.description,
+                c.complainant_name,
+                c.complainant_type,
+                c.created_at,
+                c.status,
+                'COMPLAINT_SUBMITTED' as event_type,
+                'Submitted Grievance Proceeding' as action_label
+            FROM aicte_cases c
+            ORDER BY c.created_at DESC;
+        """)
+        complaints = [dict(r) for r in cur.fetchall()]
+
+        # 2. Institution registration applications
+        cur.execute("""
+            SELECT 
+                ir.id as registration_id,
+                ir.institution_name,
+                ir.official_email,
+                ir.inst_type,
+                ir.city,
+                ir.state,
+                ir.region,
+                ir.status,
+                ir.submitted_at as created_at,
+                ir.rep_name,
+                ir.rep_designation,
+                'REGISTRATION_APPLICATION' as event_type,
+                'Applied for Institution Onboarding' as action_label
+            FROM institution_registrations ir
+            ORDER BY ir.submitted_at DESC;
+        """)
+        registrations = [dict(r) for r in cur.fetchall()]
+
+        # 3. Direct institution portfolio updates
+        cur.execute("""
+            SELECT 
+                a.id as audit_id,
+                a.actor_role,
+                a.action,
+                a.target,
+                a.result,
+                a.created_at,
+                'PORTFOLIO_UPDATE' as event_type,
+                'Institutional Profile Record Modified' as action_label
+            FROM audit a
+            WHERE a.action IN ('INSTITUTION_REGISTERED', 'INSTITUTION_PORTFOLIO_UPDATE')
+            ORDER BY a.id DESC;
+        """)
+        portfolio_updates = [dict(r) for r in cur.fetchall()]
+        conn.close()
+
+        return {
+            "total_complaints": len(complaints),
+            "total_registrations": len(registrations),
+            "complaints": complaints,
+            "registrations": registrations,
+            "portfolio_updates": portfolio_updates,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/audit/officers")
+def get_officer_audit_trail(user: dict = Depends(_get_current_user)):
+    """
+    Authoritative audit trail for officer & admin actions:
+    Includes actions that NEVER appear in notifications (deleted accounts, deactivated personnel,
+    password changes, 2FA alterations, deleted chat messages, case & notification purges).
+    """
+    if user.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail="Super Admin privileges required")
+    try:
+        conn = db.get_conn()
+        cur = conn.cursor()
+
+        # 1. Personnel Governance & Deleted Users
+        cur.execute("""
+            SELECT 
+                aa.id,
+                aa.user_id,
+                aa.changed_by,
+                aa.action,
+                aa.old_role_key,
+                aa.new_role_key,
+                aa.old_bureau_code,
+                aa.new_bureau_code,
+                aa.old_region_code,
+                aa.new_region_code,
+                aa.created_at,
+                COALESCE(u.name, da.name, 'Unknown Personnel') as target_name,
+                COALESCE(u.normalized_email, da.email, '') as target_email,
+                COALESCE(cb.name, 'Super Administrator') as actor_name,
+                COALESCE(cb.normalized_email, 'admin@aicte-india.org') as actor_email,
+                da.reason as deletion_reason,
+                CASE 
+                    WHEN aa.action = 'USER_PERMANENTLY_DELETED' THEN 1 
+                    ELSE 0 
+                END as is_deleted_user,
+                'PERSONNEL_GOVERNANCE' as domain
+            FROM assignment_audit aa
+            LEFT JOIN users u ON aa.user_id = u.id
+            LEFT JOIN users cb ON aa.changed_by = cb.id
+            LEFT JOIN deleted_accounts da ON aa.user_id = da.user_id
+            ORDER BY aa.id DESC;
+        """)
+        personnel_audits = [dict(r) for r in cur.fetchall()]
+
+        # 2. Case, Record & Purge Actions
+        cur.execute("""
+            SELECT 
+                a.id,
+                a.session_id,
+                a.actor_role,
+                a.action,
+                a.target,
+                a.result,
+                a.created_at,
+                'SYSTEM_OPERATION' as domain
+            FROM audit a
+            WHERE a.action != 'INSTITUTION_COMPLAINT_SUBMITTED'
+            ORDER BY a.id DESC;
+        """)
+        system_audits = [dict(r) for r in cur.fetchall()]
+        conn.close()
+
+        deleted_users_count = len([x for x in personnel_audits if x.get("action") == "USER_PERMANENTLY_DELETED"])
+        status_changes_count = len([x for x in personnel_audits if "STATUS_CHANGE" in (x.get("action") or "")])
+
+        return {
+            "total_personnel_audits": len(personnel_audits),
+            "total_system_audits": len(system_audits),
+            "deleted_users_count": deleted_users_count,
+            "status_changes_count": status_changes_count,
+            "personnel_audits": personnel_audits,
+            "system_audits": system_audits,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # CHAT SESSIONS
 # ═══════════════════════════════════════════════════════════════
 class CreateSessionBody(BaseModel):
@@ -2453,6 +2619,16 @@ def get_overlaps(user: dict = Depends(_get_current_user)):
             })
 
         return {"overlap_count": len(results), "institutions": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/aicte/overlap-alerts")
+def get_recorded_overlap_alerts(user: dict = Depends(_get_current_user)):
+    """Return all stored overlap alerts recorded by the AI similarity scanner."""
+    try:
+        alerts = db.get_overlap_alerts(resolved=False)
+        return {"total": len(alerts), "alerts": alerts}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -1,8 +1,10 @@
+
+
 import React, { useState } from "react";
 import { History, ShieldAlert, AlertOctagon, Clock, User, CheckCircle2, FileText, Send, Calendar, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export type ActionType = 
+export type ActionType =
   | "INSPECTION_SCHEDULED"
   | "DOCUMENT_REQUESTED"
   | "SHOW_CAUSE_NOTICE"

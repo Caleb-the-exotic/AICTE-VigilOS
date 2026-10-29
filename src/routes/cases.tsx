@@ -1378,6 +1378,7 @@ function CasesDashboard() {
   };
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [selectedCase, setSelectedCase] = useState<AICTECase | null>(null);
+  const [recordedOverlapAlerts, setRecordedOverlapAlerts] = useState<any[]>([]);
 
   // Authoritative permissions: roles above Nodal Officer
   const canManageCases = ["super_admin", "bureau_head", "approval_officer"].includes(user?.role || "");
@@ -1487,6 +1488,15 @@ function CasesDashboard() {
         setCases(cData);
         try { localStorage.setItem("aicte_cached_cases", JSON.stringify(cData)); } catch {}
       }
+      try {
+        const alertsRes = await fetch(`${API_BASE_URL}/api/aicte/overlap-alerts`, { headers });
+        if (alertsRes.ok) {
+          const aData = await alertsRes.json();
+          if (Array.isArray(aData.alerts)) {
+            setRecordedOverlapAlerts(aData.alerts);
+          }
+        }
+      } catch {}
     } catch (e) {
       /* falls back to mock data */
     } finally {
@@ -2121,27 +2131,43 @@ function CasesDashboard() {
                     region={region}
                     rbCases={rb}
                     pgrcCases={pgrc}
-                    analysis={
-                      pid === "1-109723481" ? {
-                        overlap_score: 0.88,
-                        overlap_type: "definite_overlap",
-                        shared_root_cause: "Faculty appointment and remuneration non-compliance",
-                        recommended_action: "Initiate Joint RB+PGRC Hearing on Faculty Management",
-                        reason: "The RB case addresses faculty cadre ratio while PGRC addresses non-payment of salaries. Both trace to the same root cause: the institution's failure to maintain adequate permanent faculty on compliant terms."
-                      } : pid === "1-376234110" ? {
-                        overlap_score: 0.92,
-                        overlap_type: "definite_overlap",
-                        shared_root_cause: "Unauthorized fee collection violating AICTE fee norms",
-                        recommended_action: "Consolidate under RB with PGRC observer status",
-                        reason: "The RB case covers excess fee collection under miscellaneous heads while PGRC is handling a capitation fee complaint. Both are manifestations of the same fee regulation violation."
-                      } : {
-                        overlap_score: 0.65,
-                        overlap_type: "possible_overlap",
-                        shared_root_cause: "Potential shared institutional compliance failure",
-                        recommended_action: "Monitor for parallel proceedings — recommend officer communication",
-                        reason: "Cases from different bureaus targeting the same institution — coordination advisable."
+                    analysis={(() => {
+                      const matchedRecorded = recordedOverlapAlerts.find(a => a.aicte_pid === pid);
+                      if (matchedRecorded) {
+                        return {
+                          overlap_score: matchedRecorded.overlap_score || 0.85,
+                          overlap_type: matchedRecorded.overlap_type || "definite_overlap",
+                          shared_root_cause: matchedRecorded.shared_root_cause || "Cross-bureau regulatory overlap detected by AI Intelligence",
+                          recommended_action: matchedRecorded.recommended_action || "Cross-verify files across bureaus and schedule joint officer review",
+                          reason: matchedRecorded.reason || "Parallel complaints identified with matching compliance failure."
+                        };
                       }
-                    }
+                      if (pid === "1-109723481") {
+                        return {
+                          overlap_score: 0.88,
+                          overlap_type: "definite_overlap",
+                          shared_root_cause: "Faculty appointment and remuneration non-compliance",
+                          recommended_action: "Initiate Joint RB+PGRC Hearing on Faculty Management",
+                          reason: "The RB case addresses faculty cadre ratio while PGRC addresses non-payment of salaries. Both trace to the same root cause: the institution's failure to maintain adequate permanent faculty on compliant terms."
+                        };
+                      }
+                      if (pid === "1-376234110") {
+                        return {
+                          overlap_score: 0.92,
+                          overlap_type: "definite_overlap",
+                          shared_root_cause: "Unauthorized fee collection violating AICTE fee norms",
+                          recommended_action: "Consolidate under RB with PGRC observer status",
+                          reason: "The RB case covers excess fee collection under miscellaneous heads while PGRC is handling a capitation fee complaint. Both are manifestations of the same fee regulation violation."
+                        };
+                      }
+                      return {
+                        overlap_score: 0.75,
+                        overlap_type: "definite_overlap",
+                        shared_root_cause: "Concurrent cross-bureau regulatory overlap at same institution",
+                        recommended_action: "Monitor for parallel proceedings — recommend joint officer coordination",
+                        reason: "Active cases from different bureaus for the same institution identified in the same region."
+                      };
+                    })()}
                     onViewProfile={setSelectedProfile}
                     onSelectCase={setSelectedCase}
                   />
