@@ -233,10 +233,11 @@ function getRecommendedJurisdictionCell(category?: string, bureau?: string): {
 
 // ── Overlap Alert Card ────────────────────────────────────────────
 function OverlapAlertCard({
-  institutionName, aictePid, region, rbCases, pgrcCases, analysis, onViewProfile, onSelectCase, onLinkCases
+  institutionName, aictePid, region, cases: alertCases, rbCases = [], pgrcCases = [], analysis, onViewProfile, onSelectCase, onLinkCases
 }: {
   institutionName: string; aictePid: string; region: string;
-  rbCases: AICTECase[]; pgrcCases: AICTECase[];
+  cases?: AICTECase[];
+  rbCases?: AICTECase[]; pgrcCases?: AICTECase[];
   analysis?: { overlap_score: number; overlap_type: string; shared_root_cause: string; recommended_action: string; reason: string };
   onViewProfile: (pid: string) => void;
   onSelectCase?: (c: AICTECase) => void;
@@ -248,15 +249,19 @@ function OverlapAlertCard({
   const [isUnlinking, setIsUnlinking] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
 
-  const allCases = useMemo(() => [...rbCases, ...pgrcCases], [rbCases, pgrcCases]);
+  const allCases = useMemo(() => {
+    if (alertCases && alertCases.length > 0) return alertCases;
+    return [...rbCases, ...pgrcCases];
+  }, [alertCases, rbCases, pgrcCases]);
+
   const allCaseIds = useMemo(() => {
     return Array.from(new Set(allCases.map(c => c.case_id)));
   }, [allCases]);
 
   // Primary parent case for jurisdiction resolution
   const parentCase = useMemo(() => {
-    return rbCases[0] || pgrcCases[0] || allCases[0];
-  }, [rbCases, pgrcCases, allCases]);
+    return allCases[0];
+  }, [allCases]);
 
   const recommendedJurisdiction = useMemo(() => {
     return getRecommendedJurisdictionCell(parentCase?.category, parentCase?.bureau);
@@ -415,7 +420,7 @@ function OverlapAlertCard({
 
         {/* Case pills */}
         <div className="flex flex-wrap gap-2">
-          {rbCases.map(c => (
+          {allCases.map(c => (
             <div 
               key={c.case_id} 
               onClick={(e) => {
@@ -424,22 +429,7 @@ function OverlapAlertCard({
               }}
               className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 cursor-pointer transition-colors border border-neutral-700/80 bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200"
             >
-              <BureauBadge bureau="RB" />
-              <span className="text-[10px] text-white/70 font-mono">{c.case_id}</span>
-              <span className="text-[9.5px] text-neutral-400">({c.category})</span>
-              <StatusBadge status={c.status} ageingDays={c.ageing_days} />
-            </div>
-          ))}
-          {pgrcCases.map(c => (
-            <div 
-              key={c.case_id} 
-              onClick={(e) => {
-                e.stopPropagation();
-                if (onSelectCase) onSelectCase(c);
-              }}
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 cursor-pointer transition-colors border border-neutral-700/80 bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200"
-            >
-              <BureauBadge bureau="PGRC" />
+              <BureauBadge bureau={c.bureau} />
               <span className="text-[10px] text-white/70 font-mono">{c.case_id}</span>
               <span className="text-[9.5px] text-neutral-400">({c.category})</span>
               <StatusBadge status={c.status} ageingDays={c.ageing_days} />
@@ -1735,10 +1725,15 @@ function CasesDashboard() {
       if (!byPid[c.aicte_pid]) byPid[c.aicte_pid] = [];
       byPid[c.aicte_pid].push(c);
     });
+
+    const alertPids = new Set(recordedOverlapAlerts.map(a => a.aicte_pid).filter(Boolean));
+
     return Object.entries(byPid)
-      .filter(([, cs]) => {
+      .filter(([pid, cs]) => {
         const active = cs.filter(c => c.status !== "disposed");
-        return active.some(c => c.bureau === "RB") && active.some(c => c.bureau === "PGRC");
+        const hasCrossBureau = active.some(c => c.bureau === "RB") && active.some(c => c.bureau === "PGRC");
+        const hasAiAlert = alertPids.has(pid) && active.length >= 2;
+        return hasCrossBureau || hasAiAlert;
       })
       .map(([pid, cs]) => {
         const active = cs.filter(c => c.status !== "disposed");
@@ -1755,6 +1750,7 @@ function CasesDashboard() {
 
         return {
           pid, cs,
+          cases: active,
           rb: cs.filter(c => c.bureau === "RB" && c.status !== "disposed"),
           pgrc: cs.filter(c => c.bureau === "PGRC" && c.status !== "disposed"),
           name: cs[0]?.institution_name ?? pid,
@@ -1762,7 +1758,7 @@ function CasesDashboard() {
           isConsolidated,
         };
       });
-  }, [cases]);
+  }, [cases, recordedOverlapAlerts]);
 
   // Dynamic live count of unlinked / pending overlap institutions
   const pendingOverlapCount = useMemo(() => {
@@ -2123,12 +2119,13 @@ function CasesDashboard() {
                     </span>
                   )}
                 </div>
-                {overlapInstitutions.map(({ pid, rb, pgrc, name, region }) => (
+                {overlapInstitutions.map(({ pid, cases: instActiveCases, rb, pgrc, name, region }) => (
                   <OverlapAlertCard
                     key={pid}
                     aictePid={pid}
                     institutionName={name}
                     region={region}
+                    cases={instActiveCases}
                     rbCases={rb}
                     pgrcCases={pgrc}
                     analysis={(() => {
@@ -2137,8 +2134,8 @@ function CasesDashboard() {
                         return {
                           overlap_score: matchedRecorded.overlap_score || 0.85,
                           overlap_type: matchedRecorded.overlap_type || "definite_overlap",
-                          shared_root_cause: matchedRecorded.shared_root_cause || "Cross-bureau regulatory overlap detected by AI Intelligence",
-                          recommended_action: matchedRecorded.recommended_action || "Cross-verify files across bureaus and schedule joint officer review",
+                          shared_root_cause: matchedRecorded.shared_root_cause || "Cross-case regulatory overlap detected by AI Intelligence",
+                          recommended_action: matchedRecorded.recommended_action || "Cross-verify files across cases and schedule joint officer review",
                           reason: matchedRecorded.reason || "Parallel complaints identified with matching compliance failure."
                         };
                       }
