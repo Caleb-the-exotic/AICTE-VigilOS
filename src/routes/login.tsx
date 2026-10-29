@@ -166,7 +166,7 @@ function LoginPage() {
             Demo Portal
           </p>
           <a
-            href="http://localhost:8080/complaint-portal.html"
+            href="/complaint-portal.html"
             target="_blank"
             rel="noopener noreferrer"
             className="w-full py-2 px-3 rounded-xl border border-border/40 bg-secondary/50 hover:bg-secondary hover:text-white text-white/90 text-xs font-semibold tracking-wide text-center transition-all duration-200 active:scale-[0.98] cursor-pointer block"
