@@ -297,39 +297,13 @@ export default function InstitutionRegistrationsTab({ onRefreshCases }: Institut
                     {/* Actions */}
                     <td className="px-3 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1.5">
-                        {app.status === "pending" && canManage && (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setApprovingApp(app);
-                                setApprovalNotes("Approved by reviewing officer");
-                              }}
-                              className="px-2 py-1 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold transition-all cursor-pointer"
-                              title="Approve Institution"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setRejectingApp(app);
-                                setRejectionReason("");
-                                setRejectionNotes("");
-                              }}
-                              className="px-2 py-1 rounded-md bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-[11px] font-semibold transition-all cursor-pointer"
-                              title="Reject Application"
-                            >
-                              Reject
-                            </button>
-                          </>
-                        )}
                         <button
                           type="button"
                           onClick={() => setSelectedApp(app)}
-                          className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer"
-                          title="View Application Details"
+                          className="px-2.5 py-1 rounded-md bg-secondary/50 hover:bg-secondary text-muted-foreground hover:text-foreground text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer"
+                          title="Open Application Details Window"
                         >
+                          <span>Review</span>
                           <ArrowUpRight className="w-3.5 h-3.5 text-primary" />
                         </button>
                         {canManage && (

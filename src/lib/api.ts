@@ -412,6 +412,8 @@ export const api = {
         body: JSON.stringify(payload),
       }
     ),
+  getAssignableOfficials: () =>
+    request<Array<{ id: string; name: string; normalized_email: string; role_key: string; role_label: string; bureau_code: string; region_code: string }>>("/api/aicte/officials"),
   updateCaseStatus: (caseId: string, status: string, assignedOfficer?: string, linkedCaseIds?: string[]) =>
     request<{ ok: boolean }>(`/api/aicte/cases/${caseId}`, {
       method: "PATCH",

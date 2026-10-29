@@ -1682,6 +1682,12 @@ def aicte_kpi(user: dict = Depends(_get_current_user)):
 
 
 # ── Cases List (with filtering) ─────────────────────────────────
+@app.get("/api/aicte/officials")
+def get_assignable_officials_endpoint(user: dict = Depends(_get_current_user)):
+    """Return list of official accounts above complainants for case assignment."""
+    return institution_registration_service.get_assignable_officials()
+
+
 @app.get("/api/aicte/cases")
 def list_cases(
     bureau: Optional[str] = None,
@@ -2092,13 +2098,14 @@ def submit_institution_complaint(
             result=f"Institution {inst['institution_name']} ({body.aicte_pid}) filed complaint {case_id}",
         )
 
-        # Persistent DB Notification for Authorized Officers
-        for oid in institution_registration_service.get_officer_user_ids():
+        # Persistent DB Notification for Bureau Heads and Admins to assign case
+        target_leadership_ids = institution_registration_service.get_admin_and_bureau_head_ids()
+        for oid in target_leadership_ids:
             institution_registration_service.create_notification(
                 recipient_user_id=oid,
                 notif_type="case_alert",
-                title=f"New Regulatory Proceeding: {case_id}",
-                body=f"{inst['institution_name']} ({inst.get('region', 'HQ')}) filed a new {bureau_abbr} proceeding: '{body.title}' [{body.category}]",
+                title=f"Action Required: Assign Case {case_id}",
+                body=f"{inst['institution_name']} ({inst.get('region', 'HQ')}) filed a new {bureau_abbr} proceeding: '{body.title}'. Please review and assign to an officer for execution.",
                 action_url=f"/cases?case_id={case_id}",
                 reference_id=case_id,
                 idempotency_key=f"case_created_{case_id}_{oid}",
@@ -2193,16 +2200,33 @@ def update_case(case_id: str, body: UpdateCaseBody, user: dict = Depends(_get_cu
             result=f"Case {case_id} updated by {user.get('name', 'Admin')}",
         )
 
-        # Notify officers on status change / reassignment
+        # Notify on status change / reassignment
         new_status = data.get("status")
         assigned = data.get("assigned_officer")
+        old_assigned = case.get("assigned_officer") or ""
+
+        # If an official has just been assigned, send them a private notification
+        if assigned and assigned.strip() and assigned.strip() != old_assigned.strip():
+            assigned_uid = institution_registration_service.find_officer_user_id_by_string(assigned)
+            if assigned_uid:
+                institution_registration_service.create_notification(
+                    recipient_user_id=assigned_uid,
+                    notif_type="case_alert",
+                    title=f"You have been assigned to Case {case_id}",
+                    body=f"You have been formally assigned to investigate and execute proceedings for {case.get('institution_name', 'Institution')} ({case.get('category', 'Grievance')}). Assigned by {user.get('name', 'Bureau Head / Admin')}.",
+                    action_url=f"/cases?case_id={case_id}",
+                    reference_id=case_id,
+                    idempotency_key=f"case_assigned_{case_id}_{assigned_uid}_{int(time.time())}",
+                )
+
+        # Notify leadership of general case update
         if new_status or assigned:
-            for oid in institution_registration_service.get_officer_user_ids():
+            for oid in institution_registration_service.get_admin_and_bureau_head_ids():
                 institution_registration_service.create_notification(
                     recipient_user_id=oid,
                     notif_type="case_alert",
                     title=f"Case Updated: {case_id}",
-                    body=f"Case {case_id} ({case.get('institution_name', 'Institution')}): status updated to '{new_status or case.get('status')}'. Assigned officer: {assigned or case.get('assigned_officer') or 'Unassigned'}.",
+                    body=f"Case {case_id} ({case.get('institution_name', 'Institution')}): status '{new_status or case.get('status')}'. Assigned officer: {assigned or old_assigned or 'Unassigned'}.",
                     action_url=f"/cases?case_id={case_id}",
                     reference_id=case_id,
                 )

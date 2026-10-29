@@ -779,6 +779,81 @@ def delete_all_notifications(user_id: str, is_admin: bool = False) -> int:
 
 # ── Fetch authorized officers to notify ───────────────────────────
 
+def get_admin_and_bureau_head_ids() -> List[str]:
+    """Return all active Super Admins and Bureau Heads who assign cases to lower officials."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT DISTINCT u.id FROM users u
+            JOIN user_assignments ua ON ua.user_id = u.id AND ua.status = 'active'
+            JOIN roles r ON ua.role_id = r.id
+            WHERE r.key IN ('super_admin', 'admin', 'bureau_head')
+              AND u.status = 'active'
+        """)
+        rows = cur.fetchall()
+        if not rows:
+            return ["usr_caleb", "usr_admin", "usr_62f1b9335aa9", "usr_hariprasath"]
+        return [r[0] if not hasattr(r, "keys") else r["id"] for r in rows]
+    finally:
+        conn.close()
+
+def find_officer_user_id_by_string(officer_str: str) -> Optional[str]:
+    """Given an assigned officer string e.g. 'Monisha Yathavan (Approval Officer)', find user ID."""
+    if not officer_str or not officer_str.strip():
+        return None
+    cleaned = officer_str.strip()
+    name_part = cleaned.split("(")[0].strip()
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT u.id FROM users u
+            WHERE LOWER(u.name) = LOWER(%s)
+               OR LOWER(u.normalized_email) = LOWER(%s)
+               OR LOWER(u.id) = LOWER(%s)
+            LIMIT 1
+        """, (name_part, name_part, name_part))
+        row = cur.fetchone()
+        if row:
+            return row[0] if not hasattr(row, "keys") else row["id"]
+        return None
+    finally:
+        conn.close()
+
+def get_assignable_officials() -> List[Dict[str, Any]]:
+    """Return hierarchy of officials available for case assignment."""
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT u.id, u.name, u.normalized_email, r.key as role_key, r.display_name as role_label,
+                   COALESCE(b.code, 'HQ') as bureau_code, COALESCE(reg.code, 'HQ') as region_code
+            FROM users u
+            JOIN user_assignments ua ON u.id = ua.user_id AND ua.status = 'active'
+            JOIN roles r ON ua.role_id = r.id
+            LEFT JOIN bureaus b ON ua.bureau_id = b.id
+            LEFT JOIN regions reg ON ua.region_id = reg.id
+            WHERE r.key != 'citizen' AND u.status = 'active'
+            ORDER BY 
+                CASE r.key 
+                    WHEN 'super_admin' THEN 1 
+                    WHEN 'bureau_head' THEN 2 
+                    WHEN 'approval_officer' THEN 3 
+                    WHEN 'nodal_officer' THEN 4 
+                    ELSE 5 
+                END, u.name ASC
+        """)
+        rows = cur.fetchall()
+        if not rows:
+            return []
+        if hasattr(rows[0], "keys"):
+            return [dict(r) for r in rows]
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, r)) for r in rows]
+    finally:
+        conn.close()
+
 def get_officer_user_ids() -> List[str]:
     """Return all active super_admin, bureau_head, approval_officer and administrative officer user IDs."""
     conn = get_conn()

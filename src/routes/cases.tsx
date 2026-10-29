@@ -94,16 +94,16 @@ function mockCases(): AICTECase[] {
   const d = (days: number) => new Date(now.getTime() - days * 86400000).toISOString();
   const dl = (days: number) => new Date(now.getTime() + days * 86400000).toISOString();
   const rawList: AICTECase[] = [
-    { case_id: "AICTE-2026-PGRC-0112", aicte_pid: "1-376234110", institution_code: "1-376234110", institution_name: "Thakur College of Engineering", region: "Western", bureau: "PGRC", complainant_name: "Amit Deshmukh", complainant_email: "amit.deshmukh24@gmail.com", complainant_type: "Student", category: "Capitation Fee", title: "Capitation fee demand from admitted students", description: "Students asked to pay additional ₹50,000 as 'development fee'.", assigned_officer: "Dr. Anita Sharma (PGRC)", status: "received", sla_days: 30, sla_deadline: dl(22), created_at: d(8), received_at: d(8), ageing_days: 8, sla_breached: false },
-    { case_id: "AICTE-2026-RB-0042", aicte_pid: "1-109723481", institution_code: "1-109723481", institution_name: "Shri Ram Institute of Technology", region: "Northern", bureau: "RB", complainant_name: "Dr. K.V. Ramanathan", complainant_email: "kv.ramanathan@academic-council.org", complainant_type: "Stakeholder", category: "Faculty Deficiency", title: "Faculty cadre ratio non-compliance — insufficient PhD-qualified faculty", description: "Inspection reveals faculty cadre ratio below AICTE norms.", assigned_officer: "Dr. Ramesh Gupta (RB)", status: "under_process", sla_days: 45, sla_deadline: dl(33), created_at: d(12), received_at: d(12), ageing_days: 12, sla_breached: false },
-    { case_id: "AICTE-2026-PGRC-0089", aicte_pid: "1-109723481", institution_code: "1-109723481", institution_name: "Shri Ram Institute of Technology", region: "Northern", bureau: "PGRC", complainant_name: "Prof. Sunita Sharma", complainant_email: "sunita.sharma.faculty@gmail.com", complainant_type: "Faculty", category: "Non-payment of Salary", title: "Non-payment of faculty salary for 4 consecutive months", description: "Multiple faculty members filed grievances regarding non-payment.", assigned_officer: "Ms. Priya Verma (PGRC)", status: "escalated", sla_days: 30, sla_deadline: dl(22), created_at: d(8), received_at: d(8), ageing_days: 8, sla_breached: false },
-    { case_id: "AICTE-2026-RB-0055", aicte_pid: "1-376234110", institution_code: "1-376234110", institution_name: "Thakur College of Engineering", region: "Western", bureau: "RB", complainant_name: "Rajesh V. Patil", complainant_email: "rajesh.patil.pta@gmail.com", complainant_type: "Stakeholder", category: "Fee Regulation Violation", title: "Excess fee collection beyond AICTE approved fee structure", description: "Fees collected beyond the AICTE approved structure for 2026-27.", assigned_officer: "Mr. Suresh Iyer (RB)", status: "under_process", sla_days: 30, sla_deadline: dl(25), created_at: d(5), received_at: d(5), ageing_days: 5, sla_breached: false },
-    { case_id: "AICTE-2026-PGRC-0034", aicte_pid: "1-204561892", institution_code: "1-204561892", institution_name: "KL University", region: "Southern", bureau: "PGRC", complainant_name: "K. Sai Praneeth", complainant_email: "sai.praneeth.k@gmail.com", complainant_type: "Student", category: "Ragging", title: "Ragging complaint — senior students intimidating juniors in hostel", description: "Multiple juniors reported systematic ragging in hostel.", assigned_officer: "Ms. Kavita Singh (PGRC)", status: "escalated", sla_days: 30, sla_deadline: d(1), created_at: d(31), received_at: d(31), ageing_days: 31, sla_breached: true },
-    { case_id: "AICTE-2026-RB-0021", aicte_pid: "1-445871203", institution_code: "1-445871203", institution_name: "Kalinga Institute of Technology", region: "Eastern", bureau: "RB", complainant_name: "Subhash Chandra Mohanty", complainant_email: "sc.mohanty@odisha-edu-vigil.in", complainant_type: "Public", category: "Infrastructure Deficiency", title: "Laboratory equipment deficiency — below AICTE norms", description: "EVC inspection revealed laboratories lacking minimum equipment.", assigned_officer: "Mr. Deepak Nair (RB)", status: "disposed", sla_days: 60, sla_deadline: d(15), created_at: d(75), received_at: d(75), resolved_at: d(15), ageing_days: 60, sla_breached: false },
-    { case_id: "AICTE-2026-PGRC-0078", aicte_pid: "1-512398067", institution_code: "1-512398067", institution_name: "SRM Institute of Science and Technology", region: "Southern", bureau: "PGRC", complainant_name: "Dr. M. Senthil Kumar", complainant_email: "m.senthil.chem@gmail.com", complainant_type: "Faculty", category: "Service Matters", title: "Wrongful termination of contractual faculty", description: "26 contractual faculty terminated without notice.", assigned_officer: "Dr. Ravi Kumar (PGRC)", status: "under_process", sla_days: 45, sla_deadline: dl(27), created_at: d(18), received_at: d(18), ageing_days: 18, sla_breached: false },
-    { case_id: "AICTE-2026-RO-0016", aicte_pid: "1-631047285", institution_code: "1-631047285", institution_name: "GLA University", region: "Northern", bureau: "RO", complainant_name: "Virendra Singh Rawat", complainant_email: "virendra.rawat.up@gmail.com", complainant_type: "Stakeholder", category: "Admissions Irregularity", title: "Over-admission beyond sanctioned intake in B.Tech CSE", description: "340 students admitted against sanctioned intake of 240.", assigned_officer: "RO Northern Cell", status: "transferred", sla_days: 30, sla_deadline: dl(8), created_at: d(22), received_at: d(22), ageing_days: 22, sla_breached: false },
-    { case_id: "AICTE-2026-PGRC-0145", aicte_pid: "1-788234501", institution_code: "1-788234501", institution_name: "Amity University Rajasthan", region: "Northern", bureau: "PGRC", complainant_name: "Harshwardhan Rathore", complainant_email: "h.rathore2026@gmail.com", complainant_type: "Student", category: "Academic Issues", title: "Examinations conducted without prescribed syllabus coverage", description: "End-semester exams conducted with questions outside AICTE model curriculum.", assigned_officer: "Ms. Shweta Patel (PGRC)", status: "received", sla_days: 30, sla_deadline: dl(27), created_at: d(3), received_at: d(3), ageing_days: 3, sla_breached: false },
-    { case_id: "AICTE-2026-RB-0071", aicte_pid: "1-923456789", institution_code: "1-923456789", institution_name: "Chandigarh University", region: "Northern", bureau: "RB", complainant_name: "Gurpreet Singh Gill", complainant_email: "gurpreet.gill.punjab@gmail.com", complainant_type: "Stakeholder", category: "Faculty Deficiency", title: "Insufficient visiting faculty against permanent positions", description: "60% teaching load handled by visiting faculty.", assigned_officer: "Mr. Arvind Mehta (RB)", status: "under_process", sla_days: 45, sla_deadline: dl(31), created_at: d(14), received_at: d(14), ageing_days: 14, sla_breached: false },
+    { case_id: "AICTE-2026-PGRC-0112", aicte_pid: "1-376234110", institution_code: "1-376234110", institution_name: "Thakur College of Engineering", region: "Western", bureau: "PGRC", complainant_name: "Amit Deshmukh", complainant_email: "amit.deshmukh24@gmail.com", complainant_type: "Student", category: "Capitation Fee", title: "Capitation fee demand from admitted students", description: "Students asked to pay additional ₹50,000 as 'development fee'.", assigned_officer: "Surya Prakash D (Regional Nodal Officer)", status: "received", sla_days: 30, sla_deadline: dl(22), created_at: d(8), received_at: d(8), ageing_days: 8, sla_breached: false },
+    { case_id: "AICTE-2026-RB-0042", aicte_pid: "1-109723481", institution_code: "1-109723481", institution_name: "Shri Ram Institute of Technology", region: "Northern", bureau: "RB", complainant_name: "Dr. K.V. Ramanathan", complainant_email: "kv.ramanathan@academic-council.org", complainant_type: "Stakeholder", category: "Faculty Deficiency", title: "Faculty cadre ratio non-compliance — insufficient PhD-qualified faculty", description: "Inspection reveals faculty cadre ratio below AICTE norms.", assigned_officer: "Hariprasath (Bureau Head)", status: "under_process", sla_days: 45, sla_deadline: dl(33), created_at: d(12), received_at: d(12), ageing_days: 12, sla_breached: false },
+    { case_id: "AICTE-2026-PGRC-0089", aicte_pid: "1-109723481", institution_code: "1-109723481", institution_name: "Shri Ram Institute of Technology", region: "Northern", bureau: "PGRC", complainant_name: "Prof. Sunita Sharma", complainant_email: "sunita.sharma.faculty@gmail.com", complainant_type: "Faculty", category: "Non-payment of Salary", title: "Non-payment of faculty salary for 4 consecutive months", description: "Multiple faculty members filed grievances regarding non-payment.", assigned_officer: "Monisha Yathavan (Approval Officer)", status: "escalated", sla_days: 30, sla_deadline: dl(22), created_at: d(8), received_at: d(8), ageing_days: 8, sla_breached: false },
+    { case_id: "AICTE-2026-RB-0055", aicte_pid: "1-376234110", institution_code: "1-376234110", institution_name: "Thakur College of Engineering", region: "Western", bureau: "RB", complainant_name: "Rajesh V. Patil", complainant_email: "rajesh.patil.pta@gmail.com", complainant_type: "Stakeholder", category: "Fee Regulation Violation", title: "Excess fee collection beyond AICTE approved fee structure", description: "Fees collected beyond the AICTE approved structure for 2026-27.", assigned_officer: "Deepan Thangavel (Approval Officer)", status: "under_process", sla_days: 30, sla_deadline: dl(25), created_at: d(5), received_at: d(5), ageing_days: 5, sla_breached: false },
+    { case_id: "AICTE-2026-PGRC-0034", aicte_pid: "1-204561892", institution_code: "1-204561892", institution_name: "KL University", region: "Southern", bureau: "PGRC", complainant_name: "K. Sai Praneeth", complainant_email: "sai.praneeth.k@gmail.com", complainant_type: "Student", category: "Ragging", title: "Ragging complaint — senior students intimidating juniors in hostel", description: "Multiple juniors reported systematic ragging in hostel.", assigned_officer: "Swetha NC (Regional Nodal Officer)", status: "escalated", sla_days: 30, sla_deadline: d(1), created_at: d(31), received_at: d(31), ageing_days: 31, sla_breached: true },
+    { case_id: "AICTE-2026-RB-0021", aicte_pid: "1-445871203", institution_code: "1-445871203", institution_name: "Kalinga Institute of Technology", region: "Eastern", bureau: "RB", complainant_name: "Subhash Chandra Mohanty", complainant_email: "sc.mohanty@odisha-edu-vigil.in", complainant_type: "Public", category: "Infrastructure Deficiency", title: "Laboratory equipment deficiency — below AICTE norms", description: "EVC inspection revealed laboratories lacking minimum equipment.", assigned_officer: "Demo (Approval Officer)", status: "disposed", sla_days: 60, sla_deadline: d(15), created_at: d(75), received_at: d(75), resolved_at: d(15), ageing_days: 60, sla_breached: false },
+    { case_id: "AICTE-2026-PGRC-0078", aicte_pid: "1-512398067", institution_code: "1-512398067", institution_name: "SRM Institute of Science and Technology", region: "Southern", bureau: "PGRC", complainant_name: "Dr. M. Senthil Kumar", complainant_email: "m.senthil.chem@gmail.com", complainant_type: "Faculty", category: "Service Matters", title: "Wrongful termination of contractual faculty", description: "26 contractual faculty terminated without notice.", assigned_officer: "Approval Officer (Approval Officer)", status: "under_process", sla_days: 45, sla_deadline: dl(27), created_at: d(18), received_at: d(18), ageing_days: 18, sla_breached: false },
+    { case_id: "AICTE-2026-RO-0016", aicte_pid: "1-631047285", institution_code: "1-631047285", institution_name: "GLA University", region: "Northern", bureau: "RO", complainant_name: "Virendra Singh Rawat", complainant_email: "virendra.rawat.up@gmail.com", complainant_type: "Stakeholder", category: "Admissions Irregularity", title: "Over-admission beyond sanctioned intake in B.Tech CSE", description: "340 students admitted against sanctioned intake of 240.", assigned_officer: "Bureau Head RB (Bureau Head)", status: "transferred", sla_days: 30, sla_deadline: dl(8), created_at: d(22), received_at: d(22), ageing_days: 22, sla_breached: false },
+    { case_id: "AICTE-2026-PGRC-0145", aicte_pid: "1-788234501", institution_code: "1-788234501", institution_name: "Amity University Rajasthan", region: "Northern", bureau: "PGRC", complainant_name: "Harshwardhan Rathore", complainant_email: "h.rathore2026@gmail.com", complainant_type: "Student", category: "Academic Issues", title: "Examinations conducted without prescribed syllabus coverage", description: "End-semester exams conducted with questions outside AICTE model curriculum.", assigned_officer: "Caleb (Super Admin)", status: "received", sla_days: 30, sla_deadline: dl(27), created_at: d(3), received_at: d(3), ageing_days: 3, sla_breached: false },
+    { case_id: "AICTE-2026-RB-0071", aicte_pid: "1-923456789", institution_code: "1-923456789", institution_name: "Chandigarh University", region: "Northern", bureau: "RB", complainant_name: "Gurpreet Singh Gill", complainant_email: "gurpreet.gill.punjab@gmail.com", complainant_type: "Stakeholder", category: "Faculty Deficiency", title: "Insufficient visiting faculty against permanent positions", description: "60% teaching load handled by visiting faculty.", assigned_officer: "System Administrator (Super Admin)", status: "under_process", sla_days: 45, sla_deadline: dl(31), created_at: d(14), received_at: d(14), ageing_days: 14, sla_breached: false },
   ];
   return rawList.map(c => {
     const inst = getInstitutionByPid(c.aicte_pid);
@@ -1324,7 +1324,7 @@ function CasesDashboard() {
         action_type: "INSPECTION_SCHEDULED",
         title: "Surprise Inspection Committee Scheduled",
         details: "EVC appointed for faculty register and biometric audit on campus.",
-        actor: "Dr. Ramesh Gupta (RB)",
+        actor: "Hariprasath (Bureau Head)",
         timestamp: new Date(Date.now() - 3 * 86400000).toISOString(),
       },
       {
@@ -1335,7 +1335,7 @@ function CasesDashboard() {
         action_type: "INSPECTION_SCHEDULED",
         title: "Faculty Grievance Site Investigation",
         details: "Grievance cell field officer deputed for direct faculty interview.",
-        actor: "Ms. Priya Verma (PGRC)",
+        actor: "Monisha Yathavan (Approval Officer)",
         timestamp: new Date(Date.now() - 1 * 86400000).toISOString(),
       },
       {
@@ -1346,7 +1346,7 @@ function CasesDashboard() {
         action_type: "DOCUMENT_REQUESTED",
         title: "Audited Fee Statement Demanded",
         details: "Submission of approved fee structure vs bank credit statement demanded within 10 days.",
-        actor: "Mr. Suresh Iyer (RB)",
+        actor: "Deepan Thangavel (Approval Officer)",
         timestamp: new Date(Date.now() - 4 * 86400000).toISOString(),
       },
       {
@@ -1357,7 +1357,7 @@ function CasesDashboard() {
         action_type: "DOCUMENT_REQUESTED",
         title: "Bank Fee Challans Demanded",
         details: "Demand for student receipts and cash deposit ledger.",
-        actor: "Dr. Anita Sharma (PGRC)",
+        actor: "Surya Prakash D (Regional Nodal Officer)",
         timestamp: new Date(Date.now() - 2 * 86400000).toISOString(),
       },
     ];
@@ -1511,15 +1511,26 @@ function CasesDashboard() {
     };
   }, [fetchData]);
 
-  // Deep-link to registrations tab if ?tab=registrations is in URL
+  // Deep-link to registrations tab or case modal from notifications
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.get("tab") === "registrations") {
         setActiveTab("registrations");
       }
+      const targetCid = params.get("case_id");
+      if (targetCid && cases.length > 0) {
+        const found = cases.find(c => c.case_id.toLowerCase() === targetCid.toLowerCase());
+        if (found) {
+          if (params.get("assign") === "true") {
+            setEditingCase(found);
+          } else {
+            setSelectedCase(found);
+          }
+        }
+      }
     }
-  }, []);
+  }, [cases]);
 
   // File Complaint state
   const [isFilingModalOpen, setIsFilingModalOpen] = useState(false);
@@ -1534,6 +1545,15 @@ function CasesDashboard() {
   });
 
   const [institutionsList, setInstitutionsList] = useState<InstitutionProfile[]>(getStoredInstitutions);
+  const [officialsList, setOfficialsList] = useState<Array<{ id: string; name: string; role_key: string; role_label: string; bureau_code: string }>>([]);
+
+  useEffect(() => {
+    if (HAS_BACKEND) {
+      api.getAssignableOfficials().then((data) => {
+        if (Array.isArray(data)) setOfficialsList(data);
+      }).catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -2695,18 +2715,34 @@ function CasesDashboard() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Assigned Officer */}
+                {/* Assigned Officer (Hierarchy-aware selector) */}
                 <div>
-                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                    Assigned Officer
+                  <label className="block text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1 flex items-center justify-between">
+                    <span>Assigned Official</span>
+                    <span className="text-[10px] text-primary lowercase">officials above complainants</span>
                   </label>
-                  <input
-                    type="text"
-                    value={editAssignedOfficer}
-                    onChange={(e) => setEditAssignedOfficer(e.target.value)}
-                    placeholder="e.g. Dr. Rajesh Kumar"
-                    className="w-full h-9 px-3 rounded-lg bg-input border border-border/40 text-foreground text-xs outline-none focus:border-primary"
-                  />
+                  {officialsList.length > 0 ? (
+                    <select
+                      value={editAssignedOfficer}
+                      onChange={(e) => setEditAssignedOfficer(e.target.value)}
+                      className="w-full h-9 px-2.5 rounded-lg bg-input border border-border/40 text-foreground text-xs outline-none focus:border-primary cursor-pointer"
+                    >
+                      <option value="">-- Select Official to Assign --</option>
+                      {officialsList.map(o => (
+                        <option key={o.id} value={`${o.name} (${o.role_label})`}>
+                          {o.name} • {o.role_label} ({o.bureau_code})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={editAssignedOfficer}
+                      onChange={(e) => setEditAssignedOfficer(e.target.value)}
+                      placeholder="e.g. Deepan Thangavel (Approval Officer)"
+                      className="w-full h-9 px-3 rounded-lg bg-input border border-border/40 text-foreground text-xs outline-none focus:border-primary"
+                    />
+                  )}
                 </div>
 
                 {/* SLA Days */}
