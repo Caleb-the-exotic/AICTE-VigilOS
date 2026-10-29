@@ -169,5 +169,5 @@ def run_data_migration(pg_url: str) -> dict:
     return stats
 
 if __name__ == "__main__":
-    db_url = os.getenv("DATABASE_URL") or "postgresql://postgres@localhost:5433/campusflow"
+    db_url = os.getenv("DATABASE_URL") or "postgresql://postgres:postgres@localhost:5432/campusflow"
     run_data_migration(db_url)

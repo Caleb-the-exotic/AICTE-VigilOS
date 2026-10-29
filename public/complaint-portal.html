@@ -1,0 +1,2304 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AICTE VigilOS — Official Grievance & Institution Complaint Portal</title>
+    <link rel="icon" type="image/png" href="/aicte-logo.png">
+  <link rel="apple-touch-icon" href="/aicte-logo.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --card: #111827;
+      --card-muted: #172033;
+      --border: #1f293d;
+      --border-light: #2d3748;
+      --primary: #ef4444;
+      --primary-hover: #dc2626;
+      --primary-glow: rgba(239, 68, 68, 0.28);
+      --accent: #f43f5e;
+      --orange: #f97316;
+      --orange-hover: #ea580c;
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --info: #3b82f6;
+    }
+
+    html.light {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --card-muted: #f1f5f9;
+      --border: #e2e8f0;
+      --border-light: #cbd5e1;
+      --primary: #dc2626;
+      --primary-hover: #b91c1c;
+      --primary-glow: rgba(220, 38, 38, 0.2);
+      --accent: #e11d48;
+      --orange: #ea580c;
+      --orange-hover: #c2410c;
+      --text: #0f172a;
+      --text-muted: #64748b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── CUSTOM UNIFIED SCROLLBAR (Chrome/Safari/Edge & Firefox) ── */
+    html {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(220, 38, 38, 0.45) rgba(15, 23, 42, 0.6);
+    }
+    html.light {
+      scrollbar-color: rgba(220, 38, 38, 0.4) #f1f5f9;
+    }
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(220, 38, 38, 0.45) transparent;
+    }
+    html.light * {
+      scrollbar-color: rgba(220, 38, 38, 0.35) transparent;
+    }
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+      border-radius: 999px;
+    }
+    html.light ::-webkit-scrollbar-track {
+      background: rgba(241, 245, 249, 0.85);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(220, 38, 38, 0.65), rgba(234, 88, 12, 0.65));
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+      transition: background 0.2s ease;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, rgba(220, 38, 38, 0.95), rgba(234, 88, 12, 0.95));
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background-clip: padding-box;
+    }
+    ::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* ── 1. TOP GOVERNMENT HEADER STRIP ── */
+    .gov-top-bar {
+      background: rgba(17, 24, 39, 0.95);
+      border-bottom: 1px solid var(--border);
+      padding: 0.35rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      z-index: 60;
+    }
+    html.light .gov-top-bar {
+      background: #f1f5f9;
+      border-bottom-color: #e2e8f0;
+    }
+    .gov-flag-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+    }
+    .tricolor-pill {
+      display: inline-flex;
+      width: 14px;
+      height: 10px;
+      border-radius: 2px;
+      overflow: hidden;
+      flex-direction: column;
+    }
+    .tricolor-pill span:nth-child(1) { background: #ff9933; flex: 1; }
+    .tricolor-pill span:nth-child(2) { background: #ffffff; flex: 1; }
+    .tricolor-pill span:nth-child(3) { background: #138808; flex: 1; }
+    .gov-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+    .gov-pill-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      background: var(--card-muted);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 0.72rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .gov-pill-btn:hover {
+      color: var(--text);
+      border-color: var(--border-light);
+    }
+    .gov-pill-btn-alert {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #f87171;
+    }
+    .gov-pill-btn-alert:hover {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: #ef4444;
+      color: #ffffff;
+    }
+    html.light .gov-pill-btn-alert {
+      background: #fff1f2;
+      border-color: #fecaca;
+      color: #dc2626;
+    }
+    html.light .gov-pill-btn-alert:hover {
+      background: #ffe4e6;
+      border-color: #fda4af;
+      color: #be123c;
+    }
+
+    /* ── 2. MAIN NAV HEADER (TRIPLE LOGO + DROPDOWNS + CTAS) ── */
+    .main-navbar {
+      background: rgba(17, 24, 39, 0.92);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      transition: background 0.2s;
+    }
+    html.light .main-navbar {
+      background: rgba(255, 255, 255, 0.96);
+      border-bottom-color: #e2e8f0;
+    }
+
+    .brand-cluster {
+      display: flex;
+      align-items: center;
+      gap: 1.1rem;
+    }
+    .brand-link {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      text-decoration: none;
+      color: inherit;
+    }
+    .logo-vigilos {
+      font-size: 1.25rem;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      color: var(--text);
+    }
+    .logo-vigilos span.red {
+      color: var(--primary);
+    }
+    .logo-divider {
+      width: 1px;
+      height: 32px;
+      background: var(--border);
+    }
+    .logo-aicte-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .logo-aicte-img {
+      width: 38px;
+      height: 38px;
+      object-fit: contain;
+    }
+    .logo-aicte-img.logo-bw {
+      display: none;
+    }
+    html.light .logo-aicte-img.logo-color {
+      display: none;
+    }
+    html.light .logo-aicte-img.logo-bw {
+      display: inline-block;
+    }
+    .logo-aicte-text {
+      line-height: 1.15;
+    }
+    .logo-aicte-hi {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .logo-aicte-en {
+      font-size: 0.62rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .logo-moe-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .logo-moe-icon {
+      width: 32px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .logo-moe-text {
+      line-height: 1.15;
+    }
+    .logo-moe-hi {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .logo-moe-en {
+      font-size: 0.62rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      letter-spacing: 0.04em;
+    }
+
+    /* Floating Quick Action Buttons on Bottom Right (matching screenshot) */
+    .floating-quick-actions {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      z-index: 100;
+    }
+    .floating-fab {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      text-decoration: none;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+      transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      border: none;
+      cursor: pointer;
+    }
+    .floating-fab:hover {
+      transform: scale(1.1);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+    }
+    .fab-phone {
+      background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    }
+    .fab-support {
+      background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+    }
+
+    /* Center Dropdown Menus (matching screenshot Explore, Govt Internships, Campus) */
+    .nav-links-center {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      list-style: none;
+    }
+    .nav-dropdown {
+      position: relative;
+    }
+    .nav-dropdown-trigger {
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: var(--text);
+      background: none;
+      border: none;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      cursor: pointer;
+      padding: 0.4rem 0.6rem;
+      border-radius: 6px;
+      transition: color 0.2s;
+      font-family: inherit;
+    }
+    .nav-dropdown-trigger:hover {
+      color: var(--primary);
+    }
+    .nav-dropdown-trigger svg {
+      opacity: 0.6;
+      transition: transform 0.2s;
+    }
+    .nav-dropdown:hover .nav-dropdown-trigger svg,
+    .nav-dropdown:focus-within .nav-dropdown-trigger svg {
+      transform: rotate(180deg);
+      opacity: 1;
+    }
+    .nav-dropdown-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+      min-width: 220px;
+      padding: 0.5rem;
+      display: none;
+      flex-direction: column;
+      gap: 0.25rem;
+      z-index: 100;
+    }
+    html.light .nav-dropdown-menu {
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+      border-color: #cbd5e1;
+    }
+    .nav-dropdown:hover .nav-dropdown-menu,
+    .nav-dropdown:focus-within .nav-dropdown-menu {
+      display: flex;
+    }
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.8rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .dropdown-item:hover {
+      background: var(--card-muted);
+      color: var(--primary);
+    }
+    @media (max-width: 1100px) {
+      .nav-links-center {
+        display: none;
+      }
+    }
+
+    .nav-right-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .btn-file-proceeding {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.52rem 1.05rem;
+      border-radius: 9999px;
+      background: var(--card-muted);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.82rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-file-proceeding:hover {
+      background: var(--border);
+      border-color: var(--primary);
+    }
+    .btn-officer-login {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.52rem 1.05rem;
+      border-radius: 9999px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-officer-login:hover {
+      background: var(--card-muted);
+      color: var(--primary);
+    }
+    .nav-link-btn {
+      background: transparent;
+      border: none;
+      color: #ffffff;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.45rem 0.75rem;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .nav-link-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.12);
+    }
+    html.light .nav-link-btn {
+      color: #0f172a;
+    }
+    html.light .nav-link-btn:hover {
+      color: var(--primary);
+      background: #f1f5f9;
+    }
+    .user-pill-auth {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--card-muted);
+      border: 1px solid var(--border);
+      border-radius: 9999px;
+      padding: 0.25rem 0.5rem 0.25rem 0.85rem;
+    }
+    .user-pill-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      color: var(--primary);
+      font-size: 0.78rem;
+      font-weight: 800;
+      max-width: 180px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .btn-portal-logout {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+      padding: 0.3rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-portal-logout:hover {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    /* ── 4. HERO SECTION WITH PROMINENT HEADLINE & FLOATING SEARCH ── */
+    .hero-container {
+      position: relative;
+      padding: 4.5rem 2rem 5rem 2rem;
+      text-align: center;
+      background: 
+        radial-gradient(circle at 14% 45%, rgba(249, 115, 22, 0.16) 0%, transparent 55%),
+        radial-gradient(circle at 86% 45%, rgba(16, 185, 129, 0.14) 0%, transparent 55%),
+        radial-gradient(ellipse at 50% 25%, rgba(239, 68, 68, 0.14) 0%, transparent 65%),
+        var(--bg);
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+    }
+    html.light .hero-container {
+      background: 
+        radial-gradient(circle at 14% 45%, rgba(254, 215, 170, 0.55) 0%, transparent 55%),
+        radial-gradient(circle at 86% 45%, rgba(187, 247, 208, 0.5) 0%, transparent 55%),
+        linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+
+    /* Subtle architectural background silhouette */
+    .hero-silhouette-bg {
+      position: absolute;
+      inset: 0;
+      opacity: 0.05;
+      background-image: radial-gradient(#fff 1px, transparent 1px);
+      background-size: 24px 24px;
+      pointer-events: none;
+    }
+
+    .hero-inner {
+      max-width: 980px;
+      margin: 0 auto;
+      position: relative;
+      z-index: 10;
+    }
+
+    .hero-main-title {
+      font-size: clamp(2.2rem, 5vw, 3.8rem);
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      line-height: 1.25;
+      color: var(--text);
+      margin-bottom: 1.25rem;
+    }
+    .hero-highlight {
+      color: #ea580c;
+      background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: inline-block;
+      padding-bottom: 0.22em;
+      padding-right: 0.05em;
+    }
+
+    .hero-desc {
+      font-size: clamp(0.95rem, 2vw, 1.15rem);
+      color: var(--text-muted);
+      max-width: 780px;
+      margin: 0 auto 1rem auto;
+      line-height: 1.6;
+    }
+    .hero-subtag {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      opacity: 0.8;
+      margin-bottom: 2rem;
+    }
+
+    .hero-cta-group {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      margin-bottom: 2.75rem;
+      flex-wrap: wrap;
+    }
+    .btn-hero-primary {
+      padding: 0.85rem 2rem;
+      border-radius: 9999px;
+      background: #ea580c;
+      color: #fff;
+      font-size: 0.95rem;
+      font-weight: 800;
+      text-decoration: none;
+      box-shadow: 0 8px 24px rgba(234, 88, 12, 0.35);
+      transition: all 0.2s;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      border: none;
+    }
+    .btn-hero-primary:hover {
+      background: #c2410c;
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(234, 88, 12, 0.5);
+    }
+    .btn-hero-secondary {
+      padding: 0.85rem 2rem;
+      border-radius: 9999px;
+      background: #1e293b;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #ffffff;
+      font-size: 0.95rem;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    html.light .btn-hero-secondary {
+      background: #0f172a;
+      color: #ffffff;
+      border-color: transparent;
+    }
+    .btn-hero-secondary:hover {
+      background: #334155;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    /* ── FLOATING SEARCH & VERIFICATION BAR ── */
+    .hero-search-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 9999px;
+      padding: 0.5rem 0.65rem 0.5rem 1.25rem;
+      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.4);
+      display: grid;
+      grid-template-columns: 1.4fr 1.1fr auto;
+      gap: 0.75rem;
+      align-items: center;
+      max-width: 880px;
+      margin: 0 auto;
+    }
+    html.light .hero-search-card {
+      box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.1);
+      background: #ffffff;
+      border-color: #cbd5e1;
+    }
+    @media (max-width: 768px) {
+      .hero-search-card {
+        border-radius: 20px;
+        grid-template-columns: 1fr;
+        padding: 0.85rem;
+      }
+    }
+    .search-input-box {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.55rem 0.75rem;
+      border-radius: 9999px;
+      background: transparent;
+      border: none;
+      position: relative;
+    }
+    .search-input-box input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.88rem;
+      width: 100%;
+    }
+    .search-input-box select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.88rem;
+      font-weight: 500;
+      width: 100%;
+      cursor: pointer;
+      padding-right: 1.5rem;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 0.25rem center;
+    }
+    .search-input-box select option {
+      background-color: #111827;
+      color: #f9fafb;
+      padding: 10px 14px;
+      font-size: 0.88rem;
+    }
+    html.light .search-input-box select option {
+      background-color: #ffffff;
+      color: #0f172a;
+    }
+    .search-input-box select:focus {
+      outline: none;
+    }
+    .btn-search-action {
+      background: #ea580c;
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.92rem;
+      padding: 0.85rem 1.75rem;
+      border-radius: 9999px;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: 0 6px 18px rgba(234, 88, 12, 0.35);
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .btn-search-action:hover {
+      background: #c2410c;
+      transform: translateY(-1px);
+      box-shadow: 0 8px 22px rgba(234, 88, 12, 0.5);
+    }
+
+    /* ── 5. PORTAL TABS CONTROLLER ── */
+    .tabs-strip {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 0.5rem 2rem;
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      overflow-x: auto;
+      position: sticky;
+      top: 65px;
+      z-index: 45;
+    }
+    .tab-pill {
+      padding: 0.65rem 1.25rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .tab-pill:hover {
+      color: var(--text);
+      background: var(--card-muted);
+    }
+    .tab-pill.active {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(244, 63, 94, 0.15) 100%);
+      color: var(--primary);
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    /* ── 6. TAB CONTENT SECTIONS ── */
+    .portal-section {
+      max-width: 1040px;
+      margin: 2.5rem auto;
+      padding: 0 1.5rem;
+      display: none;
+    }
+    .portal-section.active {
+      display: block;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .form-panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 2.5rem;
+      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.4);
+    }
+
+    .section-head {
+      margin-bottom: 2rem;
+      text-align: left;
+    }
+    .section-badge {
+      font-size: 0.72rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--primary);
+      margin-bottom: 0.35rem;
+      display: inline-block;
+    }
+    .section-title {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+    .section-desc {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 0.25rem;
+    }
+
+    /* Form Fields */
+    .form-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+    }
+    @media (max-width: 680px) {
+      .form-grid-2 { grid-template-columns: 1fr; }
+    }
+    .form-field {
+      margin-bottom: 1.25rem;
+    }
+    .form-field.full {
+      grid-column: span 2;
+    }
+    @media (max-width: 680px) {
+      .form-field.full { grid-column: span 1; }
+    }
+    .field-label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 0.45rem;
+      color: var(--text);
+    }
+    .field-input, .field-select, .field-textarea {
+      width: 100%;
+      padding: 0.8rem 1.1rem;
+      border-radius: 14px;
+      background: var(--card-muted);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.88rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+    .field-input:focus, .field-select:focus, .field-textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+    }
+
+    /* Step Tracker for Registration */
+    .reg-steps-track {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 2.25rem;
+      position: relative;
+    }
+    .reg-steps-track::before {
+      content: '';
+      position: absolute;
+      top: 15px;
+      left: 24px;
+      right: 24px;
+      height: 2px;
+      background: var(--border);
+      z-index: 1;
+    }
+    .reg-step-node {
+      position: relative;
+      z-index: 2;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--card);
+      border: 2px solid var(--border);
+      display: grid;
+      place-items: center;
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: var(--text-muted);
+    }
+    .reg-step-node.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+      box-shadow: 0 0 16px var(--primary-glow);
+    }
+    .reg-step-node.done {
+      background: var(--success);
+      border-color: var(--success);
+      color: #fff;
+    }
+
+    /* Result Cards */
+    .success-alert-card {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 20px;
+      padding: 1.75rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 1.25rem;
+    }
+    .success-icon-badge {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--success);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+
+    /* ── FOOTER ── */
+    .gov-portal-footer {
+      margin-top: auto;
+      border-top: 1px solid var(--border);
+      background: var(--card);
+      padding: 3rem 2rem 2rem 2rem;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .footer-grid {
+      max-width: 1040px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 2.5rem;
+      margin-bottom: 2rem;
+    }
+    @media (max-width: 768px) {
+      .footer-grid { grid-template-columns: 1fr; }
+    }
+    .footer-col h4 {
+      color: var(--text);
+      font-size: 0.95rem;
+      font-weight: 800;
+      margin-bottom: 1rem;
+    }
+    .footer-col ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .footer-col a {
+      color: var(--text-muted);
+      text-decoration: none;
+    }
+    .footer-col a:hover { color: var(--primary); }
+
+    /* ── MOBILE & ANDROID RESPONSIVENESS ── */
+    @media (max-width: 900px) {
+      .main-navbar {
+        padding: 0.65rem 1rem;
+      }
+      .brand-cluster {
+        gap: 0.6rem;
+      }
+      .logo-aicte-text, .logo-moe-text {
+        display: none;
+      }
+      .logo-divider {
+        height: 24px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .gov-top-bar {
+        padding: 0.4rem 0.85rem;
+        font-size: 0.68rem;
+        flex-direction: column;
+        gap: 0.4rem;
+        align-items: flex-start;
+      }
+      .gov-actions {
+        width: 100%;
+        justify-content: flex-end;
+      }
+      .main-navbar {
+        padding: 0.5rem 0.75rem;
+      }
+      .logo-vigilos {
+        font-size: 1.1rem;
+      }
+      .btn-file-proceeding {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.75rem;
+      }
+      .btn-officer-login {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.75rem;
+      }
+      .user-pill-auth {
+        padding: 0.2rem 0.4rem 0.2rem 0.6rem;
+      }
+      .user-pill-badge {
+        max-width: 110px;
+        font-size: 0.72rem;
+      }
+      .hero-container {
+        padding: 2.5rem 1rem 3rem 1rem;
+      }
+      .hero-main-title {
+        font-size: 1.85rem;
+        line-height: 1.2;
+      }
+      .hero-desc {
+        font-size: 0.9rem;
+        margin-bottom: 1.25rem;
+      }
+      .hero-cta-group {
+        gap: 0.65rem;
+        margin-bottom: 1.75rem;
+      }
+      .btn-hero-primary, .btn-hero-secondary {
+        width: 100%;
+        justify-content: center;
+        padding: 0.75rem 1.25rem;
+        font-size: 0.88rem;
+      }
+      .hero-search-card {
+        border-radius: 16px;
+        padding: 0.6rem;
+        gap: 0.5rem;
+      }
+      .search-input-box {
+        padding: 0.45rem 0.5rem;
+        background: var(--card-muted);
+        border-radius: 10px;
+      }
+      .btn-search-action {
+        width: 100%;
+        justify-content: center;
+        border-radius: 12px;
+        padding: 0.75rem;
+      }
+      .tabs-strip {
+        padding: 0.4rem 0.5rem;
+        top: 55px;
+        justify-content: flex-start;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+      .tabs-strip::-webkit-scrollbar {
+        display: none;
+      }
+      .tab-pill {
+        padding: 0.5rem 0.9rem;
+        font-size: 0.78rem;
+        flex-shrink: 0;
+      }
+      .portal-section {
+        margin: 1.5rem auto;
+        padding: 0 0.75rem;
+      }
+      .form-panel {
+        padding: 1.25rem 1rem;
+        border-radius: 18px;
+      }
+      .section-title {
+        font-size: 1.35rem;
+      }
+      .section-desc {
+        font-size: 0.82rem;
+      }
+      .reg-steps-track {
+        margin-bottom: 1.5rem;
+      }
+      .reg-steps-track::before {
+        top: 13px;
+      }
+      .reg-step-node {
+        width: 28px;
+        height: 28px;
+        font-size: 0.72rem;
+      }
+      .field-input, .field-select, .field-textarea {
+        padding: 0.65rem 0.85rem;
+        font-size: 0.84rem;
+        border-radius: 10px;
+      }
+      .step-card h3 {
+        font-size: 1rem !important;
+      }
+      .gov-portal-footer {
+        padding: 2rem 1rem 1.5rem 1rem;
+      }
+      .footer-grid {
+        gap: 1.5rem;
+      }
+      #notice-modal, #help-modal, #login-modal {
+        padding: 0.75rem;
+      }
+      #notice-modal > div, #help-modal > div, #login-modal > div {
+        padding: 1.35rem 1rem !important;
+        border-radius: 18px !important;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── 1. TOP GOVERNMENT HEADER STRIP ── -->
+  <div class="gov-top-bar">
+    <div class="gov-flag-wrap">
+      <span>भारत सरकार Government of India · Ministry of Education</span>
+    </div>
+    <div class="gov-actions">
+      <button type="button" onclick="toggleHelpModal()" class="gov-pill-btn" title="AICTE Toll-Free Grievance Helpdesk">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        Helpline & Support ⌵
+      </button>
+      <button type="button" onclick="toggleTheme()" class="gov-pill-btn" title="Toggle Light / Dark Theme">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        Theme
+      </button>
+    </div>
+  </div>
+
+  <!-- ── 2. MAIN NAV HEADER (TRIPLE LOGO + DROPDOWNS + CTAS) ── -->
+  <header class="main-navbar">
+    <div class="brand-cluster">
+      <a href="/" class="brand-link">
+        <div class="logo-vigilos">Vigil<span class="red">OS</span></div>
+      </a>
+      <div class="logo-divider"></div>
+      <div class="logo-aicte-group">
+        <img src="/aicte-logo.png" alt="AICTE Logo" class="logo-aicte-img logo-color" onerror="this.src='/aicte-logo-bw.png'">
+        <img src="/aicte-logo-bw.png" alt="AICTE Logo" class="logo-aicte-img logo-bw">
+        <div class="logo-aicte-text">
+          <div class="logo-aicte-hi">अखिल भारतीय तकनीकी शिक्षा परिषद</div>
+          <div class="logo-aicte-en">All India Council for Technical Education</div>
+        </div>
+      </div>
+      <div class="logo-divider"></div>
+      <div class="logo-moe-group">
+        <div class="logo-moe-icon">
+          <svg viewBox="0 0 40 48" width="28" height="34" fill="currentColor" style="color: var(--text); opacity: 0.9;">
+            <path d="M20 2 C18 2 17 3.5 17 5 C17 6.5 18 8 20 8 C22 8 23 6.5 23 5 C23 3.5 22 2 20 2 Z"/>
+            <path d="M13 6 C11.5 6 10.5 7.2 10.5 8.5 C10.5 9.8 11.5 11 13 11 C14.5 11 15.5 9.8 15.5 8.5 C15.5 7.2 14.5 6 13 6 Z"/>
+            <path d="M27 6 C25.5 6 24.5 7.2 24.5 8.5 C24.5 9.8 25.5 11 27 11 C28.5 11 29.5 9.8 29.5 8.5 C29.5 7.2 28.5 6 27 6 Z"/>
+            <path d="M14 12 C11 13 8 16 8 20 C8 24 10 27 12 28 C12 30 14 31 16 32 L16 34 L24 34 L24 32 C26 31 28 30 28 28 C30 27 32 24 32 20 C32 16 29 13 26 12 C24 13 22 13.5 20 13.5 C18 13.5 16 13 14 12 Z" fill-rule="evenodd"/>
+            <rect x="10" y="35" width="20" height="3" rx="1.5"/>
+            <circle cx="20" cy="41" r="2.5" fill="none" stroke="currentColor" stroke-width="1"/>
+            <rect x="7" y="44" width="26" height="2" rx="1"/>
+          </svg>
+        </div>
+        <div class="logo-moe-text">
+          <div class="logo-moe-hi">शिक्षा मंत्रालय</div>
+          <div class="logo-moe-en">MINISTRY OF EDUCATION</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center Navigation Links -->
+    <ul class="nav-links-center">
+      <li class="nav-dropdown">
+        <button type="button" class="nav-dropdown-trigger">
+          Explore
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="nav-dropdown-menu">
+          <a class="dropdown-item" onclick="switchSection('track')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            Track Status
+          </a>
+          <a class="dropdown-item" onclick="switchSection('directory')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4"/></svg>
+            Institutions Directory
+          </a>
+        </div>
+      </li>
+      <li>
+        <button type="button" class="nav-link-btn" onclick="toggleNoticeModal()" title="View Official AICTE Vigilance Directives">
+          Govt Directives
+        </button>
+      </li>
+      <li class="nav-dropdown">
+        <button type="button" class="nav-dropdown-trigger">
+          Portals & Support
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="nav-dropdown-menu">
+          <a class="dropdown-item" href="https://aicte-india.org" target="_blank" rel="noopener">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+            AICTE Main Website ↗
+          </a>
+          <a class="dropdown-item" href="https://education.gov.in" target="_blank" rel="noopener">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            Ministry of Education ↗
+          </a>
+          <a class="dropdown-item" onclick="toggleHelpModal()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Helpline Desk
+          </a>
+        </div>
+      </li>
+    </ul>
+
+    <!-- Streamlined Header Actions -->
+    <div class="nav-right-actions">
+      <button class="btn-file-proceeding" onclick="switchSection('complaint')" title="Lodge Official Grievance Proceeding">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        File Grievance
+      </button>
+      <div id="nav-auth-container">
+        <button type="button" class="btn-officer-login" onclick="toggleLoginModal()" id="btn-portal-login" title="Sign In to Institution Account">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          Login
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── 4. HERO SECTION WITH PROMINENT HEADLINE & FLOATING SEARCH ── -->
+  <div class="hero-container">
+    <div class="hero-silhouette-bg"></div>
+
+    <div class="hero-inner">
+      <h1 class="hero-main-title">
+        Your Institutional Redressal Is Just<br>
+        <span class="hero-highlight">A Single Click Away</span>
+      </h1>
+      <p class="hero-desc">
+        Connecting Indian Technical Institutions, Deemed Universities & Polytechnics with verified AICTE vigilance, cross-bureau overlap prevention (PGRC, RB, RO), and autonomous grievance resolution.
+      </p>
+      <p class="hero-subtag">
+        National Institutional Portal by AICTE, Ministry of Education, Government of India. Centralized for Engineering, Management, Pharmacy & Architecture colleges.
+      </p>
+
+      <div class="hero-cta-group">
+        <button class="btn-hero-primary" onclick="switchSection('complaint')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          File a Grievance
+        </button>
+        <button class="btn-hero-secondary" onclick="switchSection('register')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01"/></svg>
+          Register Institution
+        </button>
+      </div>
+
+      <!-- Floating Search & Status Verification Bar (matching screenshot pill card) -->
+      <div class="hero-search-card">
+        <div class="search-input-box">
+          <svg width="18" height="18" color="#10b981" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          <input type="text" id="hero-search-query" placeholder="College Name, Permanent ID (PID), or Grievance Ref (Eg. 1-REG...)">
+        </div>
+        <div class="search-input-box">
+          <svg width="18" height="18" color="#f97316" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+          <select id="hero-region-filter">
+            <option value="">Select City or State (Eg. Delhi, Mumbai...)</option>
+            <option value="Northern">Northern (Kanpur / UP)</option>
+            <option value="North-Western">North-Western (Chandigarh / PB / HR)</option>
+            <option value="Central">Central (Bhopal / MP)</option>
+            <option value="Western">Western (Mumbai / MH)</option>
+            <option value="Southern">Southern (Chennai / TN)</option>
+            <option value="South-Western">South-Western (Bengaluru / KA)</option>
+            <option value="Eastern">Eastern (Kolkata / WB)</option>
+            <option value="South-Central">South-Central (Hyderabad / TS / AP)</option>
+          </select>
+        </div>
+        <button class="btn-search-action" onclick="handleHeroSearch()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          Find / Track
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 5. PORTAL TABS CONTROLLER ── -->
+  <nav class="tabs-strip">
+    <button class="tab-pill active" id="tab-btn-register" onclick="switchSection('register')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      1. Register Institution
+    </button>
+    <button class="tab-pill" id="tab-btn-complaint" onclick="switchSection('complaint')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>
+      2. File Regulatory Grievance
+    </button>
+    <button class="tab-pill" id="tab-btn-track" onclick="switchSection('track')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      3. Track Status
+    </button>
+    <button class="tab-pill" id="tab-btn-directory" onclick="switchSection('directory')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10M6 10h10"/></svg>
+      4. Verified Directory
+    </button>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- TAB 1: INSTITUTION SELF-REGISTRATION -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <section id="sec-register" class="portal-section active">
+    <div class="form-panel">
+      <div class="section-head">
+        <span class="section-badge">Official Onboarding</span>
+        <h2 class="section-title">Institutional Self-Registration Application</h2>
+        <p class="section-desc">
+          Official application submitted directly to the AICTE Central Database for Directorate verification and approval.
+        </p>
+      </div>
+
+      <!-- Step Progress Bar -->
+      <div class="reg-steps-track">
+        <div class="reg-step-node active" id="rs-1">1</div>
+        <div class="reg-step-node" id="rs-2">2</div>
+        <div class="reg-step-node" id="rs-3">3</div>
+        <div class="reg-step-node" id="rs-4">4</div>
+      </div>
+
+      <form id="portal-reg-form" onsubmit="submitRegistrationApplication(event)">
+        <!-- Step 1 -->
+        <div id="reg-step-1" class="step-card">
+          <h3 style="font-size: 1.15rem; font-weight: 800; margin-bottom: 1.25rem;">Stage 1: Institutional Profile</h3>
+          <div class="form-grid-2">
+            <div class="form-field full">
+              <label class="field-label">Official Institution Name *</label>
+              <input type="text" id="inst_name" required class="field-input" placeholder="e.g. National Institute of Technology, Delhi">
+            </div>
+            <div class="form-field">
+              <label class="field-label">AICTE Permanent Code / ID (If existing)</label>
+              <input type="text" id="inst_code" class="field-input" placeholder="e.g. 1-123456789">
+            </div>
+            <div class="form-field">
+              <label class="field-label">Institution Category / Discipline *</label>
+              <select id="inst_type" class="field-select">
+                <option value="Engineering College">Engineering & Technology</option>
+                <option value="Management Institute">Management (MBA/PGDM)</option>
+                <option value="Pharmacy College">Pharmacy</option>
+                <option value="Architecture & Planning">Architecture & Planning</option>
+                <option value="Polytechnic">Polytechnic / Diploma</option>
+              </select>
+            </div>
+            <div class="form-field full">
+              <label class="field-label">Affiliating University / State Board *</label>
+              <input type="text" id="inst_affiliation" required class="field-input" placeholder="e.g. Anna University">
+            </div>
+            <div class="form-field">
+              <label class="field-label">Official Institutional Email *</label>
+              <input type="email" id="inst_email" required class="field-input" placeholder="principal@college.edu.in">
+            </div>
+            <div class="form-field">
+              <label class="field-label">Official Contact Landline / Mobile</label>
+              <input type="text" id="inst_phone" class="field-input" placeholder="+91-11-23456789">
+            </div>
+            <div class="form-field full">
+              <label class="field-label">Campus Official Portal / Website</label>
+              <input type="url" id="inst_website" class="field-input" placeholder="https://www.college.edu.in">
+            </div>
+          </div>
+          <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
+            <button type="button" class="btn-hero-primary" onclick="setRegStep(2)">Next: Campus Location →</button>
+          </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div id="reg-step-2" class="step-card" style="display: none;">
+          <h3 style="font-size: 1.15rem; font-weight: 800; margin-bottom: 1.25rem;">Stage 2: Campus Address & AICTE Regional Jurisdiction</h3>
+          <div class="form-grid-2">
+            <div class="form-field full">
+              <label class="field-label">Full Campus Address *</label>
+              <textarea id="inst_address" required rows="2" class="field-textarea" placeholder="Sector / Road / Plot No., Landmark"></textarea>
+            </div>
+            <div class="form-field">
+              <label class="field-label">City / Town *</label>
+              <input type="text" id="inst_city" required class="field-input" placeholder="New Delhi">
+            </div>
+            <div class="form-field">
+              <label class="field-label">District</label>
+              <input type="text" id="inst_district" class="field-input" placeholder="South West Delhi">
+            </div>
+            <div class="form-field">
+              <label class="field-label">State / UT *</label>
+              <input type="text" id="inst_state" required class="field-input" placeholder="Delhi">
+            </div>
+            <div class="form-field">
+              <label class="field-label">AICTE Regional Bureau Jurisdiction *</label>
+              <select id="inst_region" class="field-select">
+                <option value="Northern">Northern (Kanpur / UP, UK)</option>
+                <option value="North-Western">North-Western (Chandigarh / PB, HR, HP)</option>
+                <option value="Central">Central (Bhopal / MP, CG)</option>
+                <option value="Western">Western (Mumbai / MH, GA)</option>
+                <option value="South-Western">South-Western (Bengaluru / KA)</option>
+                <option value="Southern">Southern (Chennai / TN, PY)</option>
+                <option value="Eastern">Eastern (Kolkata / WB, NE)</option>
+                <option value="South-Central">South-Central (Hyderabad / TS, AP)</option>
+              </select>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-top: 1.5rem;">
+            <button type="button" class="btn-hero-secondary" onclick="setRegStep(1)">← Previous</button>
+            <button type="button" class="btn-hero-primary" onclick="setRegStep(3)">Next: Signatory Details →</button>
+          </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div id="reg-step-3" class="step-card" style="display: none;">
+          <h3 style="font-size: 1.15rem; font-weight: 800; margin-bottom: 1.25rem;">Stage 3: Authorized Signatory & Portal Security</h3>
+          <div class="form-grid-2">
+            <div class="form-field">
+              <label class="field-label">Authorized Person's Full Name *</label>
+              <input type="text" id="inst_rep_name" required class="field-input" placeholder="Dr. S. K. Sharma">
+            </div>
+            <div class="form-field">
+              <label class="field-label">Designation *</label>
+              <input type="text" id="inst_rep_desig" required class="field-input" placeholder="Principal / Director / Dean">
+            </div>
+            <div class="form-field">
+              <label class="field-label">Representative Official Email *</label>
+              <input type="email" id="inst_rep_email" required class="field-input" placeholder="director@college.edu.in">
+            </div>
+            <div class="form-field">
+              <label class="field-label">Mobile Number</label>
+              <input type="text" id="inst_rep_phone" class="field-input" placeholder="+91-9876543210">
+            </div>
+            <div class="form-field">
+              <label class="field-label">Set Portal Password *</label>
+              <input type="password" id="inst_password" required minlength="6" class="field-input" placeholder="Min 6 characters">
+              <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem; display: block;">Used to log in after AICTE approval.</span>
+            </div>
+            <div class="form-field">
+              <label class="field-label">Confirm Password *</label>
+              <input type="password" id="inst_confirm_password" required minlength="6" class="field-input" placeholder="Re-type password">
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-top: 1.5rem;">
+            <button type="button" class="btn-hero-secondary" onclick="setRegStep(2)">← Previous</button>
+            <button type="button" class="btn-hero-primary" onclick="setRegStep(4)">Next: Review & Declaration →</button>
+          </div>
+        </div>
+
+        <!-- Step 4 -->
+        <div id="reg-step-4" class="step-card" style="display: none;">
+          <h3 style="font-size: 1.15rem; font-weight: 800; margin-bottom: 1.25rem;">Stage 4: Verification Review & Regulatory Undertaking</h3>
+          
+          <div id="reg-summary-box" style="background: var(--card-muted); padding: 1.25rem; border-radius: 16px; margin-bottom: 1.5rem; font-size: 0.85rem; line-height: 1.6;">
+            <!-- Injected summary -->
+          </div>
+
+          <div style="display: flex; gap: 0.75rem; align-items: flex-start; margin-bottom: 1.75rem;">
+            <input type="checkbox" id="inst_decl" required style="margin-top: 0.25rem;">
+            <label for="inst_decl" style="font-size: 0.82rem; color: var(--text-muted); line-height: 1.5;">
+              I solemnly affirm that the information submitted above is true, complete, and correct. I understand that misrepresentation constitutes a violation punishable under AICTE Approval Process Regulations.
+            </label>
+          </div>
+
+          <div style="display: flex; justify-content: space-between;">
+            <button type="button" class="btn-hero-secondary" onclick="setRegStep(3)">← Previous</button>
+            <button type="submit" id="reg-submit-btn" class="btn-hero-primary">
+              Submit Registration Application
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- TAB 2: FILE REGULATORY PROCEEDING / GRIEVANCE -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <section id="sec-complaint" class="portal-section">
+    <div class="form-panel">
+      <div class="section-head">
+        <span class="section-badge">Regulatory Proceedings</span>
+        <h2 class="section-title">File Institutional Grievance / Proceeding</h2>
+        <p class="section-desc">
+          Verified technical institutions can lodge official regulatory proceedings directly to AICTE Bureaus (PGRC, RB, RO).
+        </p>
+      </div>
+
+      <!-- Authentication Gating Warning for Unauthenticated Users -->
+      <div id="complaint-auth-lock" style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 16px; padding: 1.5rem; margin-bottom: 1.75rem; display: flex; align-items: center; justify-content: space-between; gap: 1.25rem; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 1rem; max-width: 600px;">
+          <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(239, 68, 68, 0.15); color: #f87171; display: grid; place-items: center; flex-shrink: 0;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </div>
+          <div>
+            <h4 style="font-size: 1rem; font-weight: 800; color: #f87171;">Institutional Authentication Required</h4>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 0.25rem; line-height: 1.45;">
+              You are not logged in. To maintain regulatory integrity, official grievances can only be filed by approved institutions. Please sign in to your approved institution account, or submit a new registration application.
+            </p>
+          </div>
+        </div>
+        <div style="display: flex; gap: 0.75rem;">
+          <button type="button" class="btn-hero-primary" onclick="toggleLoginModal()" style="padding: 0.6rem 1.4rem; font-size: 0.85rem;">
+            Sign In Now
+          </button>
+          <button type="button" class="btn-hero-secondary" onclick="switchSection('register')" style="padding: 0.6rem 1.4rem; font-size: 0.85rem;">
+            Register College
+          </button>
+        </div>
+      </div>
+
+      <!-- Authenticated Institution Status Banner -->
+      <div id="complaint-auth-logged" style="background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: 16px; padding: 1.15rem 1.4rem; margin-bottom: 1.75rem; display: none; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 0.85rem;">
+          <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(34, 197, 94, 0.15); color: var(--success); display: grid; place-items: center;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <div>
+            <div style="font-size: 0.92rem; font-weight: 800; color: var(--text);">
+              Authenticated Institution: <span id="auth-inst-name-display" style="color: var(--primary);">Loading...</span>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.15rem;">
+              AICTE Permanent ID: <strong id="auth-inst-pid-display" style="font-family: monospace; color: var(--text);">—</strong> · Registry Status: <span style="color: var(--success); font-weight: 700;">Approved</span>
+            </div>
+          </div>
+        </div>
+        <span style="font-size: 0.75rem; padding: 0.35rem 0.75rem; border-radius: 9999px; background: rgba(34, 197, 94, 0.15); color: var(--success); font-weight: 700;">
+          Verified Proceeding Submitter
+        </span>
+      </div>
+
+      <div id="complaint-status-banner" style="display: none;"></div>
+
+      <form id="portal-complaint-form" onsubmit="submitInstitutionalComplaint(event)">
+        <div class="form-grid-2">
+          <div class="form-field full">
+            <label class="field-label">Institution Permanent ID (PID), Registered Email, or App Ref *</label>
+            <input type="text" id="comp_inst_id" required class="field-input" placeholder="e.g. 1-REG-XXXXXX or principal@college.edu.in">
+            <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.25rem; display: block;">
+              Enter your verified Permanent ID (PID), official institutional email, or approved application reference.
+            </span>
+          </div>
+
+          <div class="form-field">
+            <label class="field-label">Jurisdictional AICTE Bureau *</label>
+            <select id="comp_bureau" class="field-select">
+              <option value="PGRC">Public Grievance Redressal Cell (PGRC - General Grievances)</option>
+              <option value="RB">Regulatory Bureau (RB - Land, Norms, Faculty Deficiencies)</option>
+              <option value="RO">Regional Office (RO - State Level Jurisdictional Disputes)</option>
+            </select>
+          </div>
+
+          <div class="form-field">
+            <label class="field-label">Grievance Category *</label>
+            <select id="comp_category" class="field-select">
+              <option value="Infrastructure & Lab Facilities">Infrastructure & Lab Facilities</option>
+              <option value="Faculty Deficiencies & Biometrics">Faculty Deficiencies & Biometrics</option>
+              <option value="Fee Cap & Financial Exploitation">Fee Cap & Financial Exploitation</option>
+              <option value="Land & Physical Building Verification">Land & Physical Building Verification</option>
+              <option value="Student Harassment & Ragging">Student Harassment & Ragging</option>
+              <option value="Affiliation & University Dispute">Affiliation & University Dispute</option>
+            </select>
+          </div>
+
+          <div class="form-field full">
+            <label class="field-label">Proceeding Subject / Grievance Title *</label>
+            <input type="text" id="comp_title" required class="field-input" placeholder="Concise statement of the matter (e.g. High-voltage line clearance dispute)">
+          </div>
+
+          <div class="form-field full">
+            <label class="field-label">Full Legal Facts, Timeline & Relief Sought *</label>
+            <textarea id="comp_desc" required rows="5" class="field-textarea" placeholder="Detail the complete circumstances, previous notices, affected departments, and specific regulatory orders requested..."></textarea>
+          </div>
+
+          <div class="form-field full">
+            <label class="field-label">Upload Supporting Documents (PDF, Scanned Notice, Affidavits, or Images)</label>
+            <div style="position: relative; border: 2px dashed var(--border); border-radius: 12px; padding: 1.25rem; background: var(--card-muted); text-align: center; cursor: pointer;" onclick="document.getElementById('comp_doc_file').click()">
+              <input type="file" id="comp_doc_file" accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif" style="display: none;" onchange="handleDocFileUpload(event)">
+              <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem;">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="12" y2="12"/><line x1="15" y1="15" x2="12" y2="12"/></svg>
+                <div style="font-size: 0.88rem; font-weight: 700; color: var(--text);" id="comp_doc_label">Click to select PDF or Scanned Document</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">AICTE Tesseract OCR will automatically extract evidence text and feed to Grok LLM for similarity scanning (Max 15MB).</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-field">
+            <label class="field-label">Complainant / Submitter Official Name</label>
+            <input type="text" id="comp_sub_name" class="field-input" placeholder="Dr. S. K. Sharma">
+          </div>
+
+          <div class="form-field">
+            <label class="field-label">Official Contact Email for Case Notices</label>
+            <input type="email" id="comp_sub_email" class="field-input" placeholder="director@college.edu.in">
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
+          <button type="submit" id="comp-submit-btn" class="btn-hero-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m14 13-7.5 7.5c-.83.83-2.17.83-3 0 0 0 0 0 0 0a2.12 2.12 0 0 1 0-3L11 10"/><path d="m16 16 6-6"/><path d="m8 8 6-6"/><path d="m9 7 8 8"/><path d="m21 11-8-8"/></svg>
+            File Regulatory Proceeding
+          </button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- TAB 3: TRACK STATUS -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <section id="sec-track" class="portal-section">
+    <div class="form-panel">
+      <div class="section-head">
+        <span class="section-badge">Real-Time Lookup</span>
+        <h2 class="section-title">Case & Application Status Tracker</h2>
+        <p class="section-desc">
+          Inspect live proceedings, investigation milestones, officer assignments, and registration verdicts.
+        </p>
+      </div>
+
+      <div style="display: flex; gap: 0.75rem; margin-bottom: 2rem;">
+        <input type="text" id="track-query-input" class="field-input" placeholder="Enter Case ID (e.g. AICTE-2026-PGRC-0158) or Application Ref (e.g. APP-20261028-...)">
+        <button class="btn-hero-primary" onclick="executeStatusLookup()" style="white-space: nowrap;">
+          Track Status
+        </button>
+      </div>
+
+      <div id="track-result-container">
+        <div style="text-align: center; color: var(--text-muted); padding: 3rem 1rem;">
+          Enter your reference number above to display live Council case and application data.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- TAB 4: VERIFIED INSTITUTION DIRECTORY -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <section id="sec-directory" class="portal-section">
+    <div class="form-panel">
+      <div class="section-head">
+        <span class="section-badge">Public Database</span>
+        <h2 class="section-title">Verified AICTE Institutions Directory</h2>
+        <p class="section-desc">
+          Official institutional portfolios maintained in the AICTE Central Registry.
+        </p>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: left;">
+          <thead>
+            <tr style="border-bottom: 1px solid var(--border); color: var(--text-muted);">
+              <th style="padding: 0.75rem;">AICTE PID</th>
+              <th style="padding: 0.75rem;">Institution Name</th>
+              <th style="padding: 0.75rem;">Region</th>
+              <th style="padding: 0.75rem;">State</th>
+              <th style="padding: 0.75rem;">Status</th>
+            </tr>
+          </thead>
+          <tbody id="directory-tbody">
+            <tr>
+              <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                Loading verified directory...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 7. GOVERNMENT PORTAL FOOTER ── -->
+  <footer class="gov-portal-footer">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <h4>AICTE VigilOS Platform</h4>
+        <p style="line-height: 1.6; margin-bottom: 0.75rem;">
+          Autonomous Institutional Grievance Redressal, Cross-Bureau Overlap Detection & Regulatory Monitoring Platform. Managed under the All India Council for Technical Education, Ministry of Education, Government of India.
+        </p>
+        <span style="font-family: monospace; font-size: 0.72rem; color: var(--primary);">PS26264 AICTE Case & Compliance System</span>
+      </div>
+      <div class="footer-col">
+        <h4>Key Links</h4>
+        <ul>
+          <li><a onclick="switchSection('register')">Institution Self-Registration</a></li>
+          <li><a onclick="switchSection('complaint')">File Regulatory Proceeding</a></li>
+          <li><a onclick="switchSection('track')">Track Case Timeline</a></li>
+          <li><a onclick="switchSection('directory')">Directory of Colleges</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>National Portals</h4>
+        <ul>
+          <li><a href="https://aicte-india.org" target="_blank">AICTE Main Portal ↗</a></li>
+          <li><a href="https://education.gov.in" target="_blank">Ministry of Education ↗</a></li>
+        </ul>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ── JAVASCRIPT LOGIC ── -->
+  <script>
+    const API_BASE = window.location.port === '8000' ? '' : (window.location.origin.includes('8080') ? '' : 'http://localhost:8000');
+
+    async function apiCall(endpoint, options = {}) {
+      const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+      const token = localStorage.getItem('aicte_inst_token');
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      let url = `${API_BASE}${endpoint}`;
+      try {
+        let res = await fetch(url, { ...options, headers });
+        if (!res.ok && res.status === 500 && API_BASE === '') {
+          res = await fetch(`http://localhost:8000${endpoint}`, { ...options, headers });
+        }
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({ detail: res.statusText }));
+          throw new Error(body.detail || 'Request failed');
+        }
+        return await res.json();
+      } catch (e) {
+        throw e;
+      }
+    }
+
+    // Auth State Management
+    function getLoggedInInstitution() {
+      try {
+        const token = localStorage.getItem('aicte_inst_token');
+        const raw = localStorage.getItem('aicte_inst_data');
+        if (token && raw) {
+          return JSON.parse(raw);
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function updateAuthStateUI() {
+      const inst = getLoggedInInstitution();
+      const authNav = document.getElementById('nav-auth-container');
+      const lockBanner = document.getElementById('complaint-auth-lock');
+      const loggedBanner = document.getElementById('complaint-auth-logged');
+      const compSubmitBtn = document.getElementById('comp-submit-btn');
+
+      if (inst) {
+        if (authNav) {
+          authNav.innerHTML = `
+            <div class="user-pill-auth">
+              <span class="user-pill-badge" title="${inst.institution_name}">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                ${inst.institution_name}
+              </span>
+              <button type="button" class="btn-portal-logout" onclick="logoutInstitution()">Logout</button>
+            </div>
+          `;
+        }
+        if (lockBanner) lockBanner.style.display = 'none';
+        if (loggedBanner) {
+          loggedBanner.style.display = 'flex';
+          const nameEl = document.getElementById('auth-inst-name-display');
+          const pidEl = document.getElementById('auth-inst-pid-display');
+          if (nameEl) nameEl.textContent = inst.institution_name;
+          if (pidEl) pidEl.textContent = inst.aicte_pid;
+        }
+        if (document.getElementById('comp_inst_id')) {
+          document.getElementById('comp_inst_id').value = inst.aicte_pid;
+        }
+        if (document.getElementById('comp_sub_email') && inst.official_email) {
+          document.getElementById('comp_sub_email').value = inst.official_email;
+        }
+        if (document.getElementById('comp_sub_name')) {
+          const userRaw = localStorage.getItem('aicte_inst_user');
+          if (userRaw) {
+            try {
+              const u = JSON.parse(userRaw);
+              if (u.name) document.getElementById('comp_sub_name').value = u.name;
+            } catch (e) {}
+          }
+        }
+        if (compSubmitBtn) {
+          compSubmitBtn.style.opacity = '1';
+        }
+      } else {
+        if (authNav) {
+          authNav.innerHTML = `
+            <button type="button" class="btn-officer-login" onclick="toggleLoginModal()" id="btn-portal-login" title="Sign In to Institution Account">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+              Login
+            </button>
+          `;
+        }
+        if (lockBanner) lockBanner.style.display = 'flex';
+        if (loggedBanner) loggedBanner.style.display = 'none';
+      }
+    }
+
+    function toggleLoginModal() {
+      const modal = document.getElementById('login-modal');
+      if (modal) {
+        modal.style.display = modal.style.display === 'grid' ? 'none' : 'grid';
+        const alertBox = document.getElementById('login-alert-box');
+        if (alertBox) alertBox.style.display = 'none';
+      }
+    }
+
+    async function handleInstitutionLogin(e) {
+      e.preventDefault();
+      const email = document.getElementById('login_email').value.trim();
+      const password = document.getElementById('login_password').value.trim();
+      const alertBox = document.getElementById('login-alert-box');
+      const submitBtn = document.getElementById('login-submit-btn');
+
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Verifying Credentials...';
+      alertBox.style.display = 'none';
+
+      try {
+        const res = await apiCall('/api/institution/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+        });
+
+        localStorage.setItem('aicte_inst_token', res.token);
+        localStorage.setItem('aicte_inst_data', JSON.stringify(res.institution));
+        localStorage.setItem('aicte_inst_user', JSON.stringify(res.user));
+
+        toggleLoginModal();
+        updateAuthStateUI();
+        alert(`Login Successful! Welcome, ${res.institution.institution_name}.\n\nYou can now file and manage official regulatory proceedings.`);
+        switchSection('complaint');
+      } catch (err) {
+        alertBox.style.display = 'block';
+        alertBox.style.background = 'rgba(239, 68, 68, 0.12)';
+        alertBox.style.border = '1px solid rgba(239, 68, 68, 0.35)';
+        alertBox.style.color = '#f87171';
+        alertBox.innerHTML = `<strong>Authentication Failed:</strong> ${err.message || 'Invalid credentials or registration pending approval.'}`;
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Sign In to Institution Account';
+      }
+    }
+
+    async function logoutInstitution() {
+      try {
+        await apiCall('/api/auth/logout', { method: 'POST' });
+      } catch (e) {}
+      localStorage.removeItem('aicte_inst_token');
+      localStorage.removeItem('aicte_inst_data');
+      localStorage.removeItem('aicte_inst_user');
+      updateAuthStateUI();
+      alert('You have been logged out of your institutional portal session.');
+    }
+
+    // Toggle Section Tabs
+    function switchSection(secId) {
+      document.querySelectorAll('.tab-pill').forEach(b => b.classList.remove('active'));
+      const activeBtn = document.getElementById(`tab-btn-${secId}`);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      document.querySelectorAll('.portal-section').forEach(s => s.classList.remove('active'));
+      const activeSec = document.getElementById(`sec-${secId}`);
+      if (activeSec) {
+        activeSec.classList.add('active');
+        activeSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+
+    function toggleTheme() {
+      document.documentElement.classList.toggle('light');
+    }
+
+    // Wizard Step Controller
+    function setRegStep(step) {
+      document.querySelectorAll('.step-card').forEach(c => c.style.display = 'none');
+      document.getElementById(`reg-step-1`).style.display = step === 1 ? 'block' : 'none';
+      document.getElementById(`reg-step-2`).style.display = step === 2 ? 'block' : 'none';
+      document.getElementById(`reg-step-3`).style.display = step === 3 ? 'block' : 'none';
+      document.getElementById(`reg-step-4`).style.display = step === 4 ? 'block' : 'none';
+
+      for (let i = 1; i <= 4; i++) {
+        const node = document.getElementById(`rs-${i}`);
+        if (node) {
+          node.classList.remove('active', 'done');
+          if (i < step) node.classList.add('done');
+          else if (i === step) node.classList.add('active');
+        }
+      }
+
+      if (step === 4) {
+        document.getElementById('reg-summary-box').innerHTML = `
+          <strong>Institution Name:</strong> ${document.getElementById('inst_name').value}<br>
+          <strong>Category:</strong> ${document.getElementById('inst_type').value}<br>
+          <strong>Affiliation:</strong> ${document.getElementById('inst_affiliation').value}<br>
+          <strong>Official Email:</strong> ${document.getElementById('inst_email').value}<br>
+          <strong>Campus Region:</strong> ${document.getElementById('inst_region').value} (${document.getElementById('inst_state').value})<br>
+          <strong>Authorized Signatory:</strong> ${document.getElementById('inst_rep_name').value} (${document.getElementById('inst_rep_desig').value})<br>
+          <strong>Portal Password:</strong> Configured (Encrypted)
+        `;
+      }
+    }
+
+    // Submit Registration Application
+    async function submitRegistrationApplication(e) {
+      e.preventDefault();
+      const pw = document.getElementById('inst_password').value;
+      const confirmPw = document.getElementById('inst_confirm_password').value;
+
+      if (!pw || pw.length < 6) {
+        alert('Please enter an account password of at least 6 characters.');
+        setRegStep(3);
+        document.getElementById('inst_password').focus();
+        return;
+      }
+      if (pw !== confirmPw) {
+        alert('Passwords do not match. Please verify your confirm password.');
+        setRegStep(3);
+        document.getElementById('inst_confirm_password').focus();
+        return;
+      }
+
+      const payload = {
+        institution_name: document.getElementById('inst_name').value.trim(),
+        aicte_code: document.getElementById('inst_code').value.trim(),
+        inst_type: document.getElementById('inst_type').value,
+        affiliation: document.getElementById('inst_affiliation').value.trim(),
+        address: document.getElementById('inst_address').value.trim(),
+        city: document.getElementById('inst_city').value.trim(),
+        district: document.getElementById('inst_district').value.trim(),
+        state: document.getElementById('inst_state').value.trim(),
+        region: document.getElementById('inst_region').value,
+        official_email: document.getElementById('inst_email').value.trim().toLowerCase(),
+        contact_phone: document.getElementById('inst_phone').value.trim(),
+        rep_name: document.getElementById('inst_rep_name').value.trim(),
+        rep_designation: document.getElementById('inst_rep_desig').value.trim(),
+        rep_email: document.getElementById('inst_rep_email').value.trim().toLowerCase(),
+        rep_phone: document.getElementById('inst_rep_phone').value.trim(),
+        website: document.getElementById('inst_website').value.trim(),
+        declaration_accepted: document.getElementById('inst_decl').checked,
+        password: pw,
+      };
+
+      const btn = document.getElementById('reg-submit-btn');
+      btn.innerText = 'Submitting to Central Registry...';
+      btn.disabled = true;
+
+      try {
+        const res = await apiCall('/api/institution/register', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+
+        localStorage.setItem('aicte_inst_app_id', res.application_id);
+        localStorage.setItem('aicte_inst_email', payload.official_email);
+        localStorage.setItem('aicte_inst_name', payload.institution_name);
+
+        alert(`Application stored successfully! Application ID: ${res.application_id}\n\nYour application has been received and is pending review by the AICTE Directorate. Once approved by an officer, you can log in with your official email (${payload.official_email}) and your chosen password.`);
+        
+        switchSection('track');
+        document.getElementById('track-query-input').value = res.application_id;
+        executeStatusLookup();
+      } catch (err) {
+        alert(err.message || 'Failed to submit registration application.');
+      } finally {
+        btn.innerText = 'Submit Registration Application';
+        btn.disabled = false;
+      }
+    }
+
+    // Submit Institutional Complaint (Restricted if not logged in)
+    // ── Supporting Document Upload Handling ──
+    let uploadedDocBase64 = null;
+    let uploadedDocName = null;
+
+    function handleDocFileUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      uploadedDocName = file.name;
+      const label = document.getElementById('comp_doc_label');
+      label.innerText = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      label.style.color = 'var(--primary)';
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        uploadedDocBase64 = evt.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function submitInstitutionalComplaint(e) {
+      e.preventDefault();
+      const inst = getLoggedInInstitution();
+      if (!inst) {
+        alert('Access Restricted: You must log in with an approved institution account or register your institution before filing a regulatory grievance.');
+        toggleLoginModal();
+        return;
+      }
+
+      const instId = document.getElementById('comp_inst_id').value.trim() || inst.aicte_pid;
+      const bureau = document.getElementById('comp_bureau').value;
+      const category = document.getElementById('comp_category').value;
+      const title = document.getElementById('comp_title').value.trim();
+      const description = document.getElementById('comp_desc').value.trim();
+      const subName = document.getElementById('comp_sub_name').value.trim() || inst.institution_name;
+      const subEmail = document.getElementById('comp_sub_email').value.trim() || inst.official_email;
+
+      const btn = document.getElementById('comp-submit-btn');
+      btn.innerText = 'Submitting Proceeding...';
+      btn.disabled = true;
+
+      try {
+        const res = await apiCall('/api/aicte/cases/submit', {
+          method: 'POST',
+          body: JSON.stringify({
+            aicte_pid: instId,
+            bureau: bureau,
+            category: category,
+            title: title,
+            description: description,
+            complainant_name: subName,
+            complainant_email: subEmail,
+            document_base64: uploadedDocBase64,
+            document_name: uploadedDocName,
+          }),
+        });
+
+        const banner = document.getElementById('complaint-status-banner');
+        banner.style.display = 'block';
+        banner.innerHTML = `
+          <div class="success-alert-card">
+            <div class="success-icon-badge">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <div>
+              <h4 style="font-size: 1.05rem; font-weight: 800; color: var(--success);">Regulatory Proceeding Successfully Filed!</h4>
+              <p style="font-size: 0.85rem; color: var(--text); margin-top: 0.25rem;">
+                Official Case ID: <strong style="font-family: monospace; color: var(--primary);">${res.case_id}</strong>
+              </p>
+              <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.25rem;">
+                Your grievance has been stored in the AICTE Central Database and assigned to the ${bureau} bureau.
+              </p>
+              <button class="btn-hero-secondary" style="margin-top: 0.75rem; padding: 0.45rem 1rem; font-size: 0.78rem;" onclick="trackSpecificCase('${res.case_id}')">
+                Track Case Progress →
+              </button>
+            </div>
+          </div>
+        `;
+
+        document.getElementById('portal-complaint-form').reset();
+        updateAuthStateUI();
+      } catch (err) {
+        alert(err.message || 'Failed to submit regulatory proceeding.');
+      } finally {
+        btn.innerText = 'File Regulatory Proceeding';
+        btn.disabled = false;
+      }
+    }
+
+    function trackSpecificCase(caseId) {
+      switchSection('track');
+      document.getElementById('track-query-input').value = caseId;
+      executeStatusLookup();
+    }
+
+    // Execute Status Lookup
+    async function executeStatusLookup() {
+      const q = document.getElementById('track-query-input').value.trim();
+      const container = document.getElementById('track-result-container');
+      if (!q) {
+        container.innerHTML = '<div style="color: var(--warning); padding: 1.5rem; text-align: center;">Please enter a reference ID (Case ID or Application Ref).</div>';
+        return;
+      }
+
+      container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-muted);">Querying AICTE central database...</div>';
+
+      try {
+        if (q.toUpperCase().startsWith('APP-')) {
+          const res = await apiCall(`/api/institution/registrations/${q}`);
+          const statusBadge = res.status === 'approved' 
+            ? '<span style="color: var(--success); font-weight: 800;">APPROVED</span>'
+            : (res.status === 'rejected' ? '<span style="color: var(--danger); font-weight: 800;">REJECTED</span>' : '<span style="color: var(--warning); font-weight: 800;">PENDING OFFICER REVIEW</span>');
+
+          container.innerHTML = `
+            <div style="background: var(--card-muted); padding: 1.75rem; border-radius: 18px; border: 1px solid var(--border); text-align: left;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+                <h4 style="font-size: 1.1rem; font-weight: 800;">Registration Application #${res.id}</h4>
+                <div>Status: ${statusBadge}</div>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.85rem;">
+                <div><span style="color: var(--text-muted);">College Name:</span> <strong>${res.institution_name}</strong></div>
+                <div><span style="color: var(--text-muted);">AICTE PID Created:</span> <strong>${res.created_institution_pid || 'Pending Review'}</strong></div>
+                <div><span style="color: var(--text-muted);">Official Email:</span> <strong>${res.official_email}</strong></div>
+                <div><span style="color: var(--text-muted);">Submitted On:</span> <strong>${new Date(res.submitted_at).toLocaleString()}</strong></div>
+              </div>
+              ${res.rejection_reason ? `<div style="margin-top: 1rem; padding: 0.75rem; background: rgba(239, 68, 68, 0.1); border-radius: 10px; color: var(--danger); font-size: 0.8rem;"><strong>Officer Feedback:</strong> ${res.rejection_reason}</div>` : ''}
+              ${res.created_institution_pid ? `<div style="margin-top: 1rem;"><button class="btn-hero-primary" onclick="fileWithPid('${res.created_institution_pid}')">File Proceeding using this PID</button></div>` : ''}
+            </div>
+          `;
+        } else {
+          const res = await apiCall(`/api/aicte/cases/${q}`);
+          let linkedHtml = '';
+          if (res.linked_case_ids) {
+            try {
+              const ids = typeof res.linked_case_ids === 'string' ? JSON.parse(res.linked_case_ids) : res.linked_case_ids;
+              if (Array.isArray(ids) && ids.length > 0) {
+                linkedHtml = `
+                  <div style="margin-top: 1rem; padding: 0.85rem 1rem; background: rgba(220, 38, 38, 0.08); border: 1px solid rgba(220, 38, 38, 0.25); border-radius: 12px;">
+                    <div style="font-size: 0.78rem; font-weight: 800; color: var(--primary); text-transform: uppercase; margin-bottom: 0.35rem;">
+                      🔗 Connected / Linked Parent Proceedings (${ids.length})
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                      ${ids.map(cid => `<button type="button" class="btn-hero-secondary" style="padding: 0.25rem 0.65rem; font-size: 0.75rem; font-family: monospace;" onclick="trackSpecificCase('${cid}')">${cid}</button>`).join('')}
+                    </div>
+                  </div>
+                `;
+              }
+            } catch (e) {}
+          }
+
+          container.innerHTML = `
+            <div style="background: var(--card-muted); padding: 1.75rem; border-radius: 18px; border: 1px solid var(--border); text-align: left;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.75rem;">
+                <h4 style="font-size: 1.1rem; font-weight: 800; font-family: monospace; color: var(--primary);">${res.case_id}</h4>
+                <div style="font-weight: 700; text-transform: uppercase;">Status: ${res.status || 'Received'}</div>
+              </div>
+              <p style="font-size: 1rem; font-weight: 700; margin-bottom: 0.5rem;">${res.title}</p>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.85rem; margin-bottom: 1rem;">
+                <div><span style="color: var(--text-muted);">Bureau:</span> <strong>${res.bureau}</strong></div>
+                <div><span style="color: var(--text-muted);">Category:</span> <strong>${res.category}</strong></div>
+                <div><span style="color: var(--text-muted);">Institution PID:</span> <strong>${res.aicte_pid}</strong></div>
+                <div><span style="color: var(--text-muted);">Assigned Officer:</span> <strong>${res.assigned_officer || 'Directorate Pending'}</strong></div>
+              </div>
+              <div style="padding: 1rem; background: var(--card); border-radius: 12px; font-size: 0.82rem; line-height: 1.6; white-space: pre-wrap;">
+                ${res.description}
+              </div>
+              ${linkedHtml}
+            </div>
+          `;
+        }
+      } catch (err) {
+        container.innerHTML = `<div style="color: var(--danger); padding: 1.5rem; text-align: center;">${err.message || 'Reference not found.'}</div>`;
+      }
+    }
+
+    function fileWithPid(pid) {
+      document.getElementById('comp_inst_id').value = pid;
+      switchSection('complaint');
+    }
+
+    // Hero search handler
+    function handleHeroSearch() {
+      const q = document.getElementById('hero-search-query').value.trim();
+      if (q) {
+        switchSection('track');
+        document.getElementById('track-query-input').value = q;
+        executeStatusLookup();
+      } else {
+        switchSection('directory');
+      }
+    }
+
+    // Load Directory
+    async function loadDirectory() {
+      try {
+        const list = await apiCall('/api/aicte/institutions');
+        const tbody = document.getElementById('directory-tbody');
+        if (!list || list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">No verified institutions found.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = list.slice(0, 15).map(inst => `
+          <tr style="border-bottom: 1px solid var(--border);">
+            <td style="padding: 0.75rem; font-family: monospace; color: var(--primary); font-weight: 700;">${inst.aicte_pid}</td>
+            <td style="padding: 0.75rem; font-weight: 600;">${inst.institution_name}</td>
+            <td style="padding: 0.75rem; color: var(--text-muted);">${inst.region || '-'}</td>
+            <td style="padding: 0.75rem; color: var(--text-muted);">${inst.state || '-'}</td>
+            <td style="padding: 0.75rem;"><span style="color: var(--success); font-weight: 700; font-size: 0.75rem;">Verified</span></td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        console.warn('Failed to load directory:', e);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      updateAuthStateUI();
+      loadDirectory();
+    });
+  </script>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- INSTITUTION PORTAL LOGIN MODAL -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div id="login-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(8px); z-index: 200; place-items: center; padding: 1.5rem;">
+    <div style="background: var(--card); border: 1px solid var(--border); border-radius: 24px; padding: 2.25rem; max-width: 460px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); position: relative;">
+      <button onclick="toggleLoginModal()" style="position: absolute; top: 1.25rem; right: 1.25rem; background: transparent; border: none; color: var(--text-muted); font-size: 1.25rem; cursor: pointer;" title="Close">✕</button>
+      
+      <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem;">
+        <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(239, 68, 68, 0.15); display: grid; place-items: center; color: var(--primary);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <div>
+          <h3 style="font-size: 1.2rem; font-weight: 800;">Institution Portal Login</h3>
+          <p style="font-size: 0.78rem; color: var(--text-muted);">Access AICTE Regulatory Proceedings & Redressal</p>
+        </div>
+      </div>
+
+      <div id="login-alert-box" style="display: none; padding: 0.85rem 1rem; border-radius: 12px; font-size: 0.82rem; margin-bottom: 1.25rem; line-height: 1.4;"></div>
+
+      <form id="portal-login-form" onsubmit="handleInstitutionLogin(event)">
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <div class="form-field">
+            <label class="field-label">Official Institutional Email / AICTE PID *</label>
+            <input type="text" id="login_email" required class="field-input" placeholder="e.g. principal@college.edu.in or 1-REG-XXXXXX">
+          </div>
+          <div class="form-field">
+            <label class="field-label">Account Password *</label>
+            <input type="password" id="login_password" required class="field-input" placeholder="Enter your portal account password">
+          </div>
+        </div>
+
+        <div style="margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem;">
+          <button type="submit" id="login-submit-btn" class="btn-hero-primary" style="width: 100%; justify-content: center; padding: 0.85rem;">
+            Sign In to Institution Account
+          </button>
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: var(--text-muted); margin-top: 0.5rem;">
+            <span>Not registered yet?</span>
+            <a onclick="toggleLoginModal(); switchSection('register');" style="color: var(--primary); font-weight: 700; cursor: pointer; text-decoration: none;">
+              Register Institution →
+            </a>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Official AICTE Directives & Circulars Modal -->
+  <div id="notice-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 200; place-items: center; padding: 1.5rem;">
+    <div style="background: var(--card); border: 1px solid var(--border); border-radius: 24px; padding: 2rem; max-width: 560px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); position: relative;">
+      <button onclick="toggleNoticeModal()" style="position: absolute; top: 1.25rem; right: 1.25rem; background: transparent; border: none; color: var(--text-muted); font-size: 1.25rem; cursor: pointer;">✕</button>
+      <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem;">
+        <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(239, 68, 68, 0.15); display: grid; place-items: center; color: var(--primary);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div>
+          <h3 style="font-size: 1.15rem; font-weight: 800;">Official AICTE Directives & Circulars</h3>
+          <p style="font-size: 0.78rem; color: var(--text-muted);">Council Vigilance & Compliance Announcements</p>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.85rem; line-height: 1.5;">
+        <div style="padding: 0.85rem; background: var(--card-muted); border-radius: 12px; border-left: 3px solid var(--primary);">
+          <div style="font-weight: 700; color: var(--text);">Mandatory Institutional Self-Registration 2026-27</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">All approved and affiliated technical institutions must verify their institutional registration under the VigilOS central database.</div>
+        </div>
+        <div style="padding: 0.85rem; background: var(--card-muted); border-radius: 12px; border-left: 3px solid var(--orange);">
+          <div style="font-weight: 700; color: var(--text);">Cross-Bureau Overlap Clearance Protocol</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">Matters pending concurrently before PGRC and the Regulation Bureau are subject to automated synchronization and joint hearing.</div>
+        </div>
+        <div style="padding: 0.85rem; background: var(--card-muted); border-radius: 12px; border-left: 3px solid var(--success);">
+          <div style="font-weight: 700; color: var(--text);">Public Grievance Redressal Mechanism (PGRC)</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem;">Submissions receive a permanent AICTE Case Reference with direct 30-day statutory SLA tracking.</div>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
+        <button onclick="toggleNoticeModal()" class="btn-hero-primary" style="padding: 0.5rem 1.25rem; font-size: 0.85rem;">Acknowledge & Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help & Support Modal -->
+  <div id="help-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(8px); z-index: 200; place-items: center; padding: 1.5rem;">
+    <div style="background: var(--card); border: 1px solid var(--border); border-radius: 24px; padding: 2rem; max-width: 500px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); position: relative;">
+      <button onclick="toggleHelpModal()" style="position: absolute; top: 1.25rem; right: 1.25rem; background: transparent; border: none; color: var(--text-muted); font-size: 1.25rem; cursor: pointer;">✕</button>
+      <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem;">
+        <div style="width: 40px; height: 40px; border-radius: 12px; background: rgba(239, 68, 68, 0.15); display: grid; place-items: center; color: var(--primary);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+        </div>
+        <div>
+          <h3 style="font-size: 1.15rem; font-weight: 800;">AICTE Official Helpdesk</h3>
+          <p style="font-size: 0.78rem; color: var(--text-muted);">Ministry of Education, Government of India</p>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.85rem; line-height: 1.6;">
+        <div style="padding: 0.85rem; background: var(--card-muted); border-radius: 12px;">
+          <div style="font-weight: 700; color: var(--text);">Toll-Free Helpline</div>
+          <div style="color: var(--primary); font-size: 1.1rem; font-weight: 800; font-family: monospace;">1800-11-2345 / 011-29581000</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">Mon to Fri: 09:30 AM - 05:30 PM (IST)</div>
+        </div>
+        <div style="padding: 0.85rem; background: var(--card-muted); border-radius: 12px;">
+          <div style="font-weight: 700; color: var(--text);">Direct Assistance Emails</div>
+          <div>Grievance Inquiries: <strong style="color: var(--primary);">vigilance@aicte-india.org</strong></div>
+          <div>Portal Technical Support: <strong style="color: var(--text);">helpdesk@aicte-vigilos.gov.in</strong></div>
+        </div>
+      </div>
+      <div style="display: flex; justify-content: flex-end; margin-top: 1.5rem;">
+        <button onclick="toggleHelpModal()" class="btn-hero-primary" style="padding: 0.5rem 1.25rem; font-size: 0.85rem;">Close Helpdesk</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleNoticeModal() {
+      const modal = document.getElementById('notice-modal');
+      modal.style.display = modal.style.display === 'grid' ? 'none' : 'grid';
+    }
+
+    function toggleHelpModal() {
+      const modal = document.getElementById('help-modal');
+      modal.style.display = modal.style.display === 'grid' ? 'none' : 'grid';
+    }
+  </script>
+
+</body>
+</html>

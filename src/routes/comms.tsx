@@ -239,6 +239,12 @@ function CommsHubPage() {
     return () => clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    if (viewMode === "chat") {
+      chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [viewMode, chatMessages.length]);
+
   const handleSendChat = async (e: FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || chatSending) return;
@@ -805,7 +811,7 @@ function CommsHubPage() {
 
   return (
     <AppLayout>
-      <div className="h-full flex flex-col overflow-hidden bg-background">
+      <div className="h-[calc(100dvh-8rem)] md:h-[calc(100dvh-5.5rem)] max-h-[calc(100dvh-8rem)] md:max-h-[calc(100dvh-5.5rem)] flex flex-col overflow-hidden bg-background rounded-2xl border border-border/40 shadow-xs min-h-0">
         
         {/* Top Header Bar */}
         <header className="h-16 border-b border-border/40 px-4 sm:px-6 flex items-center justify-between shrink-0 bg-card/40 backdrop-blur-md z-10">
@@ -919,10 +925,10 @@ function CommsHubPage() {
         </header>
 
         {/* Main Workspace Body */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 min-h-0 flex overflow-hidden">
           
           {/* Main Layout Container */}
-          <div className="flex-1 flex overflow-hidden">
+          <div className="flex-1 min-h-0 flex overflow-hidden">
             
             {/* Mobile Drawer Backdrop */}
             {mobileFolderOpen && (
@@ -1143,11 +1149,11 @@ function CommsHubPage() {
             </aside>
 
             {/* Email Workspace / Main Panel */}
-            <main className="flex-1 flex flex-col bg-background overflow-hidden relative">
+            <main className="flex-1 min-h-0 flex flex-col bg-background overflow-hidden relative">
               {viewMode === "chat" ? (
                 /* LIVE CHAT VIEW */
-                <div className="flex-1 flex flex-col overflow-hidden animate-fade-in">
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="flex-1 min-h-0 flex flex-col overflow-hidden animate-fade-in">
+                  <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 scrollbar-thin">
                     {filteredChatMessages.length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3 my-auto">
                         <div className="w-14 h-14 rounded-2xl bg-secondary/50 border border-border/40 flex items-center justify-center text-muted-foreground">
@@ -1214,7 +1220,7 @@ function CommsHubPage() {
 
 
                   {/* Chat Input */}
-                  <div className="p-3 border-t border-border/40 bg-card/30">
+                  <div className="shrink-0 p-3 border-t border-border/40 bg-card/30">
                     <form onSubmit={handleSendChat} className="flex items-center gap-2">
                       <input
                         type="text"
@@ -1235,7 +1241,7 @@ function CommsHubPage() {
                 </div>
               ) : activeMessageItem ? (
                 /* GMAIL EMAIL DETAIL VIEW */
-                <div className="flex-1 flex flex-col overflow-hidden animate-fade-in">
+                <div className="flex-1 min-h-0 flex flex-col overflow-hidden animate-fade-in">
                   {/* Detail toolbar */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-card/10 gap-2">
                     <div className="flex items-center gap-1">
@@ -1299,22 +1305,36 @@ function CommsHubPage() {
                         </button>
 
                         {isDetailLabelMenuOpen && (
-                          <div className="absolute right-0 top-full mt-1 w-44 bg-card border border-border/50 rounded-xl shadow-xl p-1 z-30 space-y-0.5">
-                            <div className="px-2 py-1 text-[10px] uppercase font-bold text-muted-foreground border-b border-border/30">
-                              Apply Label
+                          <div className="absolute right-0 top-full mt-1 w-52 bg-[#18181b] border border-border/80 rounded-xl shadow-2xl p-1.5 z-50 space-y-1 backdrop-blur-none">
+                            <div className="px-2 py-1 text-[10px] uppercase tracking-wider font-bold text-muted-foreground border-b border-border/40">
+                              Labels
                             </div>
                             {userLabels.map((lbl) => {
                               const hasLabel = activeMessageItem.labels?.includes(lbl.name);
                               return (
-                                <button
-                                  key={lbl.name}
-                                  type="button"
-                                  onClick={() => handleToggleMessageLabel(activeMessageItem.id, lbl.name, activeMessageItem.labels)}
-                                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-secondary text-left cursor-pointer"
-                                >
-                                  <span>{lbl.name}</span>
-                                  {hasLabel && <Check className="w-3.5 h-3.5 text-primary" />}
-                                </button>
+                                <div key={lbl.name} className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg text-xs hover:bg-secondary text-foreground transition-colors">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleMessageLabel(activeMessageItem.id, lbl.name, activeMessageItem.labels)}
+                                    className="flex-1 flex items-center justify-between text-left cursor-pointer py-0.5"
+                                  >
+                                    <span>{lbl.name}</span>
+                                    {hasLabel && <Check className="w-3.5 h-3.5 text-primary" />}
+                                  </button>
+                                  {hasLabel && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleMessageLabel(activeMessageItem.id, lbl.name, [lbl.name]);
+                                      }}
+                                      className="p-1 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400 cursor-pointer"
+                                      title={`Remove label ${lbl.name}`}
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>
@@ -1544,20 +1564,30 @@ function CommsHubPage() {
                                 </button>
 
                                 {isBulkLabelMenuOpen && (
-                                  <div className="absolute left-0 top-full mt-1 w-44 bg-card border border-border/50 rounded-xl shadow-xl p-1 z-30 space-y-0.5">
-                                    <div className="px-2 py-1 text-[10px] uppercase font-bold text-muted-foreground border-b border-border/30">
-                                      Add Label
+                                  <div className="absolute left-0 top-full mt-1 w-52 bg-[#18181b] border border-border/80 rounded-xl shadow-2xl p-1.5 z-50 space-y-1 backdrop-blur-none">
+                                    <div className="px-2 py-1 text-[10px] uppercase tracking-wider font-bold text-muted-foreground border-b border-border/40 flex items-center justify-between">
+                                      <span>Apply / Remove Label</span>
                                     </div>
                                     {userLabels.map((lbl) => (
-                                      <button
-                                        key={lbl.name}
-                                        type="button"
-                                        onClick={() => handleBulkAction("add_label", lbl.name)}
-                                        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs hover:bg-secondary text-left cursor-pointer"
-                                      >
-                                        <span>{lbl.name}</span>
-                                        <Plus className="w-3 h-3 text-muted-foreground" />
-                                      </button>
+                                      <div key={lbl.name} className="flex items-center justify-between gap-1 px-2 py-1 rounded-lg text-xs hover:bg-secondary text-foreground transition-colors">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleBulkAction("add_label", lbl.name)}
+                                          className="flex-1 flex items-center justify-between text-left cursor-pointer py-0.5"
+                                          title={`Add label ${lbl.name}`}
+                                        >
+                                          <span>{lbl.name}</span>
+                                          <Plus className="w-3 h-3 text-emerald-400" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleBulkAction("remove_label", lbl.name)}
+                                          className="p-1 rounded hover:bg-red-500/20 text-muted-foreground hover:text-red-400 cursor-pointer"
+                                          title={`Remove label ${lbl.name} from selected`}
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </div>
                                     ))}
                                   </div>
                                 )}

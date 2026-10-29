@@ -13,6 +13,7 @@
 # ============================================================
 
 import os
+import json
 import uuid
 import datetime
 import secrets
@@ -21,7 +22,7 @@ from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException, Depends, Header, Query, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from groq import Groq
@@ -33,7 +34,7 @@ load_dotenv()
 
 
 # ── Campus backend imports ───────────────────────────────────────
-from campus import db, auth, pdf_exporter, role_service, gmail_mailer, comms_service, comms_migration
+from campus import db, auth, pdf_exporter, role_service, gmail_mailer, comms_service, comms_migration, institution_registration_migration, institution_registration_service
 from campus.executor import run as campus_run
 
 # ── Multi-Agent Kernel & Event Bus ──────────────────────────────
@@ -55,6 +56,7 @@ try:
     db.init_db()
     auth.init_auth_db()
     comms_migration.run_comms_migration()
+    institution_registration_migration.run_registration_migration()
 
     # Automatically seed fresh PostgreSQL database on first deployment
     try:
@@ -68,7 +70,7 @@ try:
         if inst_cnt == 0:
             print("[Auto-Seeder] PostgreSQL has 0 institutions. Running initial migration from campusflow.db...")
             from campus.migrate_sqlite_to_pg import run_data_migration
-            db_url = os.getenv("DATABASE_URL") or "postgresql://postgres@localhost:5433/campusflow"
+            db_url = os.getenv("DATABASE_URL") or "postgresql://postgres:postgres@localhost:5432/campusflow"
             run_data_migration(db_url)
             print("[Auto-Seeder] Initial database seeding completed successfully!")
     except Exception as seed_err:
@@ -95,7 +97,7 @@ def _make_groq() -> Groq:
     return Groq(api_key=key)
 
 def _default_model() -> str:
-    return os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    return os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 def _tavily_key() -> str:
     return os.getenv("TAVILY_API_KEY", "")
@@ -189,6 +191,15 @@ def _get_current_user(
         "permissions": user.get("permissions", []),
     }
 
+def _get_optional_user(
+    authorization: Optional[str] = Header(None),
+    token_query: Optional[str] = Query(None, alias="token"),
+) -> Optional[dict]:
+    try:
+        return _get_current_user(authorization=authorization, token_query=token_query)
+    except Exception:
+        return None
+
 
 # ═══════════════════════════════════════════════════════════════
 # HEALTH
@@ -223,6 +234,14 @@ def login(body: LoginBody):
         status_code = 403 if "deactivated" in str(result).lower() else 401
         raise HTTPException(status_code=status_code, detail=result or "Invalid email/username or password")
     
+    # ── Role Enforcement: Citizens/Complainants/Institutions cannot access the Officer Administration Portal ──
+    user_role = (result.get("role_key") or result.get("role") or "").lower()
+    if user_role in ("citizen", "institution"):
+        raise HTTPException(
+            status_code=403,
+            detail="Access restricted: Citizen and institutional accounts cannot sign in to the AICTE Officer Administration Portal. Please access the public grievance portal at /complaint-portal.html."
+        )
+
     # Check if Two-Factor Authentication (2FA) is enabled for this account
     user_id = result["id"]
     if role_service.is_user_2fa_enabled(user_id):
@@ -1699,6 +1718,21 @@ def list_cases(
             bureau=effective_bureau, status=status, aicte_pid=aicte_pid,
             region=effective_region, category=category, limit=limit,
         )
+
+        # RBAC: Citizens / Institution users view only complaints belonging to their authorized institution or their own
+        if user_role == "citizen":
+            user_id = user.get("id")
+            user_email = (user.get("email") or "").lower()
+            user_app = institution_registration_service.get_my_registration(user_id) if user_id else None
+            approved_pid = user_app.get("created_institution_pid") if (user_app and user_app.get("status") == "approved") else None
+
+            filtered_cases = []
+            for c in cases:
+                if approved_pid and c.get("aicte_pid") == approved_pid:
+                    filtered_cases.append(c)
+                elif c.get("complainant_user_id") == user_id or (c.get("complainant_email") and c.get("complainant_email").lower() == user_email):
+                    filtered_cases.append(c)
+            cases = filtered_cases
         # Annotate ageing_days
         now = datetime.datetime.now()
         for c in cases:
@@ -1717,6 +1751,10 @@ def list_cases(
                     c["sla_breached"] = False
             else:
                 c["sla_breached"] = False
+            if c.get("status") != "disposed" and (c.get("ageing_days", 0) > 30):
+                c["sla_breached"] = True
+        if status and status.strip().lower() == "breached":
+            cases = [c for c in cases if c.get("status") == "breached" or (c.get("ageing_days") or 0) > 30 or c.get("sla_breached")]
         return cases
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1825,15 +1863,30 @@ def export_cases_pdf_get(
 
 # ── Single Case Detail ────────────────────────────────────────────
 @app.get("/api/aicte/cases/{case_id}")
-def get_case(case_id: str, user: dict = Depends(_get_current_user)):
-    """Get full details of an AICTE case with authoritative scope checks."""
+def get_case(case_id: str, user: Optional[dict] = Depends(_get_optional_user)):
+    """Get full details of an AICTE case with authoritative scope checks. Supports direct ID or linked parent case IDs."""
     case = db.get_aicte_case(case_id)
+    if not case:
+        conn = db.get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT case_id FROM aicte_cases 
+            WHERE linked_case_ids LIKE %s OR case_id ILIKE %s
+            ORDER BY created_at DESC LIMIT 1;
+        """, (f'%"{case_id}"%', case_id))
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            cid = row["case_id"] if hasattr(row, "keys") else row[0]
+            case = db.get_aicte_case(cid)
+
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    # Authoritative bureau / regional jurisdiction check
-    if not role_service.has_permission(user, "cases:view", bureau=case.get("bureau"), region=case.get("region")):
-        raise HTTPException(status_code=403, detail="Access denied: Case is outside your assigned bureau or regional jurisdiction")
+    # Authoritative bureau / regional jurisdiction check for officers
+    if user and user.get("role") not in ("citizen", "institution") and user.get("role_key") not in ("citizen", "institution"):
+        if not role_service.has_permission(user, "cases:view", bureau=case.get("bureau"), region=case.get("region")):
+            raise HTTPException(status_code=403, detail="Access denied: Case is outside your assigned bureau or regional jurisdiction")
 
     # Enrich linked cases
     try:
@@ -1924,6 +1977,8 @@ class InstitutionComplaintSubmission(BaseModel):
     complainant_name: Optional[str] = None
     complainant_email: Optional[str] = None
     complainant_type: Optional[str] = "Institutional User"
+    document_base64: Optional[str] = None
+    document_name: Optional[str] = None
 
 @app.post("/api/aicte/cases/submit")
 def submit_institution_complaint(
@@ -1935,12 +1990,51 @@ def submit_institution_complaint(
     Authenticates institution user, validates against authoritative institution portfolio,
     generates structured case reference, and saves to database.
     """
-    # Verify institution existence
+    # Verify institution existence (by PID, registered email, or application ID)
     inst = db.get_institution(body.aicte_pid)
+    if not inst:
+        conn = db.get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT * FROM aicte_institutions 
+            WHERE LOWER(contact_email) = LOWER(%s) 
+               OR LOWER(institution_name) = LOWER(%s)
+               OR aicte_pid IN (SELECT created_institution_pid FROM institution_registrations WHERE id = %s)
+            LIMIT 1
+        """, (body.aicte_pid, body.aicte_pid, body.aicte_pid))
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            inst = db._format_institution_record(row) if hasattr(db, "_format_institution_record") else (dict(row) if hasattr(row, "keys") else row)
+            body.aicte_pid = inst["aicte_pid"]
+
+    # Check if application is currently pending or rejected in registration workflow
+    conn = db.get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT status, id FROM institution_registrations 
+        WHERE (created_institution_pid = %s OR LOWER(official_email) = LOWER(%s) OR id = %s)
+        ORDER BY submitted_at DESC LIMIT 1
+    """, (body.aicte_pid, (body.complainant_email or body.aicte_pid).lower(), body.aicte_pid))
+    app_check = cur.fetchone()
+    conn.close()
+    if app_check:
+        app_dict = dict(app_check) if hasattr(app_check, "keys") else {"status": app_check[0], "id": app_check[1]}
+        if app_dict["status"] == "pending":
+            raise HTTPException(
+                status_code=403,
+                detail=f"Registration application {app_dict['id']} is currently under review by AICTE officers. Proceedings can be submitted once approved."
+            )
+        elif app_dict["status"] == "rejected":
+            raise HTTPException(
+                status_code=403,
+                detail=f"Registration application {app_dict['id']} was rejected. Please review officer feedback and resubmit your registration."
+            )
+
     if not inst:
         raise HTTPException(
             status_code=404,
-            detail=f"Institution with AICTE Permanent ID '{body.aicte_pid}' not found in registry."
+            detail=f"Institution with Permanent ID or Registered Email '{body.aicte_pid}' not found in AICTE verified registry. Please complete institutional self-registration first."
         )
 
     # Resolve user if token present, or use provided complainant info
@@ -1951,6 +2045,15 @@ def submit_institution_complaint(
             user_info = auth.verify_token(token)
         except Exception:
             pass
+
+    # RBAC Enforcement: Disallow submission if user's institution registration is pending or rejected
+    if user_info and user_info.get("id"):
+        user_app = institution_registration_service.get_my_registration(user_info.get("id"))
+        if user_app and user_app.get("status") in ("pending", "rejected"):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Institution registration is currently {user_app['status']}. Only verified approved institutions may submit regulatory proceedings."
+            )
 
     comp_name = body.complainant_name or (user_info.get("name") if user_info else None) or inst.get("principal_name") or "Institutional Complainant"
     comp_email = body.complainant_email or (user_info.get("email") if user_info else None) or inst.get("contact_email") or ""
@@ -1989,6 +2092,44 @@ def submit_institution_complaint(
             result=f"Institution {inst['institution_name']} ({body.aicte_pid}) filed complaint {case_id}",
         )
 
+        # Persistent DB Notification for Authorized Officers
+        for oid in institution_registration_service.get_officer_user_ids():
+            institution_registration_service.create_notification(
+                recipient_user_id=oid,
+                notif_type="case_alert",
+                title=f"New Regulatory Proceeding: {case_id}",
+                body=f"{inst['institution_name']} ({inst.get('region', 'HQ')}) filed a new {bureau_abbr} proceeding: '{body.title}' [{body.category}]",
+                action_url=f"/cases?case_id={case_id}",
+                reference_id=case_id,
+                idempotency_key=f"case_created_{case_id}_{oid}",
+            )
+
+        # ── OCR Document Scanning & Grok LLM Similarity Overlap Scanning ──
+        ocr_document_text = ""
+        if body.document_base64:
+            try:
+                from campus.ocr_service import extract_text_from_base64
+                ocr_document_text = extract_text_from_base64(body.document_base64, filename=body.document_name or "")
+            except Exception as ocr_e:
+                print(f"[OCR] Document extraction exception: {ocr_e}")
+
+        # Execute String Splitting & Grok LLM Scanner across cases
+        similarity_matches = []
+        try:
+            from campus.similarity_scanner import scan_and_match_complaint
+            similarity_matches = scan_and_match_complaint(
+                new_case_id=case_id,
+                new_title=body.title,
+                new_desc=body.description,
+                new_category=body.category,
+                new_bureau=bureau_abbr,
+                new_inst_name=inst["institution_name"],
+                new_aicte_pid=body.aicte_pid,
+                document_text=ocr_document_text,
+            )
+        except Exception as scan_err:
+            print(f"[SimilarityScanner] Error running match scanner: {scan_err}")
+
         return {
             "ok": True,
             "case_id": case_id,
@@ -1998,6 +2139,8 @@ def submit_institution_complaint(
             "status": "received",
             "received_at": now,
             "complainant_name": comp_name,
+            "ocr_text_length": len(ocr_document_text),
+            "similarity_matches": similarity_matches,
             "message": "Complaint successfully registered in AICTE VigilOS backend."
         }
     except Exception as e:
@@ -2049,6 +2192,21 @@ def update_case(case_id: str, body: UpdateCaseBody, user: dict = Depends(_get_cu
             target=case_id,
             result=f"Case {case_id} updated by {user.get('name', 'Admin')}",
         )
+
+        # Notify officers on status change / reassignment
+        new_status = data.get("status")
+        assigned = data.get("assigned_officer")
+        if new_status or assigned:
+            for oid in institution_registration_service.get_officer_user_ids():
+                institution_registration_service.create_notification(
+                    recipient_user_id=oid,
+                    notif_type="case_alert",
+                    title=f"Case Updated: {case_id}",
+                    body=f"Case {case_id} ({case.get('institution_name', 'Institution')}): status updated to '{new_status or case.get('status')}'. Assigned officer: {assigned or case.get('assigned_officer') or 'Unassigned'}.",
+                    action_url=f"/cases?case_id={case_id}",
+                    reference_id=case_id,
+                )
+
         return {"ok": True, "case": db.get_aicte_case(case_id)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -2077,6 +2235,150 @@ def delete_case_endpoint(case_id: str, user: dict = Depends(_get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+# ── Link Overlapping Cases into Unified Proceedings ───────────────
+class LinkCasesBody(BaseModel):
+    case_ids: List[str]
+    aicte_pid: Optional[str] = None
+    note: Optional[str] = None
+
+
+class UnlinkCasesBody(BaseModel):
+    case_ids: List[str]
+
+@app.post("/api/aicte/cases/unlink")
+def unlink_cases_endpoint(body: UnlinkCasesBody, user: dict = Depends(_get_current_user)):
+    """
+    Unlink cases by removing linked_case_ids bidirectional references and notify officers.
+    """
+    raw_ids = [cid.strip() for cid in body.case_ids if cid.strip()]
+    if not raw_ids:
+        raise HTTPException(status_code=400, detail="At least one case ID is required to unlink.")
+
+    conn = db.get_conn()
+    cur = conn.cursor()
+    now = datetime.datetime.now().isoformat()
+
+    cur.execute("SELECT case_id, aicte_pid, institution_name, linked_case_ids FROM aicte_cases WHERE case_id = ANY(%s);", (raw_ids,))
+    cases = cur.fetchall()
+    inst_name = cases[0].get("institution_name") if cases else "Institution"
+
+    for r in cases:
+        cid = r["case_id"]
+        cur.execute("UPDATE aicte_cases SET linked_case_ids = '[]', updated_at = %s WHERE case_id = %s;", (now, cid))
+
+    conn.commit()
+    conn.close()
+
+    db.add_audit(
+        session_id="system",
+        actor_role=user.get("role", "officer"),
+        action="CASES_UNLINKED",
+        target=",".join(raw_ids),
+        result=f"Cases {raw_ids} unlinked by {user.get('name', 'Officer')}",
+    )
+
+    try:
+        officer_ids = institution_registration_service.get_officer_user_ids()
+        for oid in officer_ids:
+            institution_registration_service.create_notification(
+                recipient_user_id=oid,
+                notif_type="case_alert",
+                title=f"Cases Unlinked: {', '.join(raw_ids[:2])}",
+                body=f"Cases {', '.join(raw_ids)} for {inst_name} have been detached into separate independent bureau tracks by {user.get('name', 'Officer')}.",
+                action_url=f"/cases?tab=overlaps",
+                reference_id=",".join(raw_ids),
+                idempotency_key=f"cases_unlinked_{oid}_{'-'.join(sorted(raw_ids))}_{datetime.datetime.now().strftime('%Y%m%d%H%M')}",
+            )
+    except Exception as ne:
+        print(f"[Unlink Cases Notification Error] {ne}")
+
+    return {"ok": True, "message": f"Successfully unlinked cases: {', '.join(raw_ids)}"}
+
+@app.post("/api/aicte/cases/link")
+def link_cases_endpoint(body: LinkCasesBody, user: dict = Depends(_get_current_user)):
+    """
+    Transactionally link multiple overlapping cases.
+    Creates or updates the linked_case_ids bidirectional reference on all involved cases,
+    and creates a consolidated master proceeding if needed, ensuring searching any of the IDs
+    in the complaint portal immediately resolves to the connected case proceeding.
+    """
+    raw_ids = [cid.strip() for cid in body.case_ids if cid.strip()]
+    if len(raw_ids) < 2:
+        raise HTTPException(status_code=400, detail="At least two case IDs are required to link proceedings.")
+
+    conn = db.get_conn()
+    cur = conn.cursor()
+
+    # Verify all cases exist
+    cur.execute("SELECT case_id, aicte_pid, institution_name, linked_case_ids, title, bureau FROM aicte_cases WHERE case_id = ANY(%s);", (raw_ids,))
+    found_cases = cur.fetchall()
+    found_dict = {r["case_id"]: dict(r) for r in found_cases}
+
+    if len(found_dict) < len(raw_ids):
+        missing = set(raw_ids) - set(found_dict.keys())
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Case(s) not found: {', '.join(missing)}")
+
+    # Compute master set of all interconnected case IDs
+    all_connected = set(raw_ids)
+    for c in found_dict.values():
+        try:
+            stored_links = json.loads(c.get("linked_case_ids") or "[]")
+            if isinstance(stored_links, list):
+                all_connected.update([str(x) for x in stored_links if str(x).strip()])
+        except Exception:
+            pass
+
+    master_links_list = sorted(list(all_connected))
+    now = datetime.datetime.now().isoformat()
+
+    # Update linked_case_ids on every connected case in the database
+    for target_cid in master_links_list:
+        other_ids = [x for x in master_links_list if x != target_cid]
+        links_json = json.dumps(other_ids)
+        cur.execute("""
+            UPDATE aicte_cases
+            SET linked_case_ids = %s, updated_at = %s
+            WHERE case_id = %s;
+        """, (links_json, now, target_cid))
+
+    conn.commit()
+    conn.close()
+
+    # Audit log
+    db.add_audit(
+        session_id="system",
+        actor_role=user.get("role", "officer"),
+        action="CASES_LINKED",
+        target=",".join(raw_ids),
+        result=f"Cases {raw_ids} linked by {user.get('name', 'Officer')}. Connected cluster: {master_links_list}",
+    )
+
+    # Dispatch Officer Notifications for Linked Cases
+    try:
+        officer_ids = institution_registration_service.get_officer_user_ids()
+        inst_name = next((c.get("institution_name") for c in found_dict.values() if c.get("institution_name")), "Institution")
+        for oid in officer_ids:
+            institution_registration_service.create_notification(
+                recipient_user_id=oid,
+                notif_type="case_alert",
+                title=f"Cases Linked: {', '.join(master_links_list[:2])}",
+                body=f"Regulatory cases for {inst_name} have been consolidated into a synchronized cluster: {', '.join(master_links_list)}. Unified cross-bureau review initiated by {user.get('name', 'Officer')}.",
+                action_url=f"/cases?tab=overlaps",
+                reference_id=",".join(master_links_list),
+                idempotency_key=f"cases_linked_{oid}_{'-'.join(master_links_list)}_{datetime.datetime.now().strftime('%Y%m%d%H%M')}",
+            )
+    except Exception as ne:
+        print(f"[Link Cases Notification Error] {ne}")
+
+    return {
+        "ok": True,
+        "message": f"Successfully linked {len(master_links_list)} cases.",
+        "linked_case_ids": master_links_list,
+        "parent_case_ids": raw_ids,
+    }
 
 
 # ── Cross-Bureau Overlap Detection ────────────────────────────────
@@ -2151,8 +2453,8 @@ def get_sla_breached(user: dict = Depends(_get_current_user)):
 
 # ── Institution Registry ─────────────────────────────────────────
 @app.get("/api/aicte/institutions")
-def list_institutions(user: dict = Depends(_get_current_user)):
-    """Return all AICTE-registered institutions in the registry."""
+def list_institutions(authorization: Optional[str] = Header(None)):
+    """Return all AICTE-registered institutions in the registry (public & officer access)."""
     try:
         institutions = db.get_all_institutions()
         # Enrich with case counts
@@ -2170,7 +2472,7 @@ def list_institutions(user: dict = Depends(_get_current_user)):
 
 
 @app.get("/api/aicte/institutions/{aicte_pid}")
-def get_institution_profile(aicte_pid: str, user: dict = Depends(_get_current_user)):
+def get_institution_profile(aicte_pid: str, authorization: Optional[str] = Header(None)):
     """
     360° Institution Profile: institution details + all RB/PGRC/RO cases
     + overlap analysis for the Consolidated Institution Profile Card.
@@ -2295,15 +2597,18 @@ def delete_institution_portfolio(
     """Delete an institution portfolio (Super Admin only)."""
     if user.get("role") != "super_admin":
         raise HTTPException(status_code=403, detail="Super Admin privileges required to delete institutions")
-    db.delete_institution(aicte_pid)
-    db.add_audit(
-        session_id="system",
-        actor_role="super_admin",
-        action="INSTITUTION_DELETED",
-        target=aicte_pid,
-        result=f"Deleted institution profile {aicte_pid}"
-    )
-    return {"ok": True}
+    try:
+        db.delete_institution(aicte_pid)
+        db.add_audit(
+            session_id="system",
+            actor_role="super_admin",
+            action="INSTITUTION_DELETED",
+            target=aicte_pid,
+            result=f"Deleted institution profile {aicte_pid}"
+        )
+        return {"ok": True, "message": f"Institution {aicte_pid} deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete institution: {str(e)}")
 
 
 # ── AI Overlap Analysis for Two Specific Cases ───────────────────
@@ -2340,6 +2645,725 @@ def analyze_overlap_pair(body: AnalyzePairBody, user: dict = Depends(_get_curren
         return analysis
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
+# INSTITUTION SELF-REGISTRATION & APPROVAL WORKFLOW
+# ═══════════════════════════════════════════════════════════════
+
+class InstitutionRegisterPayload(BaseModel):
+    institution_name: str
+    aicte_code: Optional[str] = None
+    inst_type: Optional[str] = "Engineering College"
+    affiliation: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    district: Optional[str] = None
+    state: Optional[str] = None
+    region: Optional[str] = None
+    official_email: str
+    contact_phone: Optional[str] = None
+    rep_name: Optional[str] = None
+    rep_designation: Optional[str] = None
+    rep_email: Optional[str] = None
+    rep_phone: Optional[str] = None
+    website: Optional[str] = None
+    documents: Optional[List[dict]] = []
+    declaration_accepted: bool = False
+    idempotency_key: Optional[str] = None
+    password: Optional[str] = None
+
+class InstitutionLoginPayload(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/institution/login")
+def institution_login_endpoint(body: InstitutionLoginPayload):
+    """
+    Dedicated authentication endpoint for registered and approved institutions.
+    Enforces the approval lifecycle:
+      - Pending: informs applicant they are awaiting officer review
+      - Rejected: informs applicant with rejection reason
+      - Approved: validates credentials, returns JWT token & verified institution profile
+    """
+    clean_email = body.email.strip().lower()
+    clean_password = body.password.strip()
+    if not clean_email or not clean_password:
+        raise HTTPException(status_code=400, detail="Institutional email and password are required.")
+
+    conn = db.get_conn()
+    cur = conn.cursor()
+
+    # 1. Check institution_registrations
+    cur.execute("""
+        SELECT * FROM institution_registrations
+        WHERE LOWER(official_email) = %s
+           OR LOWER(rep_email) = %s
+           OR created_institution_pid = %s
+           OR id = %s
+        ORDER BY submitted_at DESC
+        LIMIT 1
+    """, (clean_email, clean_email, clean_email, clean_email))
+    app_row = cur.fetchone()
+    app = dict(app_row) if hasattr(app_row, "keys") else (dict(zip([d[0] for d in cur.description], app_row)) if app_row and cur.description else None)
+
+    if app:
+        status = app.get("status", "pending")
+        if status == "pending":
+            conn.close()
+            raise HTTPException(
+                status_code=403,
+                detail=f"Your institution registration application ({app['id']}) is currently under review by AICTE officers. Login will be enabled once your registration is officially approved."
+            )
+        elif status == "rejected":
+            conn.close()
+            reason = app.get("rejection_reason") or "Application did not meet regulatory requirements."
+            raise HTTPException(
+                status_code=403,
+                detail=f"Registration application was rejected by reviewing officers. Reason: {reason}"
+            )
+        elif status == "approved":
+            stored_hash = app.get("password_hash")
+            pw_match = False
+            if stored_hash and role_service.verify_password(stored_hash, clean_password):
+                pw_match = True
+
+            # Also check users table
+            cur.execute("""
+                SELECT u.*, r.key as role_key, r.display_name as role_name
+                FROM users u
+                LEFT JOIN user_assignments ua ON u.id = ua.user_id AND ua.status = 'active'
+                LEFT JOIN roles r ON ua.role_id = r.id
+                WHERE LOWER(u.normalized_email) = %s
+            """, (app["official_email"].lower(),))
+            user_row = cur.fetchone()
+            user = dict(user_row) if hasattr(user_row, "keys") else (dict(zip([d[0] for d in cur.description], user_row)) if user_row and cur.description else None)
+
+            if user and not pw_match:
+                if role_service.verify_password(user.get("password_hash"), clean_password):
+                    pw_match = True
+
+            if not pw_match:
+                conn.close()
+                raise HTTPException(status_code=401, detail="Invalid institutional email or password.")
+
+            # Fetch authoritative institution profile
+            aicte_pid = app.get("created_institution_pid")
+            cur.execute("""
+                SELECT * FROM aicte_institutions
+                WHERE aicte_pid = %s OR LOWER(contact_email) = %s
+                LIMIT 1
+            """, (aicte_pid, app["official_email"].lower()))
+            inst_row = cur.fetchone()
+            inst = dict(inst_row) if hasattr(inst_row, "keys") else (dict(zip([d[0] for d in cur.description], inst_row)) if inst_row and cur.description else None)
+            conn.close()
+
+            user_id = user["id"] if user else (app.get("applicant_user_id") or app["id"])
+            token_payload = {
+                "id": user_id,
+                "email": app["official_email"].lower(),
+                "name": app.get("rep_name") or app["institution_name"],
+                "role": "institution",
+                "status": "active",
+                "institution": inst.get("institution_name") if inst else app["institution_name"],
+            }
+            jwt_token = auth.create_jwt(token_payload)
+
+            return {
+                "ok": True,
+                "token": jwt_token,
+                "institution": {
+                    "aicte_pid": inst.get("aicte_pid") if inst else (aicte_pid or "APPROVED"),
+                    "institution_name": inst.get("institution_name") if inst else app["institution_name"],
+                    "official_email": app["official_email"].lower(),
+                    "contact_phone": app.get("contact_phone") or (inst.get("contact_phone") if inst else ""),
+                    "state": app.get("state") or (inst.get("state") if inst else ""),
+                    "region": app.get("region") or (inst.get("region") if inst else ""),
+                    "approval_status": inst.get("approval_status") if inst else "AICTE Approved (Registered via VigilOS)",
+                    "application_id": app["id"],
+                },
+                "user": token_payload,
+            }
+
+    # 2. Check directly in aicte_institutions and users (fallback for existing seeded colleges)
+    cur.execute("""
+        SELECT * FROM aicte_institutions
+        WHERE LOWER(contact_email) = %s OR LOWER(aicte_pid) = %s
+        LIMIT 1
+    """, (clean_email, clean_email))
+    inst_row = cur.fetchone()
+    inst = dict(inst_row) if hasattr(inst_row, "keys") else (dict(zip([d[0] for d in cur.description], inst_row)) if inst_row and cur.description else None)
+
+    if inst:
+        cur.execute("SELECT * FROM users WHERE LOWER(normalized_email) = %s", (inst["contact_email"].lower(),))
+        user_row = cur.fetchone()
+        user = dict(user_row) if hasattr(user_row, "keys") else (dict(zip([d[0] for d in cur.description], user_row)) if user_row and cur.description else None)
+        conn.close()
+
+        if user and role_service.verify_password(user.get("password_hash"), clean_password):
+            token_payload = {
+                "id": user["id"],
+                "email": inst["contact_email"].lower(),
+                "name": inst.get("principal_name") or inst["institution_name"],
+                "role": "institution",
+                "status": "active",
+                "institution": inst["institution_name"],
+            }
+            jwt_token = auth.create_jwt(token_payload)
+            return {
+                "ok": True,
+                "token": jwt_token,
+                "institution": {
+                    "aicte_pid": inst["aicte_pid"],
+                    "institution_name": inst["institution_name"],
+                    "official_email": inst["contact_email"].lower(),
+                    "contact_phone": inst.get("contact_phone"),
+                    "state": inst.get("state"),
+                    "region": inst.get("region"),
+                    "approval_status": inst.get("approval_status"),
+                },
+                "user": token_payload,
+            }
+        raise HTTPException(status_code=401, detail="Invalid institutional email or password.")
+
+    conn.close()
+    raise HTTPException(
+        status_code=404,
+        detail="No registered institution found for this email address. Please submit an institution registration first."
+    )
+
+@app.post("/api/institution/register")
+def register_institution_endpoint(
+    body: InstitutionRegisterPayload,
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Public or authenticated self-registration endpoint for institutions.
+    Stores application in PostgreSQL, notifies authorized officers.
+    Does NOT create an approved institution record at registration time.
+    """
+    if not body.institution_name or not body.institution_name.strip():
+        raise HTTPException(status_code=400, detail="Official institution name is required.")
+    if not body.official_email or not body.official_email.strip() or "@" not in body.official_email:
+        raise HTTPException(status_code=400, detail="Valid official institutional email address is required.")
+    if not body.declaration_accepted:
+        raise HTTPException(status_code=400, detail="You must accept the legal declaration confirming accuracy.")
+
+    applicant_user_id = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+        try:
+            secret = os.getenv("JWT_SECRET") or "vigilos_rbac_sqlite_jwt_secret_token_key_2026_super_secure"
+            payload = jwt.decode(token, secret, algorithms=["HS256"])
+            applicant_user_id = payload.get("id")
+        except Exception:
+            user_stored = _token_store.get(token)
+            if user_stored:
+                applicant_user_id = user_stored.get("id")
+
+    try:
+        app_record = institution_registration_service.submit_registration(
+            applicant_user_id=applicant_user_id,
+            institution_name=body.institution_name.strip(),
+            aicte_code=body.aicte_code.strip() if body.aicte_code else None,
+            inst_type=body.inst_type or "Engineering College",
+            affiliation=body.affiliation,
+            address=body.address,
+            city=body.city,
+            district=body.district,
+            state=body.state,
+            region=body.region,
+            official_email=body.official_email.strip().lower(),
+            contact_phone=body.contact_phone,
+            rep_name=body.rep_name,
+            rep_designation=body.rep_designation,
+            rep_email=body.rep_email,
+            rep_phone=body.rep_phone,
+            website=body.website,
+            documents=body.documents or [],
+            declaration_accepted=body.declaration_accepted,
+            idempotency_key=body.idempotency_key,
+            password=body.password,
+        )
+
+        app_id = app_record["id"]
+
+        # Notify authorized officers on existing Notifications system
+        for oid in institution_registration_service.get_officer_user_ids():
+            institution_registration_service.create_notification(
+                recipient_user_id=oid,
+                notif_type="institution_registration",
+                title=f"New Institution Registration: {app_record['institution_name']}",
+                body=f"Application {app_id} received from {app_record['institution_name']} ({app_record.get('region', 'HQ')}). Status: Pending Approval.",
+                action_url=f"/cases?tab=registrations&app_id={app_id}",
+                reference_id=app_id,
+                idempotency_key=f"notif_{app_id}_{oid}",
+            )
+
+        return {
+            "ok": True,
+            "application_id": app_id,
+            "message": "Registration application submitted successfully. AICTE regulatory officers have been notified.",
+            "application": app_record,
+        }
+    except ValueError as ve:
+        raise HTTPException(status_code=409, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/institution/registration/status")
+def get_my_registration_status(user: dict = Depends(_get_current_user)):
+    """Check current user's registration application status."""
+    app_record = institution_registration_service.get_my_registration(user["id"])
+    if not app_record and user.get("email"):
+        conn = db.get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM institution_registrations WHERE LOWER(official_email) = LOWER(%s) ORDER BY submitted_at DESC LIMIT 1",
+            (user["email"],)
+        )
+        row = cur.fetchone()
+        conn.close()
+        if row:
+            app_record = institution_registration_service._row_to_dict(cur, row)
+
+    if not app_record:
+        return {"status": "none", "application": None}
+    return {"status": app_record["status"], "application": app_record}
+
+
+# ── Institution Portal Dedicated Endpoints ─────────────────────────
+
+class InstitutionProfileUpdatePayload(BaseModel):
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    website: Optional[str] = None
+    principal_name: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    district: Optional[str] = None
+    state: Optional[str] = None
+    region: Optional[str] = None
+
+
+@app.get("/api/institution/portal-context")
+def get_institution_portal_context_endpoint(
+    authorization: Optional[str] = Header(None)
+):
+    """
+    Authoritative state for the complete Institution Portal website.
+    Resolves verification status, registration application history,
+    official AICTE portfolio profile, case statistics, and notifications.
+    """
+    user_id = None
+    user_email = None
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1]
+        try:
+            u = auth.verify_token(token)
+            if u:
+                user_id = u.get("id")
+                user_email = u.get("email")
+        except Exception:
+            pass
+    return institution_registration_service.get_portal_context(user_id=user_id, email=user_email)
+
+
+@app.get("/api/institution/profile")
+def get_my_institution_profile(user: dict = Depends(_get_current_user)):
+    """Fetch stored AICTE profile for the current authenticated institution."""
+    ctx = institution_registration_service.get_portal_context(user_id=user["id"], email=user.get("email"))
+    profile = ctx.get("profile")
+    if not profile:
+        raise HTTPException(status_code=404, detail="No official institution profile found for this account.")
+    return profile
+
+
+@app.put("/api/institution/profile")
+def update_my_institution_profile(
+    body: InstitutionProfileUpdatePayload,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Save updates to permitted profile fields for the authenticated institution.
+    Persists changes directly into PostgreSQL.
+    """
+    ctx = institution_registration_service.get_portal_context(user_id=user["id"], email=user.get("email"))
+    profile = ctx.get("profile")
+    if not profile or not profile.get("aicte_pid"):
+        raise HTTPException(
+            status_code=403,
+            detail="Institution profile is not yet approved or verified. Updates are not permitted."
+        )
+
+    pid = profile["aicte_pid"]
+    updates = {k: v for k, v in body.dict().items() if v is not None}
+    try:
+        updated = institution_registration_service.update_institution_profile(pid, updates)
+        return {
+            "ok": True,
+            "message": "Institution profile successfully updated in PostgreSQL.",
+            "institution": updated,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/institution/my-complaints")
+def get_my_institution_complaints(
+    status: Optional[str] = "all",
+    search: Optional[str] = None,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Fetch complaints belonging strictly to the authenticated institution.
+    Enforces isolation: pending or rejected accounts cannot access proceedings.
+    """
+    ctx = institution_registration_service.get_portal_context(user_id=user["id"], email=user.get("email"))
+    reg_status = ctx.get("status")
+    profile = ctx.get("profile")
+    target_pid = profile.get("aicte_pid") if profile else None
+
+    if reg_status in ("pending", "rejected", "unregistered") and not target_pid:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Institution registration is {reg_status}. Only approved institutions have access to proceedings."
+        )
+
+    effective_status = None if status == "all" else status
+    cases = db.list_aicte_cases(
+        status=effective_status,
+        aicte_pid=target_pid,
+        limit=200,
+    )
+    if search:
+        s = search.lower()
+        cases = [
+            c for c in cases
+            if s in (c.get("case_id", "") + c.get("title", "") + c.get("category", "") + c.get("description", "")).lower()
+        ]
+    return cases
+
+
+
+@app.get("/api/institution/registrations")
+def list_institution_registrations(
+    status: Optional[str] = "all",
+    search: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    List institution registration applications with filters.
+    Officer access only (super_admin, bureau_head, approval_officer or cases:manage permission).
+    """
+    user_role = user.get("role", "")
+    if user_role not in ("super_admin", "bureau_head", "approval_officer"):
+        if not role_service.has_permission(user, "cases:manage"):
+            raise HTTPException(status_code=403, detail="Officer privileges required to access registration queue.")
+
+    return institution_registration_service.list_registrations(
+        status=status,
+        search=search,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@app.get("/api/institution/registrations/{app_id}")
+def get_institution_registration_detail(
+    app_id: str,
+    user: Optional[dict] = Depends(_get_optional_user),
+):
+    """Fetch complete detail of a registration application."""
+    app_record = institution_registration_service.get_registration(app_id)
+    if not app_record:
+        raise HTTPException(status_code=404, detail=f"Registration application '{app_id}' not found.")
+
+    # Remove password_hash for security
+    app_record.pop("password_hash", None)
+
+    if user:
+        user_role = user.get("role", "")
+        is_officer = user_role in ("super_admin", "bureau_head", "approval_officer") or role_service.has_permission(user, "cases:manage")
+        is_owner = (
+            app_record.get("applicant_user_id") == user.get("id") or
+            app_record.get("official_email", "").lower() == user.get("email", "").lower()
+        )
+        if is_officer or is_owner:
+            return app_record
+
+    # Public tracking view
+    return {
+        "id": app_record["id"],
+        "institution_name": app_record["institution_name"],
+        "official_email": app_record["official_email"],
+        "status": app_record["status"],
+        "submitted_at": app_record["submitted_at"],
+        "created_institution_pid": app_record.get("created_institution_pid"),
+        "rejection_reason": app_record.get("rejection_reason"),
+    }
+
+
+class ApproveRegistrationPayload(BaseModel):
+    notes: Optional[str] = "Approved by reviewing officer"
+
+@app.post("/api/institution/registrations/{app_id}/approve")
+def approve_registration_endpoint(
+    app_id: str,
+    body: Optional[ApproveRegistrationPayload] = None,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Approve an institution registration application.
+    Transactional: creates aicte_institutions record, links accounts, records reviewer,
+    creates persistent applicant notification, and queues/sends confirmation email.
+    Officer-only.
+    """
+    user_role = user.get("role", "")
+    if user_role not in ("super_admin", "bureau_head", "approval_officer"):
+        if not role_service.has_permission(user, "cases:manage"):
+            raise HTTPException(status_code=403, detail="Officer authorization required for approval.")
+
+    notes = body.notes if body else "Approved by reviewing officer"
+    try:
+        updated_app = institution_registration_service.approve_registration(
+            app_id=app_id,
+            reviewer_id=user["id"],
+            review_notes=notes,
+        )
+
+        email_sent = institution_registration_service.send_registration_decision_email(
+            app=updated_app,
+            decision="approved",
+        )
+        updated_app["email_dispatched"] = email_sent
+
+        return {
+            "ok": True,
+            "message": f"Institution {updated_app['institution_name']} approved successfully.",
+            "application": updated_app,
+        }
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class RejectRegistrationPayload(BaseModel):
+    reason: str
+    notes: Optional[str] = ""
+
+@app.delete("/api/institution/registrations/{app_id}")
+def delete_registration_endpoint(
+    app_id: str,
+    user: dict = Depends(_get_current_user),
+):
+    """Permanently delete an institution registration from the queue (Admin only)."""
+    user_role = user.get("role", "")
+    if user_role not in ("super_admin", "bureau_head", "approval_officer"):
+        raise HTTPException(status_code=403, detail="Unauthorized: Only administrators and review officers can delete registrations.")
+
+    deleted = institution_registration_service.delete_registration(app_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Registration application not found.")
+
+    db.add_audit(
+        session_id="system",
+        actor_role=user_role,
+        action="REGISTRATION_DELETED",
+        target=app_id,
+        result=f"Application {app_id} deleted by {user.get('name', 'Admin')}",
+    )
+    return {"ok": True, "message": f"Registration {app_id} deleted successfully."}
+
+
+@app.post("/api/institution/registrations/{app_id}/reject")
+def reject_registration_endpoint(
+    app_id: str,
+    body: RejectRegistrationPayload,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Reject an institution registration application.
+    Requires clear rejection reason, records audit trail, sends notification email.
+    Officer-only.
+    """
+    user_role = user.get("role", "")
+    if user_role not in ("super_admin", "bureau_head", "approval_officer"):
+        if not role_service.has_permission(user, "cases:manage"):
+            raise HTTPException(status_code=403, detail="Officer authorization required for rejection.")
+
+    if not body.reason or not body.reason.strip():
+        raise HTTPException(status_code=400, detail="Rejection reason is required.")
+
+    try:
+        updated_app = institution_registration_service.reject_registration(
+            app_id=app_id,
+            reviewer_id=user["id"],
+            reason=body.reason.strip(),
+            review_notes=body.notes or "",
+        )
+
+        email_sent = institution_registration_service.send_registration_decision_email(
+            app=updated_app,
+            decision="rejected",
+            reason=body.reason.strip(),
+        )
+        updated_app["email_dispatched"] = email_sent
+
+        return {
+            "ok": True,
+            "message": f"Registration {app_id} rejected.",
+            "application": updated_app,
+        }
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ═══════════════════════════════════════════════════════════════
+# PERSISTENT NOTIFICATIONS SYSTEM
+# ═══════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════
+# COMPLAINT PORTAL STATIC ROUTING (NO BACKEND DISRUPTION)
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/complaint-portal.html")
+@app.get("/complaint-portal")
+def get_complaint_portal():
+    path = os.path.join(os.path.dirname(__file__), "public", "complaint-portal.html")
+    if os.path.exists(path):
+        return FileResponse(path, media_type="text/html")
+    raise HTTPException(status_code=404, detail="complaint-portal.html not found")
+
+@app.get("/institution-registration.html")
+@app.get("/institution-portal.html")
+def get_legacy_institution_portal():
+    path = os.path.join(os.path.dirname(__file__), "public", "complaint-portal.html")
+    if os.path.exists(path):
+        return FileResponse(path, media_type="text/html")
+    raise HTTPException(status_code=404, detail="Portal file not found")
+
+
+# ═══════════════════════════════════════════════════════════════
+# PERSISTENT NOTIFICATIONS SYSTEM (DATABASE-BACKED)
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/notifications")
+def get_user_notifications(
+    unread_only: bool = False,
+    user: dict = Depends(_get_current_user),
+):
+    """Return persistent database notifications. Admins receive all portal notifications."""
+    user_role = (user.get("role") or user.get("role_key") or "").lower()
+    is_admin = user_role in ("super_admin", "admin", "bureau_head")
+    notifs = institution_registration_service.get_notifications(
+        user_id=user["id"],
+        unread_only=unread_only,
+        is_admin=is_admin,
+    )
+    return notifs
+
+
+@app.patch("/api/notifications/{notif_id}/read")
+def mark_notification_as_read(
+    notif_id: str,
+    user: dict = Depends(_get_current_user),
+):
+    """Mark a single notification as read."""
+    user_role = (user.get("role") or user.get("role_key") or "").lower()
+    is_admin = user_role in ("super_admin", "admin", "bureau_head")
+    ok = institution_registration_service.mark_notification_read(notif_id, user["id"], is_admin=is_admin)
+    return {"ok": ok}
+
+
+@app.patch("/api/notifications/read-all")
+def mark_all_notifications_as_read(
+    user: dict = Depends(_get_current_user),
+):
+    """Mark all notifications as read."""
+    user_role = (user.get("role") or user.get("role_key") or "").lower()
+    is_admin = user_role in ("super_admin", "admin", "bureau_head")
+    count = institution_registration_service.mark_all_notifications_read(user["id"], is_admin=is_admin)
+    return {"ok": True, "marked_count": count}
+
+
+@app.get("/api/notifications/unread-count")
+def get_unread_notifications_count(
+    user: dict = Depends(_get_current_user),
+):
+    """Get count of unread notifications from database."""
+    user_role = (user.get("role") or user.get("role_key") or "").lower()
+    is_admin = user_role in ("super_admin", "admin", "bureau_head")
+    count = institution_registration_service.get_unread_notification_count(user["id"], is_admin=is_admin)
+    return {"unread_count": count}
+
+
+@app.delete("/api/notifications/{notif_id}")
+def delete_notification_endpoint(
+    notif_id: str,
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Delete a persistent database notification from PostgreSQL.
+    Admins (super_admin, admin, bureau_head) have full permission to delete any notification.
+    """
+    user_role = (user.get("role") or user.get("role_key") or "").lower()
+    is_admin = user_role in ("super_admin", "admin", "bureau_head")
+
+    ok = institution_registration_service.delete_notification(
+        notif_id=notif_id,
+        user_id=user["id"],
+        is_admin=is_admin,
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Notification not found or access denied")
+
+    db.add_audit(
+        session_id="system",
+        actor_role=user_role,
+        action="NOTIFICATION_DELETED",
+        target=notif_id,
+        result=f"Notification {notif_id} permanently deleted by {user.get('name', 'Admin')}",
+    )
+    return {"ok": True, "message": "Notification deleted successfully from database."}
+
+
+@app.delete("/api/notifications")
+def delete_all_notifications_endpoint(
+    user: dict = Depends(_get_current_user),
+):
+    """
+    Delete all notifications from database.
+    Restricted strictly to Administrator roles.
+    """
+    user_role = (user.get("role") or user.get("role_key") or "").lower()
+    is_admin = user_role in ("super_admin", "admin", "bureau_head")
+    if not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: Only Administrators can bulk-delete notifications."
+        )
+
+    count = institution_registration_service.delete_all_notifications(
+        user_id=user["id"],
+        is_admin=True,
+    )
+
+    db.add_audit(
+        session_id="system",
+        actor_role=user_role,
+        action="NOTIFICATIONS_BULK_DELETED",
+        target="all",
+        result=f"{count} notifications permanently deleted by {user.get('name', 'Admin')}",
+    )
+    return {"ok": True, "deleted_count": count, "message": f"{count} notifications permanently removed from database."}
+
 
 
 # ═══════════════════════════════════════════════════════════════

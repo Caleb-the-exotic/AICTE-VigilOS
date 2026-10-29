@@ -426,7 +426,172 @@ export const api = {
     request<{ ok: boolean; message?: string }>(`/api/aicte/cases/${caseId}`, {
       method: "DELETE",
     }),
+  linkCases: (caseIds: string[], note?: string) =>
+    request<{ ok: boolean; message: string; linked_case_ids: string[]; parent_case_ids: string[] }>("/api/aicte/cases/link", {
+      method: "POST",
+      body: JSON.stringify({ case_ids: caseIds, note }),
+    }),
+  unlinkCases: (caseIds: string[]) =>
+    request<{ ok: boolean; message: string }>("/api/aicte/cases/unlink", {
+      method: "POST",
+      body: JSON.stringify({ case_ids: caseIds }),
+    }),
+
+  // ===== Institution Registration & Approval =====
+  registerInstitution: (data: InstitutionRegistrationPayload) =>
+    request<{ ok: boolean; application_id: string; message: string; application: InstitutionRegistrationRecord }>(
+      "/api/institution/register",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    ),
+
+  getMyRegistrationStatus: () =>
+    request<{ status: "none" | "pending" | "approved" | "rejected"; application: InstitutionRegistrationRecord | null }>(
+      "/api/institution/registration/status"
+    ),
+
+  getInstitutionRegistrations: (params?: { status?: string; search?: string; page?: number; page_size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.status && params.status !== "all") q.set("status", params.status);
+    if (params?.search) q.set("search", params.search);
+    if (params?.page) q.set("page", String(params.page));
+    if (params?.page_size) q.set("page_size", String(params.page_size));
+    const qs = q.toString() ? `?${q.toString()}` : "";
+    return request<{ total: number; page: number; page_size: number; items: InstitutionRegistrationRecord[] }>(
+      `/api/institution/registrations${qs}`
+    );
+  },
+
+  getInstitutionRegistrationDetail: (appId: string) =>
+    request<InstitutionRegistrationRecord>(`/api/institution/registrations/${appId}`),
+
+  approveInstitutionRegistration: (appId: string, notes?: string) =>
+    request<{ ok: boolean; message: string; application: InstitutionRegistrationRecord }>(
+      `/api/institution/registrations/${appId}/approve`,
+      {
+        method: "POST",
+        body: JSON.stringify({ notes }),
+      }
+    ),
+
+  rejectInstitutionRegistration: (appId: string, reason: string, notes?: string) =>
+    request<{ ok: boolean; message: string; application: InstitutionRegistrationRecord }>(
+      `/api/institution/registrations/${appId}/reject`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reason, notes }),
+      }
+    ),
+
+  deleteInstitutionRegistration: (appId: string) =>
+    request<{ ok: boolean; message: string }>(
+      `/api/institution/registrations/${appId}`,
+      {
+        method: "DELETE",
+      }
+    ),
+
+  // ===== Notifications =====
+  getNotifications: (unreadOnly = false) =>
+    request<OfficerNotification[]>(`/api/notifications${unreadOnly ? "?unread_only=true" : ""}`),
+
+  markNotificationRead: (id: string) =>
+    request<{ ok: boolean }>(`/api/notifications/${id}/read`, {
+      method: "PATCH",
+    }),
+
+  markAllNotificationsRead: () =>
+    request<{ ok: boolean; marked_count: number }>("/api/notifications/read-all", {
+      method: "PATCH",
+    }),
+
+  getUnreadNotificationsCount: () =>
+    request<{ unread_count: number }>("/api/notifications/unread-count"),
+
+  deleteNotification: (id: string) =>
+    request<{ ok: boolean; message: string }>(`/api/notifications/${id}`, {
+      method: "DELETE",
+    }),
+
+  deleteAllNotifications: () =>
+    request<{ ok: boolean; deleted_count: number; message: string }>("/api/notifications", {
+      method: "DELETE",
+    }),
 };
+
+// ===== Registration & Notification Types =====
+export interface InstitutionRegistrationPayload {
+  institution_name: string;
+  aicte_code?: string;
+  inst_type?: string;
+  affiliation?: string;
+  address?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  region?: string;
+  official_email: string;
+  contact_phone?: string;
+  rep_name?: string;
+  rep_designation?: string;
+  rep_email?: string;
+  rep_phone?: string;
+  website?: string;
+  documents?: Array<{ name: string; url: string; type?: string }>;
+  declaration_accepted: boolean;
+  idempotency_key?: string;
+}
+
+export interface InstitutionRegistrationRecord {
+  id: string;
+  applicant_user_id?: string;
+  institution_name: string;
+  aicte_code?: string;
+  inst_type?: string;
+  affiliation?: string;
+  address?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  region?: string;
+  official_email: string;
+  contact_phone?: string;
+  rep_name?: string;
+  rep_designation?: string;
+  rep_email?: string;
+  rep_phone?: string;
+  website?: string;
+  documents_json?: string;
+  declaration_accepted: number | boolean;
+  status: "pending" | "approved" | "rejected";
+  reviewer_id?: string;
+  reviewer_name?: string;
+  reviewed_at?: string;
+  review_notes?: string;
+  rejection_reason?: string;
+  status_history_json?: string;
+  submitted_at: string;
+  updated_at: string;
+  created_institution_pid?: string;
+  email_sent_at?: string;
+  email_status?: string;
+  applicant_name?: string;
+  applicant_email?: string;
+}
+
+export interface OfficerNotification {
+  id: string;
+  recipient_user_id: string;
+  type: string;
+  title: string;
+  body: string;
+  action_url?: string;
+  reference_id?: string;
+  is_read: number;
+  created_at: string;
+}
 
 // ===== Types =====
 export interface InstitutionProfile {

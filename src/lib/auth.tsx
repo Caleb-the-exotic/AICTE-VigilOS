@@ -55,6 +55,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .then((verifiedUser) => {
           if (!isMounted) return;
           if (verifiedUser && verifiedUser.status === "active") {
+            const roleKey = ((verifiedUser as any).role_key || verifiedUser.role || "").toLowerCase();
+            if (roleKey === "citizen" || roleKey === "institution") {
+              // Block citizens from officer portal sessions
+              localStorage.removeItem(STORAGE_USER);
+              localStorage.removeItem(STORAGE_TOKEN);
+              setUser(null);
+              return;
+            }
             setUser(verifiedUser);
             localStorage.setItem(STORAGE_USER, JSON.stringify(verifiedUser));
           } else {

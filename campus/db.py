@@ -26,7 +26,7 @@ _POOL = None
 def get_pool():
     global _POOL
     if _POOL is None:
-        db_url = os.getenv("DATABASE_URL") or "postgresql://postgres@localhost:5433/campusflow"
+        db_url = os.getenv("DATABASE_URL") or "postgresql://postgres:postgres@localhost:5432/campusflow"
         if db_url.startswith("postgres://"):
             db_url = "postgresql://" + db_url[len("postgres://"):]
         try:
@@ -857,10 +857,32 @@ def upsert_institution(aicte_pid: str, institution_name: str, region: str, state
 
 
 def delete_institution(aicte_pid: str) -> bool:
-    """Delete an institution from aicte_institutions."""
+    """
+    Cascade delete an institution from aicte_institutions and clean up dependencies:
+    - aicte_overlap_alerts referencing aicte_pid
+    - aicte_cases referencing aicte_pid
+    - institution_registrations referencing aicte_pid
+    - users affiliated with this institution
+    """
     conn = get_conn()
     with conn:
-        conn.execute("DELETE FROM aicte_institutions WHERE aicte_pid=?", (aicte_pid,))
+        row = conn.execute("SELECT institution_name FROM aicte_institutions WHERE aicte_pid = ?", (aicte_pid,)).fetchone()
+        inst_name = row["institution_name"] if row and hasattr(row, "keys") else (row[0] if row else None)
+
+        conn.execute("DELETE FROM aicte_overlap_alerts WHERE aicte_pid = ?", (aicte_pid,))
+        conn.execute("DELETE FROM aicte_cases WHERE aicte_pid = ?", (aicte_pid,))
+        conn.execute("""
+            UPDATE institution_registrations
+            SET created_institution_pid = NULL,
+                status = 'rejected',
+                rejection_reason = 'Institution record deleted by administrator'
+            WHERE created_institution_pid = ?
+        """, (aicte_pid,))
+
+        if inst_name:
+            conn.execute("UPDATE users SET institution = NULL WHERE LOWER(institution) = LOWER(?)", (inst_name,))
+
+        conn.execute("DELETE FROM aicte_institutions WHERE aicte_pid = ?", (aicte_pid,))
     conn.close()
     return True
 
@@ -936,8 +958,11 @@ def list_aicte_cases(bureau: str = None, status: str = None, aicte_pid: str = No
         clauses.append("UPPER(bureau)=UPPER(?)")
         params.append(bureau.strip())
     if status:
-        clauses.append("status=?")
-        params.append(status)
+        if status.strip().lower() == "breached":
+            clauses.append("status != 'disposed'")
+        else:
+            clauses.append("status=?")
+            params.append(status)
     if aicte_pid:
         clauses.append("aicte_pid=?")
         params.append(aicte_pid)
@@ -991,6 +1016,8 @@ def list_aicte_cases(bureau: str = None, status: str = None, aicte_pid: str = No
         else:
             c["sla_breached"] = False
 
+    if status and status.strip().lower() == "breached":
+        cases = [c for c in cases if c.get("status") == "breached" or (c.get("ageing_days") or 0) > 30 or c.get("sla_breached")]
     return cases
 
 
@@ -1097,12 +1124,12 @@ def get_overlap_cases() -> list[dict]:
     conn = get_conn()
     rows = conn.execute("""
         SELECT aicte_pid, institution_name, region,
-               GROUP_CONCAT(DISTINCT bureau) as bureaus,
+               string_agg(DISTINCT bureau, ',') as bureaus,
                COUNT(*) as total_cases
         FROM aicte_cases
         WHERE status NOT IN ('disposed')
-        GROUP BY aicte_pid
-        HAVING bureaus LIKE '%RB%' AND bureaus LIKE '%PGRC%'
+        GROUP BY aicte_pid, institution_name, region
+        HAVING string_agg(DISTINCT bureau, ',') LIKE '%RB%' AND string_agg(DISTINCT bureau, ',') LIKE '%PGRC%'
         ORDER BY total_cases DESC
     """).fetchall()
     conn.close()
@@ -1167,10 +1194,15 @@ def get_case_kpis() -> dict:
         "SELECT COUNT(*) FROM aicte_cases WHERE sla_deadline < ? AND status NOT IN ('disposed')", (now,)
     ).fetchone()[0]
     overlaps = conn.execute("""
-        SELECT COUNT(DISTINCT aicte_pid) FROM aicte_cases
-        WHERE status NOT IN ('disposed')
-        GROUP BY aicte_pid
-        HAVING GROUP_CONCAT(DISTINCT bureau) LIKE '%RB%' AND GROUP_CONCAT(DISTINCT bureau) LIKE '%PGRC%'
+        SELECT COUNT(*) FROM (
+            SELECT aicte_pid
+            FROM aicte_cases
+            WHERE status NOT IN ('disposed')
+            GROUP BY aicte_pid
+            HAVING 'RB' = ANY(array_agg(bureau)) 
+               AND 'PGRC' = ANY(array_agg(bureau))
+               AND NOT ('[]' != ALL(array_agg(COALESCE(linked_case_ids, '[]'))))
+        ) sub
     """).fetchone()
     overlap_count = overlaps[0] if overlaps else 0
 

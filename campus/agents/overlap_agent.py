@@ -75,7 +75,7 @@ class OverlapAgent:
     RB and PGRC are taking parallel action on the same institution issue.
     """
 
-    def __init__(self, client=None, model: str = "llama-3.3-70b-versatile"):
+    def __init__(self, client=None, model: str = "openai/gpt-oss-120b"):
         self.client = client
         self.model = model
 

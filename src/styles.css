@@ -458,3 +458,249 @@
   main { padding: 0 !important; }
   a { color: black !important; text-decoration: none !important; }
 }
+
+/* ============================================================
+   Authoritative Light Mode Accessibility & High Contrast Rules
+   ============================================================ */
+
+html.light,
+.light {
+  color-scheme: light;
+}
+
+html.light body,
+.light body,
+body.light {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+  background-image:
+    radial-gradient(1200px 600px at 10% -10%, color-mix(in oklab, var(--primary) 7%, transparent), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, color-mix(in oklab, var(--primary) 5%, transparent), transparent 65%),
+    linear-gradient(180deg, #f8fafc, #f1f5f9) !important;
+}
+
+/* Glass cards in Light Mode */
+.light .glass-card,
+html.light .glass-card {
+  background: rgba(255, 255, 255, 0.94) !important;
+  border-color: rgba(226, 232, 240, 0.95) !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03) !important;
+  color: #0f172a !important;
+}
+
+.light .glass-card::before,
+html.light .glass-card::before {
+  display: none !important;
+}
+
+/* Text overrides in Light Mode - High contrast & readable */
+.light .text-white\!,
+html.light .text-white\!,
+.light [class*="text-white!"],
+html.light [class*="text-white!"] {
+  color: #ffffff !important;
+}
+
+/* Ensure overlay badges on dark image cards (like institution profiles) remain clearly white */
+.light .relative .bg-black\/75,
+html.light .relative .bg-black\/75,
+.light .relative .bg-neutral-900\/90,
+html.light .relative .bg-neutral-900\/90 {
+  background-color: rgba(15, 23, 42, 0.88) !important;
+  color: #ffffff !important;
+}
+
+.light .text-white,
+html.light .text-white {
+  color: #0f172a !important;
+}
+.light .text-white\/95,
+html.light .text-white\/95,
+.light .text-white\/90,
+html.light .text-white\/90,
+.light .text-white\/80,
+html.light .text-white\/80 {
+  color: #1e293b !important;
+}
+.light .text-white\/70,
+html.light .text-white\/70,
+.light .text-white\/60,
+html.light .text-white\/60 {
+  color: #334155 !important;
+}
+.light .text-white\/50,
+html.light .text-white\/50,
+.light .text-white\/40,
+html.light .text-white\/40,
+.light .text-white\/30,
+html.light .text-white\/30,
+.light .text-white\/25,
+html.light .text-white\/25,
+.light .text-white\/20,
+html.light .text-white\/20 {
+  color: #64748b !important;
+}
+
+/* Retain pure white text strictly on solid action buttons & solid red badges (NOT tint backgrounds like bg-primary/10) */
+.light .bg-primary,
+.light .bg-primary *,
+.light button.bg-primary,
+.light button.bg-primary *,
+.light .bg-red-600,
+.light .bg-red-600 *,
+.light .text-primary-foreground,
+html.light .bg-primary,
+html.light .bg-primary *,
+html.light button.bg-primary,
+html.light button.bg-primary *,
+html.light .bg-red-600,
+html.light .bg-red-600 *,
+html.light .text-primary-foreground {
+  color: #ffffff !important;
+}
+
+/* Fix active navbar and tinted link texts in Light Mode */
+.light aside .text-primary,
+html.light aside .text-primary,
+.light aside a.text-primary,
+html.light aside a.text-primary,
+.light aside a.text-primary span,
+html.light aside a.text-primary span {
+  color: #b91c1c !important; /* Rich crimson that is deep, clear, and readable on light backgrounds */
+}
+
+/* Metric summary chips in Light Mode */
+.light .bg-red-500\/10,
+html.light .bg-red-500\/10 {
+  background-color: #fef2f2 !important;
+  border-color: #fca5a5 !important;
+  color: #991b1b !important;
+}
+.light .bg-amber-500\/10,
+html.light .bg-amber-500\/10 {
+  background-color: #fffbeb !important;
+  border-color: #fcd34d !important;
+  color: #92400e !important;
+}
+.light .bg-blue-500\/10,
+html.light .bg-blue-500\/10 {
+  background-color: #eff6ff !important;
+  border-color: #93c5fd !important;
+  color: #1e40af !important;
+}
+.light .bg-emerald-500\/10,
+html.light .bg-emerald-500\/10 {
+  background-color: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+  color: #065f46 !important;
+}
+.light .bg-purple-500\/10,
+html.light .bg-purple-500\/10 {
+  background-color: #faf5ff !important;
+  border-color: #d8b4fe !important;
+  color: #6b21a8 !important;
+}
+
+/* User table role pill badges in Light Mode */
+.light .bg-red-500\/15,
+html.light .bg-red-500\/15 {
+  background-color: #fef2f2 !important;
+  border-color: #fca5a5 !important;
+  color: #b91c1c !important;
+}
+.light .bg-amber-500\/15,
+html.light .bg-amber-500\/15 {
+  background-color: #fffbeb !important;
+  border-color: #fcd34d !important;
+  color: #b45309 !important;
+}
+.light .bg-blue-500\/15,
+html.light .bg-blue-500\/15 {
+  background-color: #eff6ff !important;
+  border-color: #93c5fd !important;
+  color: #1d4ed8 !important;
+}
+.light .bg-emerald-500\/15,
+html.light .bg-emerald-500\/15 {
+  background-color: #ecfdf5 !important;
+  border-color: #6ee7b7 !important;
+  color: #047857 !important;
+}
+.light .bg-purple-500\/15,
+html.light .bg-purple-500\/15 {
+  background-color: #faf5ff !important;
+  border-color: #d8b4fe !important;
+  color: #7e22ce !important;
+}
+
+/* Modal and dialogs */
+.light .bg-neutral-950,
+.light .bg-neutral-950\/90,
+.light .bg-neutral-950\/80,
+.light .bg-neutral-900,
+.light .bg-neutral-900\/95,
+.light .bg-neutral-900\/90,
+.light .bg-neutral-900\/80,
+.light .bg-neutral-900\/70,
+html.light .bg-neutral-950,
+html.light .bg-neutral-900 {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.light .bg-neutral-800,
+.light .bg-neutral-800\/90,
+.light .bg-neutral-800\/80,
+.light .bg-neutral-800\/60,
+html.light .bg-neutral-800 {
+  background-color: #f1f5f9 !important;
+  color: #1e293b !important;
+}
+
+.light .border-neutral-800,
+.light .border-neutral-800\/80,
+.light .border-neutral-700,
+.light .border-neutral-700\/80,
+.light .border-neutral-700\/60,
+.light .border-neutral-700\/50,
+html.light .border-neutral-800,
+html.light .border-neutral-700 {
+  border-color: #e2e8f0 !important;
+}
+
+.light .border-white\/10,
+.light .border-white\/20,
+.light .border-white\/25,
+.light .border-white\/30,
+html.light .border-white\/10,
+html.light .border-white\/20 {
+  border-color: #e2e8f0 !important;
+}
+
+.light select,
+.light input,
+.light textarea,
+html.light select,
+html.light input,
+html.light textarea {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+}
+
+.light option,
+html.light option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.light aside,
+html.light aside {
+  background: #ffffff !important;
+  border-right-color: #e2e8f0 !important;
+}
+
+.light .text-muted-foreground,
+html.light .text-muted-foreground {
+  color: #64748b !important;
+}

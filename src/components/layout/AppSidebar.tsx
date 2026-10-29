@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { api } from "@/lib/api";
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, GitGraph, Shield, Brain, Settings, Bot,
@@ -36,6 +37,29 @@ export default function AppSidebar({ collapsed, onToggle }: Props) {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [, force] = useState(0);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
+
+  const refreshNotifs = useCallback(async () => {
+    try {
+      const res = await api.getUnreadNotificationsCount();
+      if (res && typeof res.unread_count === "number") {
+        setUnreadNotifs(res.unread_count);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    refreshNotifs();
+    const interval = setInterval(refreshNotifs, 10000);
+    const onUpdated = () => refreshNotifs();
+    window.addEventListener("aicte_notification_updated", onUpdated);
+    window.addEventListener("focus", onUpdated);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("aicte_notification_updated", onUpdated);
+      window.removeEventListener("focus", onUpdated);
+    };
+  }, [refreshNotifs]);
 
   useEffect(() => {
     const f = () => force((x) => x + 1);
@@ -51,7 +75,11 @@ export default function AppSidebar({ collapsed, onToggle }: Props) {
     <aside className={cn("fixed left-0 top-0 h-full z-40 border-r border-border/30 transition-all duration-300 flex flex-col bg-gradient-to-b from-sidebar to-background/95 scrollbar-thin", collapsed ? "w-16" : "w-64")}>
       <div className="h-14 flex items-center px-4 border-b border-border/30">
         <Link to="/" className="flex items-center gap-2.5 group">
-          <img src="/aicte-logo.png" alt="AICTE Emblem" className="w-8 h-8 object-contain shrink-0" />
+          <img
+            src={theme === "light" ? "/aicte-logo-bw.png" : "/aicte-logo.png"}
+            alt="AICTE Emblem"
+            className="w-8 h-8 object-contain shrink-0"
+          />
           {!collapsed && <span className="text-base font-bold tracking-tight">Vigil<span className="text-gradient-red">OS</span></span>}
         </Link>
       </div>
@@ -85,9 +113,27 @@ export default function AppSidebar({ collapsed, onToggle }: Props) {
         </button>
 
         {/* Notifications */}
-        <Link to="/notifications" className={cn("w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground", collapsed && "justify-center px-0")} title={collapsed ? "Notifications" : undefined}>
-          <Bell className="w-5 h-5 shrink-0" />
+        <Link
+          to="/notifications"
+          className={cn(
+            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+            pathname === "/notifications" ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+            collapsed && "justify-center px-0"
+          )}
+          title={collapsed ? (unreadNotifs > 0 ? `Notifications (${unreadNotifs})` : "Notifications") : undefined}
+        >
+          <div className="relative shrink-0 flex items-center justify-center">
+            <Bell className={cn("w-5 h-5", unreadNotifs > 0 ? "text-red-400" : "")} />
+            {unreadNotifs > 0 && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse ring-2 ring-background" />
+            )}
+          </div>
           {!collapsed && <span className="flex-1 text-left">Notifications</span>}
+          {!collapsed && unreadNotifs > 0 && (
+            <span className="text-[10.5px] font-bold font-mono bg-red-600 text-white rounded-full px-2 py-0.5 min-w-[20px] text-center shadow-xs shadow-red-500/40">
+              {unreadNotifs}
+            </span>
+          )}
         </Link>
 
         {/* Profile Link */}

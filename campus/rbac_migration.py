@@ -190,8 +190,11 @@ def run_migration(db_path: str = DB_PATH) -> dict:
 
         # ── 4. Create Users, Auth Accounts, User Assignments ────────
         # Backup existing legacy users if table exists
-        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
-        has_existing_users = cur.fetchone() is not None
+        try:
+            cur.execute("SELECT table_name FROM information_schema.tables WHERE table_name='users'")
+            has_existing_users = cur.fetchone() is not None
+        except Exception:
+            has_existing_users = False
 
         legacy_user_rows = []
         if has_existing_users:
@@ -292,7 +295,7 @@ def run_migration(db_path: str = DB_PATH) -> dict:
                 "role_key": "super_admin",
                 "bureau_code": "HQ",
                 "region_code": "HQ",
-                "password": "12345678",
+                "password": "VigilOS@2026!Secure",
                 "usernames": ["admin", "sysadmin"],
             },
             {
@@ -302,7 +305,7 @@ def run_migration(db_path: str = DB_PATH) -> dict:
                 "role_key": "bureau_head",
                 "bureau_code": "RB",
                 "region_code": "CENTRAL",
-                "password": "admin",
+                "password": "VigilOS@2026!Secure",
                 "usernames": ["bureau_head_demo"],
             },
             {
@@ -312,7 +315,7 @@ def run_migration(db_path: str = DB_PATH) -> dict:
                 "role_key": "approval_officer",
                 "bureau_code": "PGRC",
                 "region_code": "CENTRAL",
-                "password": "demo1234",
+                "password": "Officer@2026!AICTE",
                 "usernames": ["officer_demo"],
             },
             {

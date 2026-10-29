@@ -42,12 +42,19 @@ interface UserItem {
   permissions?: string[];
 }
 
+// Shorten long emails with dots at the end (e.g. 2204caleb2007@gmail...)
+function formatShortEmail(email: string, maxLen: number = 19): string {
+  if (!email) return "";
+  if (email.length <= maxLen) return email;
+  return email.slice(0, maxLen) + "...";
+}
+
 const ROLE_OPTIONS: { role: Role; label: string; icon: any; desc: string; badgeClass: string }[] = [
   { role: "super_admin", label: "Super Admin", icon: KeyRound, desc: "Central Vigilance & Platform Authority", badgeClass: "bg-red-500/15 text-red-400 border-red-500/30" },
   { role: "bureau_head", label: "Bureau Head", icon: Landmark, desc: "RB / PGRC / Regional Bureau Chief", badgeClass: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
   { role: "approval_officer", label: "Approval Officer", icon: ClipboardCheck, desc: "Grievance Case Handler & Investigator", badgeClass: "bg-blue-500/15 text-blue-300 border-blue-500/30" },
   { role: "nodal_officer", label: "Regional Nodal Officer", icon: Globe, desc: "State & Regional Institutional Liaison", badgeClass: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
-  { role: "citizen", label: "Citizen / Complainant", icon: User, desc: "Public Complainant & Grievance Submitter", badgeClass: "bg-purple-500/15 text-purple-300 border-purple-500/30" },
+  { role: "citizen", label: "Complainant", icon: User, desc: "Public Grievance Submitter", badgeClass: "bg-purple-500/15 text-purple-300 border-purple-500/30" },
 ];
 
 function AdminPanel() {
@@ -67,10 +74,11 @@ function AdminPanel() {
   const [regions, setRegions] = useState<Array<{ id: string; code: string; name: string }>>([
     { id: "reg_hq", code: "HQ", name: "HQ (New Delhi)" },
     { id: "reg_north", code: "NORTHERN", name: "Northern Region" },
-    { id: "reg_south", code: "SOUTHERN", name: "Southern Region" },
-    { id: "reg_west", code: "WESTERN", name: "Western Region" },
-    { id: "reg_east", code: "EASTERN", name: "Eastern Region" },
     { id: "reg_central", code: "CENTRAL", name: "Central Region" },
+    { id: "reg_west", code: "WESTERN", name: "Western Region" },
+    { id: "reg_south", code: "SOUTHERN", name: "Southern Region" },
+    { id: "reg_east", code: "EASTERN", name: "Eastern Region" },
+    { id: "reg_northeast", code: "NORTH_EASTERN", name: "North Eastern Region" },
   ]);
 
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -106,12 +114,15 @@ function AdminPanel() {
         if (meta?.regions) setRegions(meta.regions);
       } catch (err: any) {
         console.error("Failed to load users from backend:", err);
-        toast.error("Failed to load personnel records from database.");
+        const msg = err?.message?.includes("Failed to fetch")
+          ? "Backend offline: Start FastAPI server on port 8000."
+          : err?.message || "Failed to load personnel records from database.";
+        toast.error(msg);
       } finally {
         setLoadingUsers(false);
       }
     }
-  }, [user]);
+  }, [user?.id, user?.role]);
 
   useEffect(() => {
     refreshUsers();
@@ -246,7 +257,7 @@ function AdminPanel() {
       );
       toast.success(`Personnel information updated for ${editUserName.trim()}`);
       setEditingUser(null);
-      loadUsers();
+      refreshUsers();
     } catch (err: any) {
       toast.error(err?.message || "Failed to update personnel records");
     } finally {
@@ -645,7 +656,7 @@ function AdminPanel() {
             <span>Authorized Personnel & Roles</span>
             <span className={cn(
               "text-[10px] px-1.5 py-0.5 rounded-full font-mono",
-              adminTab === "users" ? "bg-black/30 text-white" : "bg-secondary text-muted-foreground"
+              adminTab === "users" ? "bg-black/20 dark:bg-black/40 text-white" : "bg-secondary text-muted-foreground"
             )}>
               {users.length}
             </span>
@@ -666,7 +677,7 @@ function AdminPanel() {
             <span>Institution Profiles</span>
             <span className={cn(
               "text-[10px] px-1.5 py-0.5 rounded-full font-mono",
-              adminTab === "institutions" ? "bg-black/30 text-white" : "bg-secondary text-muted-foreground"
+              adminTab === "institutions" ? "bg-black/20 dark:bg-black/40 text-white" : "bg-secondary text-muted-foreground"
             )}>
               {institutions.length}
             </span>
@@ -683,7 +694,7 @@ function AdminPanel() {
                 { label: "Bureau Heads", count: counts.bureau_head, icon: Landmark, color: "border-amber-500/30 bg-amber-500/10 text-amber-300" },
                 { label: "Approval Officers", count: counts.approval_officer, icon: ClipboardCheck, color: "border-blue-500/30 bg-blue-500/10 text-blue-300" },
                 { label: "Nodal Officers", count: counts.nodal_officer, icon: Globe, color: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" },
-                { label: "Citizens / Complainants", count: counts.citizen, icon: User, color: "border-purple-500/30 bg-purple-500/10 text-purple-300" },
+                { label: "Complainants", count: counts.citizen, icon: User, color: "border-purple-500/30 bg-purple-500/10 text-purple-300" },
               ].map((c) => (
                 <div key={c.label} className={cn("p-3 rounded-xl border flex flex-col justify-between transition-all", c.color)}>
                   <div className="flex items-center justify-between text-xs font-semibold">
@@ -720,7 +731,7 @@ function AdminPanel() {
                       <option value="bureau_head">Bureau Head</option>
                       <option value="approval_officer">Approval Officer</option>
                       <option value="nodal_officer">Regional Nodal Officer</option>
-                      <option value="citizen">Citizen</option>
+                      <option value="citizen">Complainant</option>
                     </select>
                   </div>
 
@@ -795,7 +806,7 @@ function AdminPanel() {
                                   {(u.name || "U").slice(0, 1).toUpperCase()}
                                 </div>
                                 <div>
-                                  <div className="text-white/95 text-xs font-bold">{u.name}</div>
+                                  <div className="text-foreground text-xs font-bold">{u.name}</div>
                                   {isSelf && (
                                     <span className="text-[10px] text-primary font-semibold">(You)</span>
                                   )}
@@ -804,8 +815,8 @@ function AdminPanel() {
                             </td>
 
                             {/* Email */}
-                            <td className="px-4 py-3 text-muted-foreground text-xs font-mono">
-                              {u.email}
+                            <td className="px-4 py-3 text-muted-foreground text-xs font-mono" title={u.email}>
+                              {formatShortEmail(u.email, 19)}
                             </td>
 
                             {/* Role Selector Dropdown */}
@@ -1148,11 +1159,11 @@ function AdminPanel() {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" />
 
                       {/* Top overlay badges */}
-                      <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2">
-                        <span className="font-mono text-[10px] bg-black/75 backdrop-blur-md border border-white/20 text-white px-2 py-0.5 rounded-md font-semibold">
+                      <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 z-10">
+                        <span className="font-mono text-[10px] bg-neutral-900/90 backdrop-blur-md border border-white/30 text-white! px-2 py-0.5 rounded-md font-bold shadow-md">
                           PID: {inst.aicte_pid}
                         </span>
-                        <span className="text-[10px] font-semibold bg-red-600/90 text-white px-2 py-0.5 rounded-md backdrop-blur-md">
+                        <span className="text-[10px] font-bold bg-red-600 text-white! px-2.5 py-0.5 rounded-md backdrop-blur-md shadow-md border border-red-400/40">
                           {inst.region} Region
                         </span>
                       </div>
@@ -1175,7 +1186,7 @@ function AdminPanel() {
                           <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />
                           <span className="truncate">{inst.city}, {inst.state}</span>
                         </span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-md bg-secondary/80 border border-border/30 text-white font-medium shrink-0">
+                        <span className="text-[10px] px-2 py-0.5 rounded-md bg-secondary border border-border/30 text-foreground font-medium shrink-0">
                           {inst.approval_status}
                         </span>
                       </div>
@@ -1203,11 +1214,11 @@ function AdminPanel() {
                       <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-border/20">
                         <div>
                           <div className="text-[10px] uppercase text-muted-foreground">Principal</div>
-                          <div className="text-white font-medium truncate">{inst.principal_name}</div>
+                          <div className="text-foreground font-medium truncate">{inst.principal_name}</div>
                         </div>
                         <div>
                           <div className="text-[10px] uppercase text-muted-foreground">Contact Email</div>
-                          <div className="text-white font-medium truncate">{inst.contact_email}</div>
+                          <div className="text-foreground font-medium truncate">{inst.contact_email}</div>
                         </div>
                       </div>
                     </div>
@@ -1218,7 +1229,7 @@ function AdminPanel() {
                         href={inst.website}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-xs text-muted-foreground hover:text-white flex items-center gap-1 transition-colors"
+                        className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
                       >
                         <Globe className="w-3.5 h-3.5" /> Visit Website
                       </a>
@@ -1261,12 +1272,12 @@ function AdminPanel() {
                   </span>
                   <span className="text-xs text-muted-foreground">Admin Profile Editor</span>
                 </div>
-                <h2 className="text-lg font-bold text-white mt-1">Edit Institution Profile</h2>
+                <h2 className="text-lg font-bold text-foreground mt-1">Edit Institution Profile</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingInst(null)}
-                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-white cursor-pointer transition-colors"
+                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1276,7 +1287,7 @@ function AdminPanel() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Institution Name */}
                 <div className="sm:col-span-2 space-y-1">
-                  <label className="font-semibold text-white/90">Institution Name</label>
+                  <label className="font-semibold text-foreground/90">Institution Name</label>
                   <input
                     type="text"
                     required
@@ -1288,7 +1299,7 @@ function AdminPanel() {
 
                 {/* Region */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">AICTE Region</label>
+                  <label className="font-semibold text-foreground/90">AICTE Region</label>
                   <select
                     value={editingInst.region}
                     onChange={(e) => setEditingInst({ ...editingInst, region: e.target.value })}
@@ -1306,7 +1317,7 @@ function AdminPanel() {
 
                 {/* Institution Type */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Institution Type</label>
+                  <label className="font-semibold text-foreground/90">Institution Type</label>
                   <input
                     type="text"
                     value={editingInst.inst_type}
@@ -1317,7 +1328,7 @@ function AdminPanel() {
 
                 {/* City */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">City</label>
+                  <label className="font-semibold text-foreground/90">City</label>
                   <input
                     type="text"
                     value={editingInst.city}
@@ -1328,7 +1339,7 @@ function AdminPanel() {
 
                 {/* State */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">State</label>
+                  <label className="font-semibold text-foreground/90">State</label>
                   <input
                     type="text"
                     value={editingInst.state}
@@ -1339,7 +1350,7 @@ function AdminPanel() {
 
                 {/* Full Address */}
                 <div className="sm:col-span-2 space-y-1">
-                  <label className="font-semibold text-white/90">Full Address</label>
+                  <label className="font-semibold text-foreground/90">Full Address</label>
                   <input
                     type="text"
                     value={editingInst.address}
@@ -1350,7 +1361,7 @@ function AdminPanel() {
 
                 {/* Approval Status */}
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-white/90">Approval Status</label>
+                  <label className="font-semibold text-foreground/90">Approval Status</label>
                   <div className="space-y-2">
                     <select
                       value={
@@ -1407,7 +1418,7 @@ function AdminPanel() {
 
                 {/* Principal / Director */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Principal / Director Name</label>
+                  <label className="font-semibold text-foreground/90">Principal / Director Name</label>
                   <input
                     type="text"
                     value={editingInst.principal_name}
@@ -1418,7 +1429,7 @@ function AdminPanel() {
 
                 {/* Contact Email */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Official Contact Email</label>
+                  <label className="font-semibold text-foreground/90">Official Contact Email</label>
                   <input
                     type="email"
                     value={editingInst.contact_email}
@@ -1429,7 +1440,7 @@ function AdminPanel() {
 
                 {/* Contact Phone */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Contact Phone</label>
+                  <label className="font-semibold text-foreground/90">Contact Phone</label>
                   <input
                     type="text"
                     value={editingInst.contact_phone}
@@ -1440,7 +1451,7 @@ function AdminPanel() {
 
                 {/* Website */}
                 <div className="sm:col-span-2 space-y-1">
-                  <label className="font-semibold text-white/90">Official Website URL</label>
+                  <label className="font-semibold text-foreground/90">Official Website URL</label>
                   <input
                     type="url"
                     value={editingInst.website}
@@ -1518,12 +1529,12 @@ function AdminPanel() {
                   </span>
                   <span className="text-xs text-muted-foreground">AICTE 360° Profile Registration</span>
                 </div>
-                <h2 className="text-lg font-bold text-white mt-1">Create New Institution Profile</h2>
+                <h2 className="text-lg font-bold text-foreground mt-1">Create New Institution Profile</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setIsCreatingInst(false)}
-                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-white cursor-pointer transition-colors"
+                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1534,7 +1545,7 @@ function AdminPanel() {
                 {/* AICTE PID */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <label className="font-semibold text-white/90">AICTE Permanent ID (PID) *</label>
+                    <label className="font-semibold text-foreground/90">AICTE Permanent ID (PID) *</label>
                     <button
                       type="button"
                       onClick={() => setNewInst({ ...newInst, aicte_pid: `1-${Math.floor(100000000 + Math.random() * 900000000)}` })}
@@ -1555,7 +1566,7 @@ function AdminPanel() {
 
                 {/* Institution Name */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Institution Name *</label>
+                  <label className="font-semibold text-foreground/90">Institution Name *</label>
                   <input
                     type="text"
                     required
@@ -1568,7 +1579,7 @@ function AdminPanel() {
 
                 {/* Region */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">AICTE Region *</label>
+                  <label className="font-semibold text-foreground/90">AICTE Region *</label>
                   <select
                     value={newInst.region}
                     onChange={(e) => setNewInst({ ...newInst, region: e.target.value })}
@@ -1586,7 +1597,7 @@ function AdminPanel() {
 
                 {/* Institution Type */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Institution Type</label>
+                  <label className="font-semibold text-foreground/90">Institution Type</label>
                   <input
                     type="text"
                     value={newInst.inst_type}
@@ -1598,7 +1609,7 @@ function AdminPanel() {
 
                 {/* City */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">City</label>
+                  <label className="font-semibold text-foreground/90">City</label>
                   <input
                     type="text"
                     value={newInst.city}
@@ -1610,7 +1621,7 @@ function AdminPanel() {
 
                 {/* State */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">State</label>
+                  <label className="font-semibold text-foreground/90">State</label>
                   <input
                     type="text"
                     value={newInst.state}
@@ -1622,7 +1633,7 @@ function AdminPanel() {
 
                 {/* Full Address */}
                 <div className="sm:col-span-2 space-y-1">
-                  <label className="font-semibold text-white/90">Full Address</label>
+                  <label className="font-semibold text-foreground/90">Full Address</label>
                   <input
                     type="text"
                     value={newInst.address}
@@ -1634,7 +1645,7 @@ function AdminPanel() {
 
                 {/* Approval Status */}
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-white/90">Approval Status</label>
+                  <label className="font-semibold text-foreground/90">Approval Status</label>
                   <div className="space-y-2">
                     <select
                       value={
@@ -1691,7 +1702,7 @@ function AdminPanel() {
 
                 {/* Principal / Director */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Principal / Director Name</label>
+                  <label className="font-semibold text-foreground/90">Principal / Director Name</label>
                   <input
                     type="text"
                     value={newInst.principal_name}
@@ -1703,7 +1714,7 @@ function AdminPanel() {
 
                 {/* Contact Email */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Official Contact Email</label>
+                  <label className="font-semibold text-foreground/90">Official Contact Email</label>
                   <input
                     type="email"
                     value={newInst.contact_email}
@@ -1715,7 +1726,7 @@ function AdminPanel() {
 
                 {/* Contact Phone */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Contact Phone</label>
+                  <label className="font-semibold text-foreground/90">Contact Phone</label>
                   <input
                     type="text"
                     value={newInst.contact_phone}
@@ -1727,7 +1738,7 @@ function AdminPanel() {
 
                 {/* Website */}
                 <div className="sm:col-span-2 space-y-1">
-                  <label className="font-semibold text-white/90">Official Website URL</label>
+                  <label className="font-semibold text-foreground/90">Official Website URL</label>
                   <input
                     type="url"
                     value={newInst.website}
@@ -1797,12 +1808,12 @@ function AdminPanel() {
                   </span>
                   <span className="text-xs text-muted-foreground">AICTE Personnel Registration</span>
                 </div>
-                <h2 className="text-lg font-bold text-white mt-1">Create Personnel Account</h2>
+                <h2 className="text-lg font-bold text-foreground mt-1">Create Personnel Account</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setIsCreatingUser(false)}
-                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-white cursor-pointer transition-colors"
+                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1812,7 +1823,7 @@ function AdminPanel() {
               <div className="space-y-3">
                 {/* Full Name */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Official Full Name *</label>
+                  <label className="font-semibold text-foreground/90">Official Full Name *</label>
                   <input
                     type="text"
                     required
@@ -1825,7 +1836,7 @@ function AdminPanel() {
 
                 {/* Email Address */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Official Email Address *</label>
+                  <label className="font-semibold text-foreground/90">Official Email Address *</label>
                   <input
                     type="email"
                     required
@@ -1838,7 +1849,7 @@ function AdminPanel() {
 
                 {/* Password */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Initial Password *</label>
+                  <label className="font-semibold text-foreground/90">Initial Password *</label>
                   <input
                     type="text"
                     required
@@ -1852,7 +1863,7 @@ function AdminPanel() {
 
                 {/* Role Designation */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Role Designation *</label>
+                  <label className="font-semibold text-foreground/90">Role Designation *</label>
                   <select
                     value={newUser.role}
                     onChange={(e) => setNewUser({ ...newUser, role: e.target.value as Role })}
@@ -1862,13 +1873,13 @@ function AdminPanel() {
                     <option value="bureau_head">Bureau Head</option>
                     <option value="super_admin">Super Admin</option>
                     <option value="nodal_officer">Regional Nodal Officer</option>
-                    <option value="citizen">Citizen / Complainant</option>
+                    <option value="citizen">Complainant</option>
                   </select>
                 </div>
 
                 {/* Bureau / Cell */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Bureau / Department Cell *</label>
+                  <label className="font-semibold text-foreground/90">Bureau / Department Cell *</label>
                   <select
                     value={newUser.bureau}
                     onChange={(e) => setNewUser({ ...newUser, bureau: e.target.value })}
@@ -1894,7 +1905,7 @@ function AdminPanel() {
 
                 {/* Region */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Jurisdiction Region *</label>
+                  <label className="font-semibold text-foreground/90">Jurisdiction Region *</label>
                   <select
                     value={newUser.region}
                     onChange={(e) => setNewUser({ ...newUser, region: e.target.value })}
@@ -1953,7 +1964,7 @@ function AdminPanel() {
                 <Trash2 className="w-5 h-5" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-base font-bold text-white">{confirmDeleteModal.title}</h3>
+                <h3 className="text-base font-bold text-foreground">{confirmDeleteModal.title}</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   {confirmDeleteModal.description}
                 </p>
@@ -1995,12 +2006,12 @@ function AdminPanel() {
                   </span>
                   <span className="text-xs text-muted-foreground">AICTE Personnel Directory</span>
                 </div>
-                <h2 className="text-lg font-bold text-white mt-1">Edit Personnel Information</h2>
+                <h2 className="text-lg font-bold text-foreground mt-1">Edit Personnel Information</h2>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingUser(null)}
-                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-white cursor-pointer transition-colors"
+                className="p-1.5 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -2010,7 +2021,7 @@ function AdminPanel() {
               <div className="space-y-3">
                 {/* Full Name */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Official Full Name *</label>
+                  <label className="font-semibold text-foreground/90">Official Full Name *</label>
                   <input
                     type="text"
                     required
@@ -2023,7 +2034,7 @@ function AdminPanel() {
 
                 {/* Email Address */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">Official Email Address *</label>
+                  <label className="font-semibold text-foreground/90">Official Email Address *</label>
                   <input
                     type="email"
                     required
@@ -2036,7 +2047,7 @@ function AdminPanel() {
 
                 {/* Current / New Password */}
                 <div className="space-y-1">
-                  <label className="font-semibold text-white/90">current password*</label>
+                  <label className="font-semibold text-foreground/90">current password*</label>
                   <input
                     type="text"
                     value={editUserPassword}

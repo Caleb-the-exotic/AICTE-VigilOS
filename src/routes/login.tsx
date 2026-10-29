@@ -16,11 +16,11 @@ export const Route = createFileRoute("/login")({ component: LoginPage });
 
 type AuthMode = "signin" | "signup";
 
-// Demo credentials that auto-fill the form when clicked
+// Demo credentials that auto-fill the form when clicked (clean, unbreached unique passwords)
 const DEMO_BUTTONS = [
-  { label: "Super Admin", email: "admin@aicte-india.org", password: "12345678" },
-  { label: "Bureau Head", email: "admin", password: "admin" },
-  { label: "Officer", email: "officer@aicte.gov.in", password: "demo1234" },
+  { label: "Super Admin", email: "admin@aicte-india.org", password: "VigilOS#Aicte!KlpQ" },
+  { label: "Bureau Head", email: "bureauhead.demo@aicte-india.org", password: "VigilOS#Bureau!RtkP" },
+  { label: "Officer", email: "officer@aicte.gov.in", password: "VigilOS#Officer!XnmW" },
 ];
 
 function LoginPage() {
@@ -254,6 +254,9 @@ function LoginPage() {
                     onChange={(e) => setSignInPassword(e.target.value)}
                     placeholder="••••••••"
                     required
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     className="w-full pl-10 pr-10 py-2.5 bg-secondary/30 hover:bg-secondary/40 focus:bg-background border border-border/70 focus:border-red-500/60 rounded-xl text-sm placeholder:text-muted-foreground/50 text-foreground outline-none transition-all focus:ring-2 focus:ring-red-500/20"
                   />
                   <button type="button" onClick={() => setShowSignInPassword(!showSignInPassword)} className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground" aria-label="Toggle password visibility">

@@ -6,7 +6,7 @@ import {
   RefreshCw, Search, Shield, Siren, TrendingUp, Users,
   X, ChevronRight, ChevronLeft, ArrowUpRight, Eye, AlertOctagon,
   BarChart3, MapPin, Calendar, Link2, Zap, Info, Loader2,
-  Plus, Mail, Phone, Edit3, Trash2,
+  Plus, Mail, Phone, Edit3, Trash2, AlertCircle,
 } from "lucide-react";
 import AppLayout from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -15,13 +15,17 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { exportCasesAsPdf } from "@/lib/pdf-export";
-import { getInstitutionByPid, getStoredInstitutions } from "@/lib/institutions";
+import { getInstitutionByPid, getStoredInstitutions, fetchInstitutionsAsync, type InstitutionProfile } from "@/lib/institutions";
+import InstitutionRegistrationsTab from "@/components/cases/InstitutionRegistrationsTab";
+import { IndiaRegionalMap } from "@/components/cases/IndiaRegionalMap";
+import ReactECharts from "echarts-for-react";
+import { useTheme } from "@/lib/theme";
 
 export const Route = createFileRoute("/cases")({ component: CasesDashboard });
 
 // ── Types ────────────────────────────────────────────────────────
 type Bureau = "RB" | "PGRC" | "RO" | "ALL";
-type CaseStatus = "received" | "under_process" | "transferred" | "escalated" | "disposed" | "ALL";
+type CaseStatus = "received" | "under_process" | "transferred" | "escalated" | "disposed" | "breached" | "ALL";
 
 interface AICTECase {
   case_id: string;
@@ -48,6 +52,7 @@ interface AICTECase {
   updated_at?: string;
   ageing_days?: number;
   sla_breached?: boolean;
+  linked_case_ids?: string[] | string;
 }
 
 interface Institution {
@@ -111,17 +116,18 @@ function mockCases(): AICTECase[] {
 
 // ── Helpers ──────────────────────────────────────────────────────
 const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
-  received:      { label: "Received",      color: "bg-red-950/40 text-red-300 border-red-500/30",   dot: "bg-red-400" },
-  under_process: { label: "Under Process", color: "bg-primary/15 text-primary border-primary/30", dot: "bg-primary" },
-  transferred:   { label: "Transferred",   color: "bg-rose-950/40 text-rose-300 border-rose-500/30", dot: "bg-rose-400" },
-  escalated:     { label: "Escalated",     color: "bg-red-600/25 text-red-200 border-red-500/50 shadow-sm", dot: "bg-red-500 animate-pulse" },
-  disposed:      { label: "Disposed",      color: "bg-neutral-800 text-neutral-300 border-neutral-700", dot: "bg-neutral-400" },
+  received:      { label: "Received",      color: "bg-neutral-800/80 text-neutral-300 border-neutral-700/80", dot: "bg-neutral-400" },
+  under_process: { label: "Under Process", color: "bg-neutral-800/80 text-neutral-300 border-neutral-700/80", dot: "bg-neutral-400" },
+  transferred:   { label: "Transferred",   color: "bg-neutral-800/80 text-neutral-300 border-neutral-700/80", dot: "bg-neutral-400" },
+  escalated:     { label: "Escalated",     color: "bg-neutral-800/80 text-neutral-300 border-neutral-700/80", dot: "bg-neutral-400" },
+  disposed:      { label: "Disposed",      color: "bg-neutral-800/80 text-neutral-300 border-neutral-700/80", dot: "bg-neutral-400" },
+  breached:      { label: "Breached",      color: "bg-red-950/80 text-red-300 border-red-500/50",             dot: "bg-red-500" },
 };
 
 const BUREAU_CONFIG: Record<string, { color: string; bg: string }> = {
-  RB:   { color: "text-red-300", bg: "bg-red-500/20 border border-red-500/30" },
-  PGRC: { color: "text-rose-300", bg: "bg-rose-500/20 border border-rose-500/30" },
-  RO:   { color: "text-red-200", bg: "bg-red-950/60 border border-red-800/40" },
+  RB:   { color: "text-neutral-300", bg: "bg-neutral-800/90 border border-neutral-700/80" },
+  PGRC: { color: "text-neutral-300", bg: "bg-neutral-800/90 border border-neutral-700/80" },
+  RO:   { color: "text-neutral-300", bg: "bg-neutral-800/90 border border-neutral-700/80" },
 };
 
 function BureauBadge({ bureau }: { bureau: string }) {
@@ -129,8 +135,10 @@ function BureauBadge({ bureau }: { bureau: string }) {
   return <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-widest", cfg.bg, cfg.color)}>{bureau}</span>;
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const cfg = STATUS_CONFIG[status] || { label: status, color: "bg-white/10 text-white/60 border-white/10", dot: "bg-white/40" };
+function StatusBadge({ status, ageingDays }: { status: string; ageingDays?: number }) {
+  const isBreached = status === "breached" || (status !== "disposed" && ageingDays !== undefined && ageingDays > 30);
+  const effectiveStatus = isBreached ? "breached" : status;
+  const cfg = STATUS_CONFIG[effectiveStatus] || { label: effectiveStatus, color: "bg-white/10 text-white/60 border-white/10", dot: "bg-white/40" };
   return (
     <span className={cn("inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full border", cfg.color)}>
       <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
@@ -140,12 +148,18 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // ── KPI Tile ──────────────────────────────────────────────────────
-function KpiTile({ label, value, icon: Icon, color, pulse, sub }: {
+function KpiTile({ label, value, icon: Icon, color, pulse, sub, onClick }: {
   label: string; value: number | string; icon: React.FC<{ className?: string }>;
-  color?: string; pulse?: boolean; sub?: string;
+  color?: string; pulse?: boolean; sub?: string; onClick?: () => void;
 }) {
   return (
-    <div className="glass-card p-4 flex flex-col gap-2 hover:border-white/20 transition-all duration-200 group relative overflow-hidden">
+    <div 
+      onClick={onClick}
+      className={cn(
+        "glass-card p-2.5 sm:p-4 flex flex-col gap-1.5 sm:gap-2 hover:border-white/20 transition-all duration-200 group relative overflow-hidden",
+        onClick && "cursor-pointer"
+      )}
+    >
       {pulse && (
         <div className="absolute inset-0 rounded-xl bg-red-500/5 animate-pulse pointer-events-none" />
       )}
@@ -164,77 +178,485 @@ function KpiTile({ label, value, icon: Icon, color, pulse, sub }: {
   );
 }
 
+// ── Helper to resolve assignment Cell based on parent category ──
+function getRecommendedJurisdictionCell(category?: string, bureau?: string): {
+  cell: "PSRC" | "RO" | "RB";
+  name: string;
+  desc: string;
+} {
+  const cat = (category || "").toLowerCase();
+  // PSRC: Faculty, Salary, Staff Cadre, Recruitment, Service Matters
+  if (
+    cat.includes("faculty") ||
+    cat.includes("salary") ||
+    cat.includes("cadre") ||
+    cat.includes("service") ||
+    cat.includes("remuneration") ||
+    cat.includes("appointment") ||
+    cat.includes("wages") ||
+    cat.includes("stipend") ||
+    cat.includes("biometric")
+  ) {
+    return {
+      cell: "PSRC",
+      name: "Public Service Grievance & Staff Cell (PSRC)",
+      desc: "Faculty Cadre, Staff Remuneration & Service Grievances.",
+    };
+  }
+  // RO: Ragging, Hostel, Student discipline, Admissions, Local site inspection
+  if (
+    cat.includes("ragging") ||
+    cat.includes("hostel") ||
+    cat.includes("admission") ||
+    cat.includes("intake") ||
+    cat.includes("academic") ||
+    cat.includes("student") ||
+    cat.includes("campus") ||
+    cat.includes("discipline") ||
+    bureau === "RO"
+  ) {
+    return {
+      cell: "RO",
+      name: "Regional Office Field Oversight (RO)",
+      desc: "Student Welfare, Admissions & Regional Field Jurisdiction.",
+    };
+  }
+  // RB: Statutory Regulation, Capitation Fee, Norms, Approval, Infrastructure
+  return {
+    cell: "RB",
+    name: "Regulation & Approval Bureau (RB)",
+    desc: "Statutory Norms, Fee Regulations & AICTE Approvals.",
+  };
+}
+
 // ── Overlap Alert Card ────────────────────────────────────────────
 function OverlapAlertCard({
-  institutionName, aictePid, region, rbCases, pgrcCases, analysis, onViewProfile
+  institutionName, aictePid, region, rbCases, pgrcCases, analysis, onViewProfile, onSelectCase, onLinkCases
 }: {
   institutionName: string; aictePid: string; region: string;
   rbCases: AICTECase[]; pgrcCases: AICTECase[];
   analysis?: { overlap_score: number; overlap_type: string; shared_root_cause: string; recommended_action: string; reason: string };
   onViewProfile: (pid: string) => void;
+  onSelectCase?: (c: AICTECase) => void;
+  onLinkCases?: (caseIds: string[]) => void;
 }) {
   const score = analysis?.overlap_score ?? 0.88;
   const isHigh = score >= 0.7;
+  const [isLinking, setIsLinking] = useState(false);
+  const [isUnlinking, setIsUnlinking] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+
+  const allCases = useMemo(() => [...rbCases, ...pgrcCases], [rbCases, pgrcCases]);
+  const allCaseIds = useMemo(() => {
+    return Array.from(new Set(allCases.map(c => c.case_id)));
+  }, [allCases]);
+
+  // Primary parent case for jurisdiction resolution
+  const parentCase = useMemo(() => {
+    return rbCases[0] || pgrcCases[0] || allCases[0];
+  }, [rbCases, pgrcCases, allCases]);
+
+  const recommendedJurisdiction = useMemo(() => {
+    return getRecommendedJurisdictionCell(parentCase?.category, parentCase?.bureau);
+  }, [parentCase]);
+
+  // User selected target cell for linking (defaults to recommended)
+  const [selectedCell, setSelectedCell] = useState<"PSRC" | "RO" | "RB">(recommendedJurisdiction.cell);
+
+  // Sync selected cell if recommended updates
+  useEffect(() => {
+    setSelectedCell(recommendedJurisdiction.cell);
+  }, [recommendedJurisdiction.cell]);
+
+  // Check if cases in this overlap are already formally linked/consolidated
+  const isLinkedConsolidated = useMemo(() => {
+    return allCases.some(c => {
+      if (!c.linked_case_ids) return false;
+      if (Array.isArray(c.linked_case_ids)) return c.linked_case_ids.length > 0;
+      try {
+        const parsed = JSON.parse(c.linked_case_ids);
+        return Array.isArray(parsed) && parsed.length > 0;
+      } catch {
+        return false;
+      }
+    });
+  }, [allCases]);
+
+  const handleConfirmLink = async () => {
+    if (allCaseIds.length < 2) {
+      toast.info("At least two cases are required to link.");
+      return;
+    }
+    setIsLinking(true);
+    try {
+      if (onLinkCases) {
+        onLinkCases(allCaseIds);
+      } else if (HAS_BACKEND) {
+        await api.linkCases(allCaseIds, `Assigned to ${selectedCell} Cell based on category: ${parentCase?.category || "Institutional Oversight"}`);
+        toast.success(`Linked ${allCaseIds.length} cases under ${selectedCell} Cell for ${institutionName}!`);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("aicte_case_updated"));
+        }
+      }
+      setShowLinkModal(false);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to link cases.");
+    } finally {
+      setIsLinking(false);
+    }
+  };
+
+  const handleUnlink = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`Unlink and detach consolidated proceedings for ${institutionName}?`)) return;
+    setIsUnlinking(true);
+    try {
+      if (HAS_BACKEND) {
+        await api.unlinkCases(allCaseIds);
+        toast.success(`Cases for ${institutionName} unlinked into independent tracks.`);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("aicte_case_updated"));
+        }
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to unlink cases.");
+    } finally {
+      setIsUnlinking(false);
+    }
+  };
 
   return (
-    <div className={cn(
-      "rounded-xl border p-4 space-y-3 transition-all hover:scale-[1.01]",
-      isHigh
-        ? "bg-red-950/20 border-primary/40 shadow-lg shadow-red-900/10"
-        : "bg-red-950/10 border-red-500/25"
-    )}>
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary/20 grid place-items-center shrink-0">
-            <Siren className="w-4 h-4 text-primary animate-pulse" />
+    <>
+      <div 
+        onClick={() => onViewProfile(aictePid)}
+        className={cn(
+          "rounded-xl border p-4 space-y-3 transition-colors cursor-pointer",
+          isLinkedConsolidated
+            ? "bg-emerald-950/20 border-emerald-500/40 shadow-lg shadow-emerald-900/10 hover:border-emerald-500/60"
+            : isHigh
+              ? "bg-red-950/20 border-primary/40 shadow-lg shadow-red-900/10 hover:border-primary/60"
+              : "bg-red-950/10 border-red-500/25 hover:border-red-500/50"
+        )}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className={cn(
+              "w-8 h-8 rounded-lg grid place-items-center shrink-0",
+              isLinkedConsolidated ? "bg-emerald-500/20" : "bg-primary/20"
+            )}>
+              {isLinkedConsolidated ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              ) : (
+                <Siren className="w-4 h-4 text-primary animate-pulse" />
+              )}
+            </div>
+            <div>
+              <div className="font-semibold text-sm text-white flex items-center gap-2 flex-wrap">
+                <span>{institutionName}</span>
+                {isLinkedConsolidated && (
+                  <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Linked / Consolidated
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={cn("text-[10px] font-mono", isLinkedConsolidated ? "text-emerald-400/80" : "text-primary/80")}>{aictePid}</span>
+                <span className="text-white/20">·</span>
+                <span className="text-[10px] text-muted-foreground">{region} Region</span>
+              </div>
+            </div>
           </div>
-          <div>
-            <div className="font-semibold text-sm text-white">{institutionName}</div>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[10px] text-primary/80 font-mono">{aictePid}</span>
-              <span className="text-white/20">·</span>
-              <span className="text-[10px] text-muted-foreground">{region} Region</span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <div className={cn(
+              "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+              isLinkedConsolidated 
+                ? "text-emerald-300 bg-emerald-500/15 border-emerald-500/30"
+                : "text-primary bg-primary/15 border-primary/30"
+            )}>
+              {isLinkedConsolidated ? "Synchronized" : `${Math.round(score * 100)}% overlap`}
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <div className="text-[10px] font-bold text-primary bg-primary/15 border border-primary/30 px-2 py-0.5 rounded-full">
-            {Math.round(score * 100)}% overlap
+
+        {/* Suggested Cell Assignment Plain Indicator (No colored labels) */}
+        <div className="p-2.5 rounded-lg bg-neutral-900/90 border border-neutral-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 text-neutral-300">
+            <span className="text-muted-foreground font-semibold">Target Cell:</span>
+            <span className="font-medium text-white">{recommendedJurisdiction.name}</span>
+          </div>
+          <div className="text-[11px] text-muted-foreground font-mono">
+            Category: <span className="text-white font-medium">{parentCase?.category || "Compliance"}</span>
+          </div>
+        </div>
+
+        {/* Shared Root Cause Banner */}
+        {analysis?.shared_root_cause && (
+          <div className={cn(
+            "p-2.5 rounded-lg border text-xs space-y-1",
+            isLinkedConsolidated 
+              ? "bg-emerald-500/10 border-emerald-500/20" 
+              : "bg-red-500/10 border-red-500/20"
+          )}>
+            <div className={cn(
+              "font-bold text-[11px] flex items-center gap-1.5",
+              isLinkedConsolidated ? "text-emerald-300" : "text-red-300"
+            )}>
+              {isLinkedConsolidated ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
+              <span>{isLinkedConsolidated ? "Consolidated Joint Track:" : "Shared Root Cause:"} {analysis.shared_root_cause}</span>
+            </div>
+            <div className="text-[11px] text-muted-foreground line-clamp-2">
+              {analysis.reason}
+            </div>
+          </div>
+        )}
+
+        {/* Case pills */}
+        <div className="flex flex-wrap gap-2">
+          {rbCases.map(c => (
+            <div 
+              key={c.case_id} 
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onSelectCase) onSelectCase(c);
+              }}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 cursor-pointer transition-colors border border-neutral-700/80 bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200"
+            >
+              <BureauBadge bureau="RB" />
+              <span className="text-[10px] text-white/70 font-mono">{c.case_id}</span>
+              <span className="text-[9.5px] text-neutral-400">({c.category})</span>
+              <StatusBadge status={c.status} ageingDays={c.ageing_days} />
+            </div>
+          ))}
+          {pgrcCases.map(c => (
+            <div 
+              key={c.case_id} 
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onSelectCase) onSelectCase(c);
+              }}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 cursor-pointer transition-colors border border-neutral-700/80 bg-neutral-900/90 hover:bg-neutral-800 text-neutral-200"
+            >
+              <BureauBadge bureau="PGRC" />
+              <span className="text-[10px] text-white/70 font-mono">{c.case_id}</span>
+              <span className="text-[9.5px] text-neutral-400">({c.category})</span>
+              <StatusBadge status={c.status} ageingDays={c.ageing_days} />
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-2 pt-1 flex-wrap items-center justify-between">
+          <div className="flex gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewProfile(aictePid);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/50 border border-border/40 text-xs text-white/80 hover:bg-secondary hover:text-white transition-all cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5" /> View Institutional Profile
+            </button>
+            {isLinkedConsolidated ? (
+              <button 
+                type="button"
+                disabled={isUnlinking}
+                onClick={handleUnlink}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/40 hover:bg-destructive/20 border border-border/40 hover:border-destructive/40 text-xs font-semibold text-muted-foreground hover:text-destructive transition-all cursor-pointer disabled:opacity-50"
+                title="Detach and unlink these cases"
+              >
+                <Link2 className="w-3.5 h-3.5" /> {isUnlinking ? "Unlinking..." : "Unlink Cases"}
+              </button>
+            ) : (
+              <button 
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowLinkModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 border border-primary/40 text-xs font-semibold text-primary transition-all cursor-pointer"
+              >
+                <Link2 className="w-3.5 h-3.5" /> Link Cases
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Case pills */}
-      <div className="flex flex-wrap gap-2">
-        {rbCases.map(c => (
-          <div key={c.case_id} className="flex items-center gap-1.5 bg-red-950/30 border border-red-500/20 rounded-lg px-2.5 py-1.5">
-            <BureauBadge bureau="RB" />
-            <span className="text-[10px] text-white/70 font-mono">{c.case_id}</span>
-            <StatusBadge status={c.status} />
-          </div>
-        ))}
-        {pgrcCases.map(c => (
-          <div key={c.case_id} className="flex items-center gap-1.5 bg-rose-950/30 border border-rose-500/20 rounded-lg px-2.5 py-1.5">
-            <BureauBadge bureau="PGRC" />
-            <span className="text-[10px] text-white/70 font-mono">{c.case_id}</span>
-            <StatusBadge status={c.status} />
-          </div>
-        ))}
-      </div>
-
-      <div className="flex gap-2 pt-1 flex-wrap">
-        <button
-          onClick={() => onViewProfile(aictePid)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/50 border border-border/40 text-xs text-white/80 hover:bg-secondary hover:text-white transition-all"
+      {/* ── Interactive Link Case & Cell Assignment Modal (Locked Center Screen, App CSS) ── */}
+      {showLinkModal && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowLinkModal(false);
+          }}
         >
-          <Eye className="w-3.5 h-3.5" /> View Institutional Profile
-        </button>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/30 text-xs text-primary hover:bg-primary/25 transition-all">
-          <Link2 className="w-3.5 h-3.5" /> Link Cases
-        </button>
-      </div>
-    </div>
+          <div 
+            className="w-full max-w-lg bg-card border border-border/60 rounded-2xl p-5 space-y-4 shadow-2xl relative text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between border-b border-border/30 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Link2 className="w-4 h-4 text-primary" /> Confirm Case Link & Cell Assignment
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Institution: <span className="text-white font-semibold">{institutionName}</span> ({aictePid})
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowLinkModal(false)}
+                className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-white cursor-pointer transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Parent case category banner */}
+            <div className="p-3 rounded-xl bg-secondary/30 border border-border/40 space-y-1.5 text-xs">
+              <div className="text-[10px] text-muted-foreground uppercase font-mono font-semibold">
+                Parent Case Category
+              </div>
+              <div className="font-semibold text-white text-sm flex items-center gap-2">
+                <span>{parentCase?.category || "General Grievance"}</span>
+                <span className="text-muted-foreground font-normal">({parentCase?.case_id})</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                AICTE routing rule: parent category determines whether the consolidated proceeding assigns to PSRC, RO, or RB.
+              </p>
+            </div>
+
+            {/* Cell Choice Selection */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-white/90 block">
+                Assign Consolidated Proceeding To Cell:
+              </label>
+
+              <div className="space-y-2">
+                {/* Option 1: PSRC */}
+                <label 
+                  onClick={() => setSelectedCell("PSRC")}
+                  className={cn(
+                    "flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all",
+                    selectedCell === "PSRC" 
+                      ? "bg-primary/10 border-primary ring-1 ring-primary/30" 
+                      : "bg-secondary/20 border-border/30 hover:border-border/60"
+                  )}
+                >
+                  <input 
+                    type="radio" 
+                    name={`cell-${aictePid}`} 
+                    checked={selectedCell === "PSRC"} 
+                    onChange={() => setSelectedCell("PSRC")}
+                    className="mt-1 accent-primary" 
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xs text-white">PSRC Cell</span>
+                      {recommendedJurisdiction.cell === "PSRC" && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/30 font-bold uppercase font-mono">
+                          Recommended by Category
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-white/80 mt-0.5 font-medium">Public Service Grievance & Staff Cell</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Faculty Cadre, Non-payment of Salary, Service Matters & Recruitment.</div>
+                  </div>
+                </label>
+
+                {/* Option 2: RO */}
+                <label 
+                  onClick={() => setSelectedCell("RO")}
+                  className={cn(
+                    "flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all",
+                    selectedCell === "RO" 
+                      ? "bg-primary/10 border-primary ring-1 ring-primary/30" 
+                      : "bg-secondary/20 border-border/30 hover:border-border/60"
+                  )}
+                >
+                  <input 
+                    type="radio" 
+                    name={`cell-${aictePid}`} 
+                    checked={selectedCell === "RO"} 
+                    onChange={() => setSelectedCell("RO")}
+                    className="mt-1 accent-primary" 
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xs text-white">RO Cell</span>
+                      {recommendedJurisdiction.cell === "RO" && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/30 font-bold uppercase font-mono">
+                          Recommended by Category
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-white/80 mt-0.5 font-medium">Regional Office Field Oversight</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Ragging, Admissions Irregularity, Campus Welfare & Student Matters.</div>
+                  </div>
+                </label>
+
+                {/* Option 3: RB */}
+                <label 
+                  onClick={() => setSelectedCell("RB")}
+                  className={cn(
+                    "flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all",
+                    selectedCell === "RB" 
+                      ? "bg-primary/10 border-primary ring-1 ring-primary/30" 
+                      : "bg-secondary/20 border-border/30 hover:border-border/60"
+                  )}
+                >
+                  <input 
+                    type="radio" 
+                    name={`cell-${aictePid}`} 
+                    checked={selectedCell === "RB"} 
+                    onChange={() => setSelectedCell("RB")}
+                    className="mt-1 accent-primary" 
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xs text-white">RB Cell</span>
+                      {recommendedJurisdiction.cell === "RB" && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/30 font-bold uppercase font-mono">
+                          Recommended by Category
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-white/80 mt-0.5 font-medium">Regulation & Approval Bureau</div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Capitation Fee, Excess Fee Structure, Infrastructure Norms & Regulatory Orders.</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Cases to be connected */}
+            <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/30 text-[11px] text-neutral-300 flex items-center justify-between">
+              <span className="text-muted-foreground">Connecting Cases:</span>
+              <span className="font-mono text-primary font-bold">{allCaseIds.join(" ↔ ")}</span>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/30">
+              <button 
+                type="button"
+                onClick={() => setShowLinkModal(false)}
+                className="px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-xs text-muted-foreground hover:text-white cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                disabled={isLinking}
+                onClick={handleConfirmLink}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-xs font-semibold shadow-md shadow-primary/20 disabled:opacity-50 cursor-pointer transition-all"
+              >
+                <Link2 className="w-3.5 h-3.5" /> {isLinking ? "Assigning & Linking..." : `Assign to ${selectedCell} & Link`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -294,7 +716,7 @@ function CaseRow({
       </td>
 
       {/* 6. Status */}
-      <td className="px-3 py-3"><StatusBadge status={c.status} /></td>
+      <td className="px-3 py-3"><StatusBadge status={c.status} ageingDays={c.ageing_days} /></td>
 
       {/* 7. Ageing */}
       <td className="px-3 py-3">
@@ -500,7 +922,7 @@ function InstitutionDrawer({ pid, onClose, liveCases }: { pid: string; onClose: 
                     <div className="text-[10px] font-mono text-red-300/80">{c.case_id}</div>
                     <div className="text-xs font-medium text-white/80 mt-0.5 leading-tight">{c.title}</div>
                     <div className="flex items-center gap-1.5 mt-1.5">
-                      <StatusBadge status={c.status} />
+                      <StatusBadge status={c.status} ageingDays={c.ageing_days} />
                       <span className="text-[10px] text-white/30">{c.ageing_days}d</span>
                     </div>
                   </div>
@@ -520,7 +942,7 @@ function InstitutionDrawer({ pid, onClose, liveCases }: { pid: string; onClose: 
                     <div className="text-[10px] font-mono text-rose-300/80">{c.case_id}</div>
                     <div className="text-xs font-medium text-white/80 mt-0.5 leading-tight">{c.title}</div>
                     <div className="flex items-center gap-1.5 mt-1.5">
-                      <StatusBadge status={c.status} />
+                      <StatusBadge status={c.status} ageingDays={c.ageing_days} />
                       <span className="text-[10px] text-white/30">{c.ageing_days}d</span>
                     </div>
                   </div>
@@ -541,7 +963,7 @@ function InstitutionDrawer({ pid, onClose, liveCases }: { pid: string; onClose: 
                   <div key={c.case_id} className="bg-white/5 border border-white/10 rounded-lg p-2.5">
                     <div className="text-[10px] font-mono text-white/50">{c.case_id}</div>
                     <div className="text-xs font-medium text-white/80 mt-0.5">{c.title}</div>
-                    <div className="mt-1.5"><StatusBadge status={c.status} /></div>
+                    <div className="mt-1.5"><StatusBadge status={c.status} ageingDays={c.ageing_days} /></div>
                   </div>
                 ))}
               </div>
@@ -567,6 +989,287 @@ function InstitutionDrawer({ pid, onClose, liveCases }: { pid: string; onClose: 
 }
 
 // ── Main Dashboard Component ──────────────────────────────────────
+// ── Apache ECharts: Status Donut Ring Chart Component ───────────────
+function StatusDonutBreakdown({ cases }: { cases: AICTECase[] }) {
+  const { theme } = useTheme();
+  const isDark = theme !== "light";
+  const textColor = isDark ? "#ffffff" : "#0f172a";
+  const subTextColor = isDark ? "#a1a1aa" : "#64748b";
+  const tooltipBg = isDark ? "#18181b" : "#ffffff";
+  const tooltipBorder = isDark ? "#3f3f46" : "#cbd5e1";
+  const tooltipText = isDark ? "#f4f4f5" : "#0f172a";
+
+  const statusMeta: Record<string, { label: string; color: string }> = {
+    received:      { label: "Received",      color: isDark ? "#94a3b8" : "#64748b" },
+    under_process: { label: "Under Process", color: "#0284c7" },
+    transferred:   { label: "Transferred",   color: "#9333ea" },
+    escalated:     { label: "Escalated",     color: "#ea580c" },
+    breached:      { label: "Breached",      color: "#dc2626" },
+    disposed:      { label: "Disposed",      color: "#16a34a" },
+  };
+
+  const chartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    Object.keys(statusMeta).forEach(k => { counts[k] = 0; });
+
+    cases.forEach(c => {
+      const isBreached = c.status === "breached" || (c.status !== "disposed" && ((c.ageing_days ?? 0) > 30 || c.sla_breached));
+      const eff = isBreached ? "breached" : c.status;
+      if (counts[eff] !== undefined) {
+        counts[eff]++;
+      } else {
+        counts[c.status] = (counts[c.status] || 0) + 1;
+      }
+    });
+
+    return Object.entries(statusMeta).map(([status, cfg]) => ({
+      name: cfg.label,
+      value: counts[status] || 0,
+      itemStyle: {
+        color: cfg.color,
+        borderRadius: 6,
+        borderColor: isDark ? "#18181b" : "#ffffff",
+        borderWidth: 2,
+      },
+    })).filter(item => item.value > 0);
+  }, [cases, isDark]);
+
+  const totalCases = cases.length;
+
+  const option = useMemo(() => ({
+    backgroundColor: "transparent",
+    tooltip: {
+      trigger: "item",
+      backgroundColor: tooltipBg,
+      borderColor: tooltipBorder,
+      borderWidth: 1,
+      padding: [8, 12],
+      textStyle: { color: tooltipText, fontSize: 12, fontFamily: "monospace" },
+      formatter: (params: any) => {
+        return `<div style="font-weight:700;margin-bottom:2px;color:${tooltipText};">${params.name}</div>
+                <div style="color:${params.color};font-size:13px;font-weight:800;">${params.value} cases (${params.percent}%)</div>`;
+      },
+    },
+    legend: {
+      orient: "horizontal",
+      bottom: "2%",
+      left: "center",
+      itemWidth: 10,
+      itemHeight: 10,
+      textStyle: { color: subTextColor, fontSize: 11 },
+      icon: "circle",
+    },
+    series: [
+      {
+        name: "Case Status",
+        type: "pie",
+        radius: ["50%", "74%"],
+        center: ["50%", "44%"],
+        avoidLabelOverlap: false,
+        label: {
+          show: true,
+          position: "center",
+          formatter: () => `{val|${totalCases}}\n{lbl|TOTAL CASES}`,
+          rich: {
+            val: {
+              fontSize: 26,
+              fontWeight: 800,
+              color: textColor,
+              fontFamily: "monospace",
+              lineHeight: 32,
+            },
+            lbl: {
+              fontSize: 10,
+              color: subTextColor,
+              fontWeight: 600,
+              letterSpacing: 1,
+            },
+          },
+        },
+        emphasis: {
+          scale: true,
+          scaleSize: 6,
+          itemStyle: {
+            shadowBlur: 14,
+            shadowColor: isDark ? "rgba(0, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.15)",
+          },
+          label: {
+            show: true,
+            formatter: (params: any) => `{val|${params.value}}\n{lbl|${params.name.toUpperCase()}}`,
+            rich: {
+              val: {
+                fontSize: 26,
+                fontWeight: 800,
+                color: textColor,
+                fontFamily: "monospace",
+                lineHeight: 32,
+              },
+              lbl: {
+                fontSize: 10,
+                color: "#dc2626",
+                fontWeight: 700,
+                letterSpacing: 1,
+              },
+            },
+          },
+        },
+        data: chartData,
+      },
+    ],
+  }), [chartData, totalCases, textColor, subTextColor, tooltipBg, tooltipBorder, tooltipText, isDark]);
+
+  return (
+    <div className="glass-card p-5 flex flex-col justify-between">
+      <div className="flex items-center justify-between mb-2 border-b border-border/20 pb-2.5">
+        <h3 className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+          <TrendingUp className="w-4 h-4 text-primary" />
+          Status Breakdown
+        </h3>
+        <span className="text-[10px] font-mono font-semibold text-muted-foreground bg-secondary/80 border border-border/60 px-2 py-0.5 rounded-full">
+          {totalCases} cases
+        </span>
+      </div>
+      <div className="w-full h-[270px] relative">
+        <ReactECharts
+          option={option}
+          style={{ height: "100%", width: "100%" }}
+          opts={{ renderer: "svg" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Apache ECharts: Complainant Types Vertical Bar Chart Component ───
+function ComplainantTypesBarChart({ cases }: { cases: AICTECase[] }) {
+  const { theme } = useTheme();
+  const isDark = theme !== "light";
+  const axisColor = isDark ? "#3f3f46" : "#cbd5e1";
+  const labelColor = isDark ? "#d4d4d8" : "#334155";
+  const subTextColor = isDark ? "#a1a1aa" : "#64748b";
+  const splitLineColor = isDark ? "rgba(255, 255, 255, 0.07)" : "rgba(0, 0, 0, 0.06)";
+  const tooltipBg = isDark ? "#18181b" : "#ffffff";
+  const tooltipBorder = isDark ? "#3f3f46" : "#cbd5e1";
+  const tooltipText = isDark ? "#f4f4f5" : "#0f172a";
+
+  const chartData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    cases.forEach((c) => {
+      const t = c.complainant_type || "Public";
+      counts[t] = (counts[t] || 0) + 1;
+    });
+    const categories = Object.keys(counts);
+    const values = categories.map((k) => counts[k]);
+    return { categories, values };
+  }, [cases]);
+
+  const option = useMemo(() => ({
+    backgroundColor: "transparent",
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      backgroundColor: tooltipBg,
+      borderColor: tooltipBorder,
+      borderWidth: 1,
+      padding: [8, 12],
+      textStyle: { color: tooltipText, fontSize: 12, fontFamily: "monospace" },
+      formatter: (params: any) => {
+        const item = params[0];
+        return `<div style="font-weight:700;margin-bottom:2px;color:${tooltipText};">${item.name}</div>
+                <div style="color:#ef4444;font-size:13px;font-weight:800;">${item.value} complaints</div>`;
+      },
+    },
+    grid: {
+      top: "14%",
+      bottom: "10%",
+      left: "8%",
+      right: "6%",
+      containLabel: true,
+    },
+    xAxis: {
+      type: "category",
+      data: chartData.categories,
+      axisLine: { lineStyle: { color: axisColor } },
+      axisLabel: { color: labelColor, fontSize: 11, fontWeight: 500 },
+      axisTick: { alignWithLabel: true },
+    },
+    yAxis: {
+      type: "value",
+      minInterval: 1,
+      splitLine: { lineStyle: { color: splitLineColor, type: "dashed" } },
+      axisLabel: { color: subTextColor, fontSize: 11, fontFamily: "monospace" },
+    },
+    series: [
+      {
+        name: "Complaints",
+        type: "bar",
+        barWidth: "40%",
+        data: chartData.values,
+        label: {
+          show: true,
+          position: "top",
+          color: isDark ? "#ffffff" : "#0f172a",
+          fontFamily: "monospace",
+          fontWeight: "bold",
+          fontSize: 12,
+        },
+        itemStyle: {
+          borderRadius: [6, 6, 0, 0],
+          color: {
+            type: "linear",
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: "#ef4444" },
+              { offset: 1, color: isDark ? "#7f1d1d" : "#b91c1c" },
+            ],
+          },
+        },
+        emphasis: {
+          itemStyle: {
+            color: {
+              type: "linear",
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: "#f87171" },
+                { offset: 1, color: isDark ? "#991b1b" : "#dc2626" },
+              ],
+            },
+            shadowBlur: 10,
+            shadowColor: "rgba(239, 68, 68, 0.5)",
+          },
+        },
+      },
+    ],
+  }), [chartData, axisColor, labelColor, subTextColor, splitLineColor, tooltipBg, tooltipBorder, tooltipText, isDark]);
+
+  return (
+    <div className="glass-card p-5 flex flex-col justify-between">
+      <div className="flex items-center justify-between mb-2 border-b border-border/20 pb-2.5">
+        <h3 className="text-sm font-semibold flex items-center gap-1.5 text-foreground">
+          <Users className="w-4 h-4 text-primary" />
+          Complainant Types
+        </h3>
+        <span className="text-[10px] font-mono font-semibold text-muted-foreground bg-secondary/80 border border-border/60 px-2 py-0.5 rounded-full">
+          {cases.length} total
+        </span>
+      </div>
+      <div className="w-full h-[270px] relative">
+        <ReactECharts
+          option={option}
+          style={{ height: "100%", width: "100%" }}
+          opts={{ renderer: "svg" }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function CasesDashboard() {
   const nav = useNavigate();
   const { user } = useAuth();
@@ -582,7 +1285,7 @@ function CasesDashboard() {
   const [searchQ, setSearchQ] = useState("");
 
   // Views
-  const [activeTab, setActiveTab] = useState<"cases" | "overlaps" | "institutions" | "analytics">("cases");
+  const [activeTab, setActiveTab] = useState<"cases" | "overlaps" | "institutions" | "analytics" | "registrations">("cases");
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [selectedCase, setSelectedCase] = useState<AICTECase | null>(null);
 
@@ -710,6 +1413,16 @@ function CasesDashboard() {
     };
   }, [fetchData]);
 
+  // Deep-link to registrations tab if ?tab=registrations is in URL
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "registrations") {
+        setActiveTab("registrations");
+      }
+    }
+  }, []);
+
   // File Complaint state
   const [isFilingModalOpen, setIsFilingModalOpen] = useState(false);
   const [submittingComplaint, setSubmittingComplaint] = useState(false);
@@ -722,7 +1435,56 @@ function CasesDashboard() {
     complainant_type: "Student",
   });
 
-  const availableInstitutions = useMemo(() => getStoredInstitutions(), []);
+  const [institutionsList, setInstitutionsList] = useState<InstitutionProfile[]>(getStoredInstitutions);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchInstitutionsAsync().then((live) => {
+      if (mounted && Array.isArray(live) && live.length > 0) {
+        setInstitutionsList(live);
+      }
+    }).catch(() => {});
+
+    const sync = () => {
+      setInstitutionsList(getStoredInstitutions());
+    };
+    window.addEventListener("aicte_institution_updated", sync);
+    return () => {
+      mounted = false;
+      window.removeEventListener("aicte_institution_updated", sync);
+    };
+  }, []);
+
+  const allDisplayInstitutions = useMemo(() => {
+    const pids = new Set(institutionsList.map(i => i.aicte_pid));
+    const merged = [...institutionsList];
+    cases.forEach(c => {
+      if (c.aicte_pid && !pids.has(c.aicte_pid)) {
+        pids.add(c.aicte_pid);
+        merged.push({
+          aicte_pid: c.aicte_pid,
+          institution_name: c.institution_name || c.aicte_pid,
+          region: c.region || "Central",
+          state: "State",
+          city: "City",
+          address: "Campus",
+          inst_type: "Technical Institute",
+          approval_status: "Active Approval",
+          principal_name: "",
+          contact_email: "",
+          contact_phone: "",
+          website: "",
+          established_year: 2020,
+          total_faculty: 0,
+          total_students: 0,
+          images: [],
+        });
+      }
+    });
+    return merged;
+  }, [institutionsList, cases]);
+
+  const availableInstitutions = allDisplayInstitutions;
 
   const handleFileComplaintSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -768,16 +1530,28 @@ function CasesDashboard() {
   // Derived filtered cases
   const filteredCases = useMemo(() => {
     return cases.filter(c => {
+      const isBreached = c.status === "breached" || (c.status !== "disposed" && ((c.ageing_days ?? 0) > 30 || c.sla_breached));
+      const effectiveStatus = isBreached ? "breached" : c.status;
+
       if (bureauFilter !== "ALL" && c.bureau !== bureauFilter) return false;
-      if (statusFilter !== "ALL" && c.status !== statusFilter) return false;
+      if (statusFilter !== "ALL") {
+        if (statusFilter === "breached") {
+          if (!isBreached) return false;
+        } else {
+          if (c.status !== statusFilter && effectiveStatus !== statusFilter) return false;
+        }
+      }
       if (regionFilter !== "ALL" && c.region !== regionFilter) return false;
       if (searchQ.trim()) {
         const q = searchQ.toLowerCase();
-        if (!c.case_id.toLowerCase().includes(q) &&
-            !c.institution_name.toLowerCase().includes(q) &&
-            !c.aicte_pid.toLowerCase().includes(q) &&
-            !c.category.toLowerCase().includes(q) &&
-            !c.title.toLowerCase().includes(q)) return false;
+        const matchesQ =
+          c.case_id.toLowerCase().includes(q) ||
+          c.institution_name.toLowerCase().includes(q) ||
+          c.aicte_pid.toLowerCase().includes(q) ||
+          c.category.toLowerCase().includes(q) ||
+          c.title.toLowerCase().includes(q) ||
+          (isBreached && q.includes("breach"));
+        if (!matchesQ) return false;
       }
       return true;
     });
@@ -798,6 +1572,35 @@ function CasesDashboard() {
   );
 
   // Overlap institutions (cases with both RB and PGRC)
+    // Live bureau workload computed dynamically from cases (updates instantly on link/unlink/edit)
+  const activeBureauCounts = useMemo(() => {
+    const counts = { RB: 0, PGRC: 0, RO: 0 };
+    cases.forEach(c => {
+      if (c.bureau in counts) counts[c.bureau as keyof typeof counts]++;
+    });
+    return counts;
+  }, [cases]);
+  const totalActiveCasesCount = Math.max(1, cases.length);
+
+  // Regional distribution for India map
+  const regionalSummaryData = useMemo(() => {
+    const summary: Record<string, { region: string; casesCount: number; collegesCount: number; colleges: string[] }> = {};
+    cases.forEach(c => {
+      const reg = c.region || "Central";
+      if (!summary[reg]) {
+        summary[reg] = { region: reg, casesCount: 0, collegesCount: 0, colleges: [] };
+      }
+      summary[reg].casesCount++;
+      if (c.institution_name && !summary[reg].colleges.includes(c.institution_name)) {
+        summary[reg].colleges.push(c.institution_name);
+      }
+    });
+    Object.keys(summary).forEach(k => {
+      summary[k].collegesCount = summary[k].colleges.length;
+    });
+    return summary;
+  }, [cases]);
+
   const overlapInstitutions = useMemo(() => {
     const byPid: Record<string, AICTECase[]> = {};
     cases.forEach(c => {
@@ -809,14 +1612,34 @@ function CasesDashboard() {
         const active = cs.filter(c => c.status !== "disposed");
         return active.some(c => c.bureau === "RB") && active.some(c => c.bureau === "PGRC");
       })
-      .map(([pid, cs]) => ({
-        pid, cs,
-        rb: cs.filter(c => c.bureau === "RB" && c.status !== "disposed"),
-        pgrc: cs.filter(c => c.bureau === "PGRC" && c.status !== "disposed"),
-        name: cs[0]?.institution_name ?? pid,
-        region: cs[0]?.region ?? "—",
-      }));
+      .map(([pid, cs]) => {
+        const active = cs.filter(c => c.status !== "disposed");
+        const isConsolidated = active.some(c => {
+          if (!c.linked_case_ids) return false;
+          if (Array.isArray(c.linked_case_ids)) return c.linked_case_ids.length > 0;
+          try {
+            const p = JSON.parse(c.linked_case_ids);
+            return Array.isArray(p) && p.length > 0;
+          } catch {
+            return false;
+          }
+        });
+
+        return {
+          pid, cs,
+          rb: cs.filter(c => c.bureau === "RB" && c.status !== "disposed"),
+          pgrc: cs.filter(c => c.bureau === "PGRC" && c.status !== "disposed"),
+          name: cs[0]?.institution_name ?? pid,
+          region: cs[0]?.region ?? "—",
+          isConsolidated,
+        };
+      });
   }, [cases]);
+
+  // Dynamic live count of unlinked / pending overlap institutions
+  const pendingOverlapCount = useMemo(() => {
+    return overlapInstitutions.filter(o => !o.isConsolidated).length;
+  }, [overlapInstitutions]);
 
   // Ageing distribution for analytics
   const ageingBuckets = useMemo(() => {
@@ -911,45 +1734,53 @@ function CasesDashboard() {
         </div>
 
         {/* ── KPI Grid ─────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5">
-          <div className="col-span-2 md:col-span-1">
-            <KpiTile label="Total Received" value={kpi.total} icon={FileText} sub="All bureaus" />
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-1.5 sm:gap-2.5">
+          <div className="col-span-1">
+            <KpiTile label="Total Received" value={kpi.total} icon={FileText} sub="All bureaus" onClick={() => { setActiveTab("cases"); setStatusFilter("ALL"); }} />
           </div>
-          <div className="col-span-2 md:col-span-1">
-            <KpiTile label="Under Process" value={kpi.under_process} icon={Clock} color="bg-red-500/20" sub="Active pipeline" />
+          <div className="col-span-1">
+            <KpiTile label="Under Process" value={kpi.under_process} icon={Clock} color="bg-red-500/20" sub="Active pipeline" onClick={() => { setActiveTab("cases"); setStatusFilter("under_process"); }} />
           </div>
-          <div className="col-span-2 md:col-span-1">
-            <KpiTile label="Escalated" value={kpi.escalated} icon={AlertTriangle} color="bg-red-500/20" sub="Priority cases" />
+          <div className="col-span-1">
+            <KpiTile label="Escalated" value={kpi.escalated} icon={AlertTriangle} color="bg-red-500/20" sub="Priority cases" onClick={() => { setActiveTab("cases"); setStatusFilter("escalated"); }} />
           </div>
-          <div className="col-span-2 md:col-span-1">
-            <KpiTile label="Disposed" value={kpi.disposed} icon={CheckCircle2} color="bg-white/10" sub="Resolved" />
+          <div className="col-span-1">
+            <KpiTile label="Disposed" value={kpi.disposed} icon={CheckCircle2} color="bg-white/10" sub="Resolved" onClick={() => { setActiveTab("cases"); setStatusFilter("disposed"); }} />
           </div>
-          <div className="col-span-2 md:col-span-1">
-            <KpiTile label="Transferred" value={kpi.transferred} icon={ArrowUpRight} color="bg-rose-500/20" sub="Bureau → Bureau" />
+          <div className="col-span-1">
+            <KpiTile label="Transferred" value={kpi.transferred} icon={ArrowUpRight} color="bg-rose-500/20" sub="Bureau → Bureau" onClick={() => { setActiveTab("cases"); setStatusFilter("transferred"); }} />
           </div>
-          <div className="col-span-2 md:col-span-1">
-            <KpiTile label="SLA Breached" value={kpi.sla_breached} icon={AlertOctagon} color="bg-red-600/30" pulse={kpi.sla_breached > 0} sub="Past deadline" />
+          <div className="col-span-1">
+            <KpiTile label="SLA Breached" value={kpi.sla_breached} icon={AlertOctagon} color="bg-red-600/30" pulse={kpi.sla_breached > 0} sub="Past deadline" onClick={() => { setActiveTab("cases"); setStatusFilter("breached"); setSearchQ(""); }} />
           </div>
-          <div className="col-span-2">
-            <div className={cn(
-              "glass-card p-4 flex flex-col gap-2 hover:border-red-500/30 transition-all duration-200 group relative overflow-hidden",
-              kpi.overlapping_institutions > 0 && "border-red-500/40 bg-red-500/5"
-            )}>
-              {kpi.overlapping_institutions > 0 && (
+          <div className="col-span-3 sm:col-span-2 lg:col-span-2">
+            <div
+              onClick={() => setActiveTab("overlaps")}
+              className={cn(
+                "glass-card p-2 sm:p-4 flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-start justify-between gap-1.5 sm:gap-2 hover:border-red-500/50 hover:bg-red-500/10 transition-all duration-200 group relative overflow-hidden cursor-pointer",
+                pendingOverlapCount > 0 && "border-red-500/40 bg-red-500/5"
+              )}>
+              {pendingOverlapCount > 0 && (
                 <div className="absolute inset-0 bg-red-500/5 animate-pulse pointer-events-none rounded-xl" />
               )}
-              <div className="flex items-center justify-between relative z-10">
-                <div className="w-8 h-8 rounded-lg bg-red-500/20 grid place-items-center">
-                  <Siren className="w-4 h-4 text-red-400 animate-pulse" />
+              <div className="flex items-center justify-between w-full relative z-10">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-red-500/20 grid place-items-center">
+                    <Siren className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-400 animate-pulse" />
+                  </div>
+                  <div className="sm:hidden flex items-baseline gap-2">
+                    <span className="text-xl font-bold tabular-nums text-red-300">{pendingOverlapCount}</span>
+                    <span className="text-[11px] font-semibold text-white">Overlapping Institutions</span>
+                  </div>
                 </div>
-                {kpi.overlapping_institutions > 0 && (
+                {pendingOverlapCount > 0 && (
                   <span className="text-[9px] bg-red-500/20 text-red-300 border border-red-500/30 px-1.5 py-0.5 rounded-full font-bold">
                     ALERT
                   </span>
                 )}
               </div>
-              <div className="relative z-10">
-                <div className="text-2xl font-bold tabular-nums text-red-300">{kpi.overlapping_institutions}</div>
+              <div className="relative z-10 hidden sm:block">
+                <div className="text-2xl font-bold tabular-nums text-red-300">{pendingOverlapCount}</div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">Overlapping Institutions</div>
                 <div className="text-[10px] text-red-400/60 mt-0.5">RB ∩ PGRC concurrent</div>
               </div>
@@ -964,17 +1795,17 @@ function CasesDashboard() {
               <BarChart3 className="w-4 h-4 text-primary" /> Bureau Workload
             </h2>
             <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />RB: {kpi.by_bureau.RB}</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />PGRC: {kpi.by_bureau.PGRC}</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-white/40 inline-block" />RO: {kpi.by_bureau.RO}</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" />RB: {activeBureauCounts.RB}</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />PGRC: {activeBureauCounts.PGRC}</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-white/40 inline-block" />RO: {activeBureauCounts.RO}</span>
             </div>
           </div>
-          <div className="flex h-3 rounded-full overflow-hidden">
-            {kpi.total > 0 && (
+          <div className="flex h-3 rounded-full overflow-hidden bg-white/5">
+            {totalActiveCasesCount > 0 && (
               <>
-                <div className="bg-red-600 transition-all" style={{ width: `${(kpi.by_bureau.RB / kpi.total) * 100}%` }} title={`RB: ${kpi.by_bureau.RB}`} />
-                <div className="bg-rose-400 transition-all" style={{ width: `${(kpi.by_bureau.PGRC / kpi.total) * 100}%` }} title={`PGRC: ${kpi.by_bureau.PGRC}`} />
-                <div className="bg-white/30 transition-all" style={{ width: `${(kpi.by_bureau.RO / kpi.total) * 100}%` }} title={`RO: ${kpi.by_bureau.RO}`} />
+                <div className="bg-red-600 transition-all duration-500" style={{ width: `${(activeBureauCounts.RB / totalActiveCasesCount) * 100}%` }} title={`RB: ${activeBureauCounts.RB}`} />
+                <div className="bg-rose-400 transition-all duration-500" style={{ width: `${(activeBureauCounts.PGRC / totalActiveCasesCount) * 100}%` }} title={`PGRC: ${activeBureauCounts.PGRC}`} />
+                <div className="bg-white/40 transition-all duration-500" style={{ width: `${(activeBureauCounts.RO / totalActiveCasesCount) * 100}%` }} title={`RO: ${activeBureauCounts.RO}`} />
               </>
             )}
           </div>
@@ -984,8 +1815,9 @@ function CasesDashboard() {
         <div className="flex flex-wrap gap-1">
           {([
             ["cases", "All Cases", FileText],
-            ["overlaps", `Overlap Alerts (${overlapInstitutions.length})`, Siren],
-            ["institutions", "Institutions", Building2],
+            ...(canManageCases ? [["registrations", "Registrations", Building2] as [typeof activeTab, string, any]] : []),
+            ["overlaps", `Overlap Alerts (${pendingOverlapCount})`, Siren],
+            ["institutions", `Institutions (${allDisplayInstitutions.length})`, Building2],
             ["analytics", "Analytics", BarChart3],
           ] as [typeof activeTab, string, any][]).map(([k, label, Icon]) => (
             <button
@@ -1140,11 +1972,18 @@ function CasesDashboard() {
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-2 px-1">
-                  <AlertTriangle className="w-4 h-4 text-red-400" />
-                  <span className="text-sm font-semibold text-red-300">
-                    {overlapInstitutions.length} institution{overlapInstitutions.length > 1 ? "s" : ""} require cross-bureau coordination
-                  </span>
+                <div className="flex items-center justify-between gap-2 px-1 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-red-400" />
+                    <span className="text-sm font-semibold text-red-300">
+                      {pendingOverlapCount} institution{pendingOverlapCount !== 1 ? "s" : ""} require cross-bureau coordination
+                    </span>
+                  </div>
+                  {overlapInstitutions.length > pendingOverlapCount && (
+                    <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
+                      {overlapInstitutions.length - pendingOverlapCount} Synchronized & Consolidated
+                    </span>
+                  )}
                 </div>
                 {overlapInstitutions.map(({ pid, rb, pgrc, name, region }) => (
                   <OverlapAlertCard
@@ -1176,6 +2015,7 @@ function CasesDashboard() {
                       }
                     }
                     onViewProfile={setSelectedProfile}
+                    onSelectCase={setSelectedCase}
                   />
                 ))}
               </>
@@ -1186,12 +2026,13 @@ function CasesDashboard() {
         {/* ── TAB: Institutions ────────────────────────────────────── */}
         {activeTab === "institutions" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {Array.from(new Set(cases.map(c => c.aicte_pid))).map(pid => {
+            {allDisplayInstitutions.map(inst => {
+              const pid = inst.aicte_pid;
               const instCases = cases.filter(c => c.aicte_pid === pid);
               const active = instCases.filter(c => c.status !== "disposed");
               const hasOverlap = active.some(c => c.bureau === "RB") && active.some(c => c.bureau === "PGRC");
-              const name = instCases[0]?.institution_name ?? pid;
-              const region = instCases[0]?.region ?? "—";
+              const name = inst.institution_name;
+              const region = inst.region ?? "—";
               return (
                 <button
                   key={pid}
@@ -1221,10 +2062,21 @@ function CasesDashboard() {
                   <div className="flex items-center gap-3 mt-3 flex-wrap">
                     <span className="text-[10px] text-muted-foreground flex items-center gap-1"><MapPin className="w-2.5 h-2.5" />{region}</span>
                     <span className="text-[10px] text-muted-foreground">{instCases.length} total cases</span>
-                    <span className="text-[10px] text-red-400">{active.length} active</span>
+                    <span className={cn("text-[10px]", active.length > 0 ? "text-red-400 font-semibold" : "text-emerald-400/90")}>
+                      {active.length} active
+                    </span>
+                    {instCases.length === 0 && (
+                      <span className="text-[9.5px] font-mono text-neutral-400 bg-neutral-800/80 border border-neutral-700/60 px-1.5 py-0.2 rounded">
+                        Compliant
+                      </span>
+                    )}
                   </div>
                   <div className="flex gap-1.5 mt-2">
-                    {Array.from(new Set(instCases.map(c => c.bureau))).map(b => <BureauBadge key={b} bureau={b} />)}
+                    {instCases.length > 0 ? (
+                      Array.from(new Set(instCases.map(c => c.bureau))).map(b => <BureauBadge key={b} bureau={b} />)
+                    ) : (
+                      <span className="text-[9px] text-white/40 italic">No bureau proceedings registered</span>
+                    )}
                   </div>
                 </button>
               );
@@ -1278,51 +2130,34 @@ function CasesDashboard() {
               </div>
             </div>
 
-            {/* Status breakdown */}
-            <div className="glass-card p-5">
-              <h3 className="text-sm font-semibold mb-4 flex items-center gap-1.5"><TrendingUp className="w-4 h-4 text-primary" />Status Breakdown</h3>
-              <div className="space-y-2">
-                {Object.entries(STATUS_CONFIG).map(([status, cfg]) => {
-                  const count = cases.filter(c => c.status === status).length;
-                  return (
-                    <div key={status} className="flex items-center gap-3">
-                      <StatusBadge status={status} />
-                      <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full bg-white/20 transition-all duration-700"
-                          style={{ width: kpi.total > 0 ? `${(count / kpi.total) * 100}%` : "0%" }} />
-                      </div>
-                      <span className="text-xs text-white/60 tabular-nums w-4">{count}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            {/* Status breakdown Donut Ring Chart */}
+            <StatusDonutBreakdown cases={cases} />
 
-            {/* Complainant types */}
-            <div className="glass-card p-5">
-              <h3 className="text-sm font-semibold mb-4 flex items-center gap-1.5"><Users className="w-4 h-4 text-primary" />Complainant Types</h3>
-              <div className="space-y-3">
-                {Array.from(new Set(cases.map(c => c.complainant_type))).map(type => {
-                  const count = cases.filter(c => c.complainant_type === type).length;
-                  return (
-                    <div key={type}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs text-white/70">{type}</span>
-                        <span className="text-xs font-bold tabular-nums text-white/80">{count}</span>
-                      </div>
-                      <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full bg-primary/60 transition-all duration-700"
-                          style={{ width: kpi.total > 0 ? `${(count / kpi.total) * 100}%` : "0%" }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            {/* Complainant Types Vertical Bar Chart (Apache ECharts) */}
+            <ComplainantTypesBarChart cases={cases} />
+
+            {/* ── India Regional Map (Live Complained Technical Institutions) ── */}
+            <div className="md:col-span-2">
+              <IndiaRegionalMap
+                regionData={regionalSummaryData}
+                totalCases={cases.length}
+                onSelectRegion={(reg) => {
+                  setRegionFilter(reg);
+                  setActiveTab("cases");
+                }}
+              />
             </div>
           </div>
         )}
 
+              {/* ── TAB: Registrations (Officer Approval Workflow) ── */}
+        {activeTab === "registrations" && (
+          <InstitutionRegistrationsTab onRefreshCases={fetchData} />
+        )}
       </div>
+
+
+
 
       {/* ── Institution Profile Drawer ──────────────────────────────── */}
       {selectedProfile && (
@@ -1330,61 +2165,150 @@ function CasesDashboard() {
       )}
 
       {/* ── Case Detail Modal ──────────────────────────────────────── */}
-      {selectedCase && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedCase(null)} />
-          <div className="relative w-full max-w-lg bg-card border border-border/40 rounded-2xl shadow-2xl p-5 space-y-4 max-h-[80vh] overflow-y-auto">
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <BureauBadge bureau={selectedCase.bureau} />
-                  <span className="text-[11px] font-mono text-primary/80">{selectedCase.case_id}</span>
-                  <StatusBadge status={selectedCase.status} />
-                  {selectedCase.sla_breached && (
-                    <span className="text-[10px] font-bold text-red-400 bg-red-500/20 border border-red-500/30 px-1.5 py-0.5 rounded-full">SLA BREACHED</span>
-                  )}
+      {selectedCase && (() => {
+        // Parse linked case IDs safely
+        let linkedIds: string[] = [];
+        if (Array.isArray(selectedCase.linked_case_ids)) {
+          linkedIds = selectedCase.linked_case_ids.map(String);
+        } else if (typeof selectedCase.linked_case_ids === "string" && selectedCase.linked_case_ids.trim()) {
+          try {
+            const parsed = JSON.parse(selectedCase.linked_case_ids);
+            if (Array.isArray(parsed)) linkedIds = parsed.map(String);
+          } catch {
+            linkedIds = [selectedCase.linked_case_ids];
+          }
+        }
+
+        // Also check if any other case in cases has linked this case ID
+        if (linkedIds.length === 0) {
+          const siblingCases = cases.filter(c => {
+            if (c.case_id === selectedCase.case_id) return false;
+            let siblings: string[] = [];
+            if (Array.isArray(c.linked_case_ids)) siblings = c.linked_case_ids.map(String);
+            else if (typeof c.linked_case_ids === "string" && c.linked_case_ids.trim()) {
+              try {
+                const p = JSON.parse(c.linked_case_ids);
+                if (Array.isArray(p)) siblings = p.map(String);
+              } catch {
+                siblings = [c.linked_case_ids];
+              }
+            }
+            return siblings.includes(selectedCase.case_id);
+          });
+          if (siblingCases.length > 0) {
+            linkedIds = siblingCases.map(s => s.case_id);
+          }
+        }
+
+        const linkedCaseObjects = cases.filter(c => linkedIds.includes(c.case_id));
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedCase(null)} />
+            <div className="relative w-full max-w-lg bg-card border border-border/40 rounded-2xl shadow-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <BureauBadge bureau={selectedCase.bureau} />
+                    <span className="text-[11px] font-mono text-primary/80 font-bold">{selectedCase.case_id}</span>
+                    <StatusBadge status={selectedCase.status} ageingDays={selectedCase.ageing_days} />
+                    {linkedIds.length > 0 && (
+                      <span className="text-[10px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                        <Link2 className="w-3 h-3 text-emerald-400" /> Linked / Consolidated
+                      </span>
+                    )}
+                    {selectedCase.sla_breached && (
+                      <span className="text-[10px] font-bold text-red-400 bg-red-500/20 border border-red-500/30 px-1.5 py-0.5 rounded-full">SLA BREACHED</span>
+                    )}
+                  </div>
+                  <h2 className="font-semibold text-sm mt-2 leading-snug">{selectedCase.title}</h2>
                 </div>
-                <h2 className="font-semibold text-sm mt-2 leading-snug">{selectedCase.title}</h2>
+                <button onClick={() => setSelectedCase(null)} className="p-1.5 rounded-lg hover:bg-secondary/60 text-muted-foreground shrink-0 cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <button onClick={() => setSelectedCase(null)} className="p-1.5 rounded-lg hover:bg-secondary/60 text-muted-foreground shrink-0">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px]">
-              {[
-                ["Institution", selectedCase.institution_name],
-                ["Institution Code", selectedCase.institution_code || selectedCase.aicte_pid],
-                ["Region", selectedCase.region],
-                ["Bureau", selectedCase.bureau],
-                ["Category", selectedCase.category],
-                ["Status", selectedCase.status],
-                ["Ageing", `${selectedCase.ageing_days ?? 0} days`],
-                ["Submitted By", selectedCase.complainant_name || selectedCase.complainant_type || "Public"],
-                ["Complainant Email", selectedCase.complainant_email || "N/A"],
-                ["Received At", selectedCase.received_at ? new Date(selectedCase.received_at).toLocaleDateString() : (selectedCase.created_at ? new Date(selectedCase.created_at).toLocaleDateString() : "N/A")],
-              ].map(([k, v]) => (
-                <div key={k} className="bg-secondary/30 rounded-lg p-2">
-                  <div className="text-muted-foreground text-[9px] uppercase tracking-wider">{k}</div>
-                  <div className="text-white/80 mt-0.5 font-medium truncate">{v}</div>
+
+              {/* Linked Case Information Section */}
+              {linkedIds.length > 0 && (
+                <div className="p-3 rounded-xl bg-emerald-950/25 border border-emerald-500/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-emerald-300 flex items-center gap-1.5">
+                      <Link2 className="w-3.5 h-3.5 text-emerald-400" /> Connected Regulatory Proceedings
+                    </span>
+                    <span className="text-[10px] font-mono text-emerald-400/80">
+                      {linkedIds.length} Linked Case{linkedIds.length > 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {linkedIds.map(lid => {
+                      const linkedObj = linkedCaseObjects.find(c => c.case_id === lid);
+                      return (
+                        <div 
+                          key={lid} 
+                          onClick={() => {
+                            if (linkedObj) setSelectedCase(linkedObj);
+                          }}
+                          className={cn(
+                            "flex items-center justify-between p-2 rounded-lg bg-neutral-900/80 border border-emerald-500/20 text-xs transition-colors",
+                            linkedObj ? "hover:border-emerald-500/50 cursor-pointer" : ""
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            {linkedObj && <BureauBadge bureau={linkedObj.bureau} />}
+                            <span className="font-mono font-bold text-emerald-300 text-[11px]">{lid}</span>
+                            {linkedObj && (
+                              <span className="text-white/70 truncate max-w-[200px] text-[11px]">{linkedObj.title}</span>
+                            )}
+                          </div>
+                          {linkedObj && (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <StatusBadge status={linkedObj.status} ageingDays={linkedObj.ageing_days} />
+                              <ArrowUpRight className="w-3 h-3 text-emerald-400" />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              ))}
-            </div>
-            {selectedCase.description && (
-              <div className="bg-secondary/20 border border-border/20 rounded-lg p-3 text-xs text-white/70 leading-relaxed">
-                {selectedCase.description}
+              )}
+
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                {[
+                  ["Institution", selectedCase.institution_name],
+                  ["Institution Code", selectedCase.institution_code || selectedCase.aicte_pid],
+                  ["Region", selectedCase.region],
+                  ["Bureau", selectedCase.bureau],
+                  ["Category", selectedCase.category],
+                  ["Status", selectedCase.status],
+                  ["Ageing", `${selectedCase.ageing_days ?? 0} days`],
+                  ["Submitted By", selectedCase.complainant_name || selectedCase.complainant_type || "Public"],
+                  ["Complainant Email", selectedCase.complainant_email || "N/A"],
+                  ["Received At", selectedCase.received_at ? new Date(selectedCase.received_at).toLocaleDateString() : (selectedCase.created_at ? new Date(selectedCase.created_at).toLocaleDateString() : "N/A")],
+                ].map(([k, v]) => (
+                  <div key={k} className="bg-secondary/30 rounded-lg p-2">
+                    <div className="text-muted-foreground text-[9px] uppercase tracking-wider">{k}</div>
+                    <div className="text-white/80 mt-0.5 font-medium truncate">{v}</div>
+                  </div>
+                ))}
               </div>
-            )}
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => { setSelectedProfile(selectedCase.aicte_pid); setSelectedCase(null); }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/25 text-xs text-primary hover:bg-primary/25 transition-all"
-              >
-                <Eye className="w-3.5 h-3.5" /> View Institution Profile
-              </button>
+              {selectedCase.description && (
+                <div className="bg-secondary/20 border border-border/20 rounded-lg p-3 text-xs text-white/70 leading-relaxed">
+                  {selectedCase.description}
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => { setSelectedProfile(selectedCase.aicte_pid); setSelectedCase(null); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 border border-primary/25 text-xs text-primary hover:bg-primary/25 transition-all cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" /> View Institution Profile
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── File Complaint Modal (Integrated Database Persistence) ── */}
       {isFilingModalOpen && (
