@@ -432,5 +432,33 @@ def init_postgres_schema(conn):
         ON CONFLICT (version) DO NOTHING
     """, ("20261027_01_postgres_schema", now, "Comprehensive PostgreSQL schema migration"))
     
+    # Synchronize all SERIAL sequences with their table MAX(id) to prevent duplicate key violations after data import
+    try:
+        cur.execute("""
+            SELECT 
+                t.relname AS table_name,
+                a.attname AS column_name,
+                s.relname AS sequence_name
+            FROM pg_class s
+            JOIN pg_depend d ON d.objid = s.oid
+            JOIN pg_class t ON d.refobjid = t.oid
+            JOIN pg_attribute a ON (d.refobjid, d.refobjsubid) = (a.attrelid, a.attnum)
+            WHERE s.relkind = 'S';
+        """)
+        seq_rows = cur.fetchall()
+        for s_row in seq_rows:
+            try:
+                tbl = s_row['table_name'] if hasattr(s_row, 'keys') else s_row[0]
+                col = s_row['column_name'] if hasattr(s_row, 'keys') else s_row[1]
+                seq = s_row['sequence_name'] if hasattr(s_row, 'keys') else s_row[2]
+                cur.execute(f"SELECT COALESCE(MAX({col}), 0) FROM {tbl};")
+                m_row = cur.fetchone()
+                m_val = m_row[0] if m_row else 0
+                cur.execute(f"SELECT setval('{seq}', {m_val} + 1, false);")
+            except Exception:
+                continue
+    except Exception as seq_sync_err:
+        print(f"[PostgreSQL Schema] Sequence auto-sync notice: {seq_sync_err}")
+
     conn.commit()
     print("[PostgreSQL Schema] Initialized schema and indexes successfully.")
