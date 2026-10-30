@@ -171,8 +171,7 @@ Call analyze_case_overlap with your findings."""
         desc_b = (case_b.get("description", "") + " " + case_b.get("title", "") + " " + case_b.get("category", "")).lower()
 
         bureaus = {case_a.get("bureau", ""), case_b.get("bureau", "")}
-        # Only flag as cross-bureau overlap if they are from different bureaus
-        different_bureaus = len(bureaus) == 2 and "RB" in bureaus and "PGRC" in bureaus
+        same_pid = bool(case_a.get("aicte_pid") and case_a.get("aicte_pid") == case_b.get("aicte_pid"))
 
         rb_desc = desc_a if case_a.get("bureau") == "RB" else desc_b
         pgrc_desc = desc_b if case_b.get("bureau") == "PGRC" else desc_a
@@ -192,31 +191,31 @@ Call analyze_case_overlap with your findings."""
                     best_score = pattern["score"]
                     best_pattern = pattern
 
-        if best_pattern and different_bureaus:
+        if best_pattern:
             return {
                 "overlap_score": best_score,
                 "overlap_type": "definite_overlap" if best_score >= 0.7 else "possible_overlap",
                 "shared_root_cause": best_pattern["root_cause"],
                 "recommended_action": best_pattern["action"],
                 "reason": (
-                    f"The RB case addresses '{case_a.get('category', 'compliance issue')}' "
-                    f"while the PGRC case addresses '{case_b.get('category', 'grievance')}'. "
+                    f"Case {case_a.get('case_id')} addresses '{case_a.get('category', 'compliance issue')}' "
+                    f"while Case {case_b.get('case_id')} addresses '{case_b.get('category', 'grievance')}'. "
                     f"Both trace to: {best_pattern['root_cause']}. "
-                    f"Without coordination, parallel proceedings risk conflicting orders."
+                    f"Without coordination, parallel proceedings risk conflicting regulatory orders."
                 ),
                 "method": "rule_based"
             }
 
-        # Generic overlap check — same category different bureaus
-        if different_bureaus and case_a.get("category") == case_b.get("category"):
+        # Same institution & same category overlap check (same bureau or cross bureau)
+        if same_pid and case_a.get("category") and case_a.get("category") == case_b.get("category"):
             return {
-                "overlap_score": 0.65,
-                "overlap_type": "possible_overlap",
-                "shared_root_cause": f"Shared complaint category: {case_a.get('category', 'unknown')}",
-                "recommended_action": "Monitor for parallel proceedings — recommend officer communication",
+                "overlap_score": 0.85,
+                "overlap_type": "definite_overlap",
+                "shared_root_cause": f"Concurrent complaints under {case_a.get('category')} for same institution",
+                "recommended_action": "Consolidate proceedings under joint case track to prevent conflicting resolutions",
                 "reason": (
-                    f"Both cases share the same complaint category ({case_a.get('category')}) "
-                    f"on the same institution from different bureaus. Coordination is advisable."
+                    f"Both cases share the category '{case_a.get('category')}' for institution {case_a.get('institution_name', case_a.get('aicte_pid'))}. "
+                    f"Consolidation is advised to streamline regulatory investigation."
                 ),
                 "method": "rule_based"
             }

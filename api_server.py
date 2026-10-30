@@ -2134,7 +2134,25 @@ def create_case(body: CreateCaseBody, user: dict = Depends(_get_current_user)):
         )
 
         created_case = db.get_aicte_case(case_id)
-        return {"ok": True, "case_id": case_id, "case": created_case}
+
+        # Trigger AI Overlap & Similarity Intelligence Scanner
+        similarity_matches = []
+        try:
+            from campus.similarity_scanner import scan_and_match_complaint
+            similarity_matches = scan_and_match_complaint(
+                new_case_id=case_id,
+                new_title=body.title,
+                new_desc=body.description or "",
+                new_category=body.category,
+                new_bureau=bureau_abbr,
+                new_inst_name=inst_name,
+                new_aicte_pid=body.aicte_pid,
+                document_text="",
+            )
+        except Exception as scan_err:
+            print(f"[SimilarityScanner] Error running match scanner for case {case_id}: {scan_err}")
+
+        return {"ok": True, "case_id": case_id, "case": created_case, "similarity_matches": similarity_matches}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

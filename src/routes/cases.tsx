@@ -1511,11 +1511,14 @@ function CasesDashboard() {
     };
   }, [fetchData]);
 
-  // Deep-link to registrations tab or case modal from notifications
+  // Deep-link to overlaps tab, registrations tab, or case modal from notifications
   useEffect(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      if (params.get("tab") === "registrations") {
+      const targetTab = params.get("tab");
+      if (targetTab === "overlaps") {
+        setActiveTab("overlaps");
+      } else if (targetTab === "registrations") {
         setActiveTab("registrations");
       }
       const targetCid = params.get("case_id");
@@ -1524,7 +1527,8 @@ function CasesDashboard() {
         if (found) {
           if (params.get("assign") === "true") {
             setEditingCase(found);
-          } else {
+          } else if (targetTab !== "overlaps") {
+            // Only open detail modal if not specifically deep-linking to overlaps tab
             setSelectedCase(found);
           }
         }
@@ -1726,13 +1730,27 @@ function CasesDashboard() {
       byPid[c.aicte_pid].push(c);
     });
 
-    const alertPids = new Set(recordedOverlapAlerts.map(a => a.aicte_pid).filter(Boolean));
+    const alertPids = new Set(
+      recordedOverlapAlerts.map(a => String(a.aicte_pid || "").trim().toLowerCase()).filter(Boolean)
+    );
+    // Also map case IDs mentioned in overlap alerts to their institution PIDs
+    recordedOverlapAlerts.forEach(a => {
+      const rbId = String(a.rb_case_id || "").toLowerCase();
+      const pgrcId = String(a.pgrc_case_id || "").toLowerCase();
+      cases.forEach(c => {
+        const cid = String(c.case_id || "").toLowerCase();
+        if ((rbId && cid === rbId) || (pgrcId && cid === pgrcId)) {
+          if (c.aicte_pid) alertPids.add(c.aicte_pid.trim().toLowerCase());
+        }
+      });
+    });
 
     return Object.entries(byPid)
       .filter(([pid, cs]) => {
         const active = cs.filter(c => c.status !== "disposed");
+        const normPid = String(pid || "").trim().toLowerCase();
         const hasCrossBureau = active.some(c => c.bureau === "RB") && active.some(c => c.bureau === "PGRC");
-        const hasAiAlert = alertPids.has(pid) && active.length >= 2;
+        const hasAiAlert = alertPids.has(normPid) && cs.length >= 2;
         return hasCrossBureau || hasAiAlert;
       })
       .map(([pid, cs]) => {
@@ -2129,7 +2147,11 @@ function CasesDashboard() {
                     rbCases={rb}
                     pgrcCases={pgrc}
                     analysis={(() => {
-                      const matchedRecorded = recordedOverlapAlerts.find(a => a.aicte_pid === pid);
+                      const normPid = String(pid || "").trim().toLowerCase();
+                      const matchedRecorded = recordedOverlapAlerts.find(a => 
+                        String(a.aicte_pid || "").trim().toLowerCase() === normPid ||
+                        instActiveCases.some(c => c.case_id === a.rb_case_id || c.case_id === a.pgrc_case_id)
+                      );
                       if (matchedRecorded) {
                         return {
                           overlap_score: matchedRecorded.overlap_score || 0.85,
